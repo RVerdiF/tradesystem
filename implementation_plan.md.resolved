@@ -1,0 +1,285 @@
+# TradeSystem5000 — Plano de Implementação
+
+Sistema de trading algorítmico baseado na metodologia de **Marcos Lopez de Prado** (*Advances in Financial Machine Learning*), integrando MetaTrader 5, Machine Learning e execução assíncrona.
+
+## User Review Required
+
+> [!IMPORTANT]
+> **Dependência do MetaTrader 5**: O pacote `MetaTrader5` só funciona no Windows e requer o terminal MT5 instalado e configurado com uma conta (demo ou real). Certifique-se de que o MT5 está disponível na máquina.
+
+> [!WARNING]
+> **Dados Históricos**: Para testes iniciais, o sistema usará dados de demonstração/simulados quando o MT5 não estiver acessível. Os módulos terão fallback para carregar dados de arquivos `.parquet` já existentes no diretório `data/`.
+
+> [!IMPORTANT]
+> **Escopo Incremental**: O sistema será construído fase por fase. Cada fase será funcional e testável de forma independente antes de avançar. Sugiro começarmos pela **Fase 1** (infraestrutura) e avançar progressivamente.
+
+---
+
+## Arquitetura do Projeto
+
+```
+tradesystem5000/
+├── pyproject.toml                 # Dependências e metadata do projeto
+├── README.md                      # Documentação completa
+├── config/
+│   └── settings.py                # Configurações globais (credenciais, símbolos, timeframes)
+├── src/
+│   ├── __init__.py
+│   ├── data/                      # Fase 1 — Engenharia de Dados
+│   │   ├── __init__.py
+│   │   ├── mt5_connector.py       # 1.1 Conectividade e autenticação MT5
+│   │   ├── extractor.py           # 1.2 Pipeline de extração (ticks + OHLC)
+│   │   ├── storage.py             # 1.3 Armazenamento Parquet
+│   │   ├── cleaner.py             # 1.4 Limpeza de dados (bad ticks, lacunas)
+│   │   └── bar_sampler.py         # 1.5 Amostragem (barras de volume/dólar)
+│   ├── features/                  # Fase 2 — Feature Engineering
+│   │   ├── __init__.py
+│   │   ├── frac_diff.py           # 2.1 Diferenciação Fracionária (FFD)
+│   │   ├── cusum_filter.py        # 2.2 Filtro CUSUM
+│   │   ├── indicators.py          # 2.3 Features (técnicos + microestrutura)
+│   │   └── normalizer.py          # 2.4 Normalização temporal (Z-score móvel)
+│   ├── labeling/                  # Fase 3 — Alpha + Tripla Barreira
+│   │   ├── __init__.py
+│   │   ├── alpha.py               # 3.1 Módulo Alpha (sinal direcional)
+│   │   ├── volatility.py          # 3.2 Volatilidade dinâmica
+│   │   ├── triple_barrier.py      # 3.3 Método da Tripla Barreira
+│   │   └── meta_labeling.py       # 3.4 Meta-Labeling
+│   ├── modeling/                  # Fase 4 — ML e Dimensionamento
+│   │   ├── __init__.py
+│   │   ├── purge_embargo.py       # 4.1 Purga e embargo
+│   │   ├── cv.py                  # 4.2 Purged K-Fold CV
+│   │   ├── classifier.py          # 4.3 Classificador secundário
+│   │   └── bet_sizing.py          # 4.4 Kelly fracionário
+│   ├── backtest/                  # Fase 5 — Backtesting
+│   │   ├── __init__.py
+│   │   ├── cpcv.py                # 5.1 Combinatorial Purged CV
+│   │   ├── cost_model.py          # 5.2 Modelagem de custos
+│   │   ├── metrics.py             # 5.3 Métricas (Sharpe Deflacionado, etc.)
+│   │   └── attribution.py         # 5.4 Análise de atribuição
+│   └── execution/                 # Fase 6 — Live Trading
+│       ├── __init__.py
+│       ├── engine.py              # 6.1 Engine assíncrona
+│       ├── order_manager.py       # 6.2 Gerenciador de ordens
+│       ├── risk.py                # 6.3 Circuit breakers
+│       └── audit.py               # 6.4 Auditoria e logging
+├── tests/                         # Testes unitários por fase
+│   ├── __init__.py
+│   ├── test_data/
+│   ├── test_features/
+│   ├── test_labeling/
+│   ├── test_modeling/
+│   ├── test_backtest/
+│   └── test_execution/
+├── data/                          # Dados persistentes (Parquet, não versionados)
+│   ├── raw/
+│   ├── processed/
+│   └── samples/
+├── logs/                          # Logs de execução
+└── notebooks/                     # Jupyter notebooks exploratórios
+```
+
+---
+
+## Proposed Changes
+
+### Configuração Base
+
+#### [NEW] [pyproject.toml](file:///c:/Users/rafae/Documents/PythonProjects/tradesystem5000/pyproject.toml)
+Definir metadata do projeto e dependências:
+- **Core**: `numpy`, `pandas`, `scipy`, `numba`
+- **MT5**: `MetaTrader5`
+- **Storage**: `pyarrow` (Parquet)
+- **ML**: `scikit-learn`, `xgboost`
+- **Async**: `asyncio` (stdlib)
+- **Logging**: `loguru`
+- **Testing**: `pytest`, `pytest-asyncio`
+
+#### [NEW] [config/settings.py](file:///c:/Users/rafae/Documents/PythonProjects/tradesystem5000/config/settings.py)
+Configurações centralizadas: credenciais MT5 (via env vars), lista de símbolos, timeframes, parâmetros de risco.
+
+---
+
+### Fase 1 — Engenharia de Dados
+
+#### [NEW] [mt5_connector.py](file:///c:/Users/rafae/Documents/PythonProjects/tradesystem5000/src/data/mt5_connector.py)
+- Classe `MT5Connector` com context manager (`__enter__`/`__exit__`)
+- `initialize()` + `login()` com retry automático e backoff exponencial
+- Tratamento de exceções: `MT5ConnectionError`, `MT5AuthError`
+- Fallback para modo offline quando MT5 não está disponível
+
+#### [NEW] [extractor.py](file:///c:/Users/rafae/Documents/PythonProjects/tradesystem5000/src/data/extractor.py)
+- `extract_ticks(symbol, start, end)` → `pd.DataFrame` via `copy_ticks_range`
+- `extract_ohlc(symbol, timeframe, n_bars)` → `pd.DataFrame` via `copy_rates_from_pos`
+- Download incremental (só busca dados novos)
+- Validação de integridade dos dados baixados
+
+#### [NEW] [storage.py](file:///c:/Users/rafae/Documents/PythonProjects/tradesystem5000/src/data/storage.py)
+- Classe `ParquetStore` com particionamento por símbolo e data
+- `save(df, symbol, data_type)` e `load(symbol, data_type, start, end)`
+- Append eficiente sem reescrita total
+- Compressão com `snappy` para balanço entre velocidade e tamanho
+
+#### [NEW] [cleaner.py](file:///c:/Users/rafae/Documents/PythonProjects/tradesystem5000/src/data/cleaner.py)
+- `remove_spikes(df, z_threshold)` — filtro de Z-score para outliers
+- `fill_gaps(df, method, max_gap)` — forward fill ou interpolação com limite
+- `validate_ohlc(df)` — verifica H≥L, O e C entre H e L
+
+#### [NEW] [bar_sampler.py](file:///c:/Users/rafae/Documents/PythonProjects/tradesystem5000/src/data/bar_sampler.py)
+- `volume_bars(ticks, threshold)` — amostra quando volume acumulado atinge limiar
+- `dollar_bars(ticks, threshold)` — amostra quando valor financeiro acumulado atinge limiar
+- Retorna DataFrames OHLCV padronizados
+
+---
+
+### Fase 2 — Feature Engineering
+
+#### [NEW] [frac_diff.py](file:///c:/Users/rafae/Documents/PythonProjects/tradesystem5000/src/features/frac_diff.py)
+- `frac_diff_ffd(series, d, threshold)` — Diferenciação Fracionária Fixed-Width Window
+- Busca automática do `d` mínimo via teste ADF (Augmented Dickey-Fuller)
+- Implementação otimizada com `numba` para performance
+
+#### [NEW] [cusum_filter.py](file:///c:/Users/rafae/Documents/PythonProjects/tradesystem5000/src/features/cusum_filter.py)
+- `cusum_events(close, threshold)` → timestamps de eventos
+- Threshold adaptativo baseado em volatilidade EWMA
+
+#### [NEW] [indicators.py](file:///c:/Users/rafae/Documents/PythonProjects/tradesystem5000/src/features/indicators.py)
+- **Momentum**: RSI, MACD, ROC
+- **Volatilidade**: ATR, Bollinger Bands width, desvio padrão móvel
+- **Microestrutura**: Order Flow Imbalance (OFI), VPIN estimado
+- Todas as features calculadas point-in-time (sem look-ahead)
+
+#### [NEW] [normalizer.py](file:///c:/Users/rafae/Documents/PythonProjects/tradesystem5000/src/features/normalizer.py)
+- `rolling_zscore(series, window)` — normalização com janela móvel
+- `expanding_rank(series)` — rank percentual expandido
+- Validação anti look-ahead bias em modo debug
+
+---
+
+### Fase 3 — Alpha e Tripla Barreira
+
+#### [NEW] [alpha.py](file:///c:/Users/rafae/Documents/PythonProjects/tradesystem5000/src/labeling/alpha.py)
+- Classe abstrata `AlphaModel` com método `generate_signal(features) → Series`
+- Implementação: `TrendFollowingAlpha` (cruzamento de médias exponenciais)
+- Implementação: `MeanReversionAlpha` (Z-score de preço vs. média)
+
+#### [NEW] [volatility.py](file:///c:/Users/rafae/Documents/PythonProjects/tradesystem5000/src/labeling/volatility.py)
+- `daily_vol(close, span)` — desvio padrão EWMA dos retornos
+- Usado para ajustar dinamicamente largura das barreiras
+
+#### [NEW] [triple_barrier.py](file:///c:/Users/rafae/Documents/PythonProjects/tradesystem5000/src/labeling/triple_barrier.py)
+- `apply_triple_barrier(close, events, pt_sl, num_days)` → DataFrame com:
+  - `t1` = barreira vertical (tempo máximo)
+  - `trgt` = barreira de volatilidade
+  - `side` = direção do sinal
+- `get_first_touch(close, events)` → timestamp da primeira barreira tocada
+
+#### [NEW] [meta_labeling.py](file:///c:/Users/rafae/Documents/PythonProjects/tradesystem5000/src/labeling/meta_labeling.py)
+- `get_meta_labels(triple_barrier_events, close)` → rótulos binários {0, 1}
+- 1 = Alpha acertou (TP atingido), 0 = Alpha errou (SL ou tempo)
+- Geração do dataset final de treinamento com features + labels
+
+---
+
+### Fase 4 — ML e Dimensionamento
+
+#### [NEW] [purge_embargo.py](file:///c:/Users/rafae/Documents/PythonProjects/tradesystem5000/src/modeling/purge_embargo.py)
+- `purge_overlapping(X, y, events, test_times)` — remove amostras contaminadas
+- `embargo(train_indices, test_times, pct_embargo)` — período de embargo pós-teste
+
+#### [NEW] [cv.py](file:///c:/Users/rafae/Documents/PythonProjects/tradesystem5000/src/modeling/cv.py)
+- Classe `PurgedKFold(BaseCrossValidator)` com purga + embargo integrados
+- Compatível com API do scikit-learn (`.split()`)
+
+#### [NEW] [classifier.py](file:///c:/Users/rafae/Documents/PythonProjects/tradesystem5000/src/modeling/classifier.py)
+- Pipeline: `StandardScaler` → `RandomForestClassifier` / `XGBClassifier`
+- Hyperparameter tuning via `GridSearchCV` com `PurgedKFold`
+- Retorna `predict_proba` para bet sizing
+
+#### [NEW] [bet_sizing.py](file:///c:/Users/rafae/Documents/PythonProjects/tradesystem5000/src/modeling/bet_sizing.py)
+- `kelly_fraction(prob, odds)` — fração de Kelly pura
+- `fractional_kelly(prob, odds, fraction=0.5)` — Kelly fracionário (mais conservador)
+- `discretize_bet(kelly_f, max_leverage)` — converte fração em lotes
+
+---
+
+### Fase 5 — Backtesting
+
+#### [NEW] [cpcv.py](file:///c:/Users/rafae/Documents/PythonProjects/tradesystem5000/src/backtest/cpcv.py)
+- `CombinatorialPurgedCV` — gera caminhos combinatórios de backtest
+- Múltiplos cenários históricos não lineares
+
+#### [NEW] [cost_model.py](file:///c:/Users/rafae/Documents/PythonProjects/tradesystem5000/src/backtest/cost_model.py)
+- `BrazilianCostModel` — taxas B3 (corretagem, emolumentos, ISS)
+- `SlippageModel` — impacto baseado em volume e spread médio
+
+#### [NEW] [metrics.py](file:///c:/Users/rafae/Documents/PythonProjects/tradesystem5000/src/backtest/metrics.py)
+- `deflated_sharpe(sr, n_trials)` — Sharpe ajustado por múltiplos testes
+- `max_drawdown(returns)`, `calmar_ratio(returns)`
+- `probability_of_ruin(returns, threshold)`
+
+#### [NEW] [attribution.py](file:///c:/Users/rafae/Documents/PythonProjects/tradesystem5000/src/backtest/attribution.py)
+- Decomposição Alpha vs. Meta-Labeling
+- Relatório de contribuição por componente
+
+---
+
+### Fase 6 — Live Trading
+
+#### [NEW] [engine.py](file:///c:/Users/rafae/Documents/PythonProjects/tradesystem5000/src/execution/engine.py)
+- Classe `TradingEngine` com `asyncio` event loop
+- Processamento de ticks em tempo real
+- State machine: `IDLE → ANALYZING → TRADING → MONITORING`
+
+#### [NEW] [order_manager.py](file:///c:/Users/rafae/Documents/PythonProjects/tradesystem5000/src/execution/order_manager.py)
+- `send_order(request)` via `mt5.order_send()`
+- Slicing de ordens grandes em partes menores
+- Verificação de preenchimento e reconciliação
+
+#### [NEW] [risk.py](file:///c:/Users/rafae/Documents/PythonProjects/tradesystem5000/src/execution/risk.py)
+- `CircuitBreaker` — limites de perda diária, drawdown máximo, exposição setorial
+- Encerramento automático de todas as posições ao atingir limite
+- Notificação via log + alerta
+
+#### [NEW] [audit.py](file:///c:/Users/rafae/Documents/PythonProjects/tradesystem5000/src/execution/audit.py)
+- Logger estruturado com `loguru` (JSON + rotação de arquivos)
+- Registro de cada decisão do modelo e cada execução da API
+- Reconciliação backtest vs. execução real
+
+---
+
+## Verification Plan
+
+### Testes Automatizados
+Cada fase terá testes unitários em `tests/`. Executar com:
+```bash
+pytest tests/ -v --tb=short
+```
+
+#### Fase 1 — Dados
+- Testar `cleaner.py` com dados sintéticos contendo spikes conhecidos
+- Testar `bar_sampler.py` verificando que barras de volume totalizam volume esperado
+- Testar `storage.py` — round-trip save/load sem perda de dados
+
+#### Fase 2 — Features
+- Testar `frac_diff.py` — verificar estacionaridade com teste ADF
+- Testar `cusum_filter.py` — validar que eventos são gerados apenas em mudanças significativas
+- Testar `normalizer.py` — confirmar que média ≈ 0 e std ≈ 1 na janela
+
+#### Fase 3 — Labeling
+- Testar `triple_barrier.py` com série sintética onde TP/SL/tempo são conhecidos
+- Testar `meta_labeling.py` — rótulos corretos para trades conhecidos
+
+#### Fase 4 — ML
+- Testar `PurgedKFold` — garantir que não há observações sobrepostas entre train/test
+- Testar `bet_sizing.py` — Kelly = 0 quando prob = 0.5 (edge zero)
+
+#### Fase 5 — Backtest
+- Testar `metrics.py` com retornos conhecidos (Sharpe calculado manualmente)
+- Testar `cost_model.py` — custo total para trade conhecido
+
+### Verificação Manual
+- **Fase 1**: Conectar ao MT5 e baixar 1 dia de ticks de PETR4 → salvar em Parquet → recarregar e comparar
+- **Fase 6**: Executar em modo Paper Trading por 1 sessão de mercado e verificar logs
+
+> [!TIP]
+> Sugiro começarmos pela **Fase 1** completa. Após validação, avançamos para a próxima fase. Isso garante uma base sólida antes de construir a lógica mais complexa.
