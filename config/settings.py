@@ -197,6 +197,20 @@ class MLConfig:
 
 
 # ---------------------------------------------------------------------------
+# Execução (Fase 6 — Paper Trading / Live)
+# ---------------------------------------------------------------------------
+@dataclass(frozen=True)
+class ExecutionConfig:
+    """Parâmetros do motor de execução."""
+
+    mode: str = "paper"              # 'paper' ou 'live'
+    poll_interval: float = 0.5       # Segundos entre leitura de ticks
+    max_slippage_ticks: int = 5      # Desvio máximo aceito em envio a mercado
+    magic_number: int = 5000         # Identificador das ordens do sistema
+    reconciliation_interval: int = 60# Segundos entre reconciliações posição real vs esperada
+
+
+# ---------------------------------------------------------------------------
 # Instâncias padrão (singleton-like)
 # ---------------------------------------------------------------------------
 mt5_config = MT5Config()
@@ -208,4 +222,6 @@ log_config = LogConfig()
 feature_config = FeatureConfig()
 labeling_config = LabelingConfig()
 ml_config = MLConfig()
+execution_config = ExecutionConfig()
+
 

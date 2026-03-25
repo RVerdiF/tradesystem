@@ -1,0 +1,2 @@
+{"event": "ORDER_EXECUTED", "ticket": -1, "symbol": "WIN", "action": "BUY_SIMULADA", "volume": 1.0, "price": 0.0, "comment": "", "timestamp": "2026-03-25T16:26:25.735134", "mode": "paper"}
+{"event": "ORDER_EXECUTED", "ticket": -1, "symbol": "WIN", "action": "CLOSE_ALL_SIMULADA", "volume": 0.0, "price": 0.0, "comment": "", "timestamp": "2026-03-25T16:26:25.735134", "mode": "paper"}
