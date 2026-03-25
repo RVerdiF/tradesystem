@@ -127,6 +127,37 @@ class LogConfig:
 
 
 # ---------------------------------------------------------------------------
+# Feature Engineering
+# ---------------------------------------------------------------------------
+@dataclass(frozen=True)
+class FeatureConfig:
+    """Parâmetros de Feature Engineering (Fase 2)."""
+
+    # Diferenciação Fracionária (FFD)
+    ffd_d: float = 0.4              # d inicial para FFD
+    ffd_threshold: float = 1e-5     # corte de pesos
+    ffd_adf_pvalue: float = 0.05    # p-value alvo do teste ADF
+
+    # CUSUM
+    cusum_threshold_pct: float = 1.0  # % de desvio para trigger
+    cusum_ewm_span: int = 50          # span do EWMA para threshold adaptativo
+
+    # Indicadores — Momentum
+    rsi_period: int = 14
+    macd_fast: int = 12
+    macd_slow: int = 26
+    macd_signal: int = 9
+
+    # Indicadores — Volatilidade
+    atr_period: int = 14
+    bb_period: int = 20
+    bb_std: float = 2.0
+
+    # Normalização
+    zscore_window: int = 50
+
+
+# ---------------------------------------------------------------------------
 # Instâncias padrão (singleton-like)
 # ---------------------------------------------------------------------------
 mt5_config = MT5Config()
@@ -135,3 +166,4 @@ cleaning_config = CleaningConfig()
 risk_config = RiskConfig()
 cost_config = CostConfig()
 log_config = LogConfig()
+feature_config = FeatureConfig()
