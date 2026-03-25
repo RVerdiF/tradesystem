@@ -182,6 +182,21 @@ class LabelingConfig:
 
 
 # ---------------------------------------------------------------------------
+# ML Modeling (Fase 4)
+# ---------------------------------------------------------------------------
+@dataclass(frozen=True)
+class MLConfig:
+    """Parâmetros para modelagem ML e Validação Cruzada (Fase 4)."""
+
+    # Validação Cruzada
+    cv_splits: int = 5
+    embargo_pct: float = 0.01        # 1% das barras da base como embargo pós-teste
+
+    # Bet Sizing
+    max_leverage: int = 5            # Alavancagem máxima (lotes)
+
+
+# ---------------------------------------------------------------------------
 # Instâncias padrão (singleton-like)
 # ---------------------------------------------------------------------------
 mt5_config = MT5Config()
@@ -192,3 +207,5 @@ cost_config = CostConfig()
 log_config = LogConfig()
 feature_config = FeatureConfig()
 labeling_config = LabelingConfig()
+ml_config = MLConfig()
+
