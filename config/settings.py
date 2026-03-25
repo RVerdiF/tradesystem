@@ -156,6 +156,30 @@ class FeatureConfig:
     # Normalização
     zscore_window: int = 50
 
+# ---------------------------------------------------------------------------
+# Labeling (Fase 3 — Alpha + Tripla Barreira)
+# ---------------------------------------------------------------------------
+@dataclass(frozen=True)
+class LabelingConfig:
+    """Parâmetros para rotulagem e alpha models (Fase 3)."""
+
+    # Alpha — Trend Following
+    trend_fast_span: int = 10        # EMA rápida (períodos)
+    trend_slow_span: int = 50        # EMA lenta (períodos)
+
+    # Alpha — Mean Reversion
+    mean_rev_window: int = 20        # Janela do Z-score
+    mean_rev_entry: float = 2.0      # Z-score de entrada (|z| > entry → sinal)
+    mean_rev_exit: float = 0.0       # Z-score de saída
+
+    # Volatilidade dinâmica
+    vol_span: int = 20               # Span EWMA para volatilidade dos retornos
+
+    # Tripla Barreira
+    pt_sl_ratio: tuple[float, float] = (1.0, 1.0)  # (profit_take, stop_loss) em múltiplos de vol
+    max_holding_periods: int = 10    # Barreira vertical (barras máximas)
+    min_return: float = 0.0          # Retorno mínimo para considerar label +1
+
 
 # ---------------------------------------------------------------------------
 # Instâncias padrão (singleton-like)
@@ -167,3 +191,4 @@ risk_config = RiskConfig()
 cost_config = CostConfig()
 log_config = LogConfig()
 feature_config = FeatureConfig()
+labeling_config = LabelingConfig()
