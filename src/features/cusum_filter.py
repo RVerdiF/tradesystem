@@ -56,14 +56,13 @@ def cusum_events(
         )
 
     diff = close.diff().dropna()
-    timestamps = diff.index.values
     values = diff.values.astype(np.float64)
 
     logger.info("Aplicando filtro CUSUM (threshold={:.6f}, n={})", threshold, len(values))
 
     event_indices = _cusum_kernel(values, threshold)
 
-    events = pd.DatetimeIndex([timestamps[i] for i in event_indices])
+    events = diff.index[event_indices]
 
     logger.success("CUSUM: {} eventos detectados em {} observações", len(events), len(close))
     return events
@@ -109,7 +108,6 @@ def adaptive_cusum_events(
     # Threshold adaptativo = volatilidade × multiplicador
     adaptive_h = (vol * threshold_multiplier).values.astype(np.float64)
     values = diff.values.astype(np.float64)
-    timestamps = diff.index.values
 
     logger.info(
         "Aplicando CUSUM adaptativo (ewm_span={}, mult={}, n={})",
@@ -120,7 +118,7 @@ def adaptive_cusum_events(
 
     event_indices = _adaptive_cusum_kernel(values, adaptive_h)
 
-    events = pd.DatetimeIndex([timestamps[i] for i in event_indices])
+    events = diff.index[event_indices]
 
     logger.success(
         "CUSUM adaptativo: {} eventos detectados em {} observações",

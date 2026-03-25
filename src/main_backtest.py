@@ -121,7 +121,7 @@ def run_pipeline(df, interval="1d"):
     # Fase 3: Alpha e Labeling (Tripla Barreira)
     # ---------------------------------------------------------
     logger.info("--- Fase 3: Alpha e Labeling ---")
-    alpha_model = TrendFollowingAlpha(fast_span=10, slow_span=50)
+    alpha_model = TrendFollowingAlpha(fast_span=5, slow_span=20)
     signal = alpha_model.generate_signal(df)
     
     signal_events = get_signal_events(signal)
@@ -161,7 +161,17 @@ def run_pipeline(df, interval="1d"):
         
     split_idx = int(len(X) * 0.7)
     train_idx = X.index[:split_idx]
-    test_idx = X.index[split_idx:]
+    
+    # Adicionar embargo (zona de exclusão) para evitar Data Leakage
+    # max_holding é 20 barras, então pulamos 20 eventos (se houver o suficiente)
+    gap = min(20, int(len(X) * 0.1)) # Limita o embargo a no máximo 10% da amostra
+    test_start_idx = split_idx + gap
+    
+    if test_start_idx >= len(X) - 5: # Precisa de pelo menos 5 pro teste
+        logger.warning(f"Embargo de {gap} barras muito grande. Tentando rodar sem embargo.")
+        test_start_idx = split_idx
+        
+    test_idx = X.index[test_start_idx:]
     
     X_train, y_train = X.loc[train_idx], y_meta.loc[train_idx]
     X_test, y_test = X.loc[test_idx], y_meta.loc[test_idx]
@@ -178,7 +188,10 @@ def run_pipeline(df, interval="1d"):
         return
 
     meta_model = MetaClassifier(n_estimators=100, max_depth=3)
-    meta_model.fit(X_train, y_train)
+    
+    # Usando o retorno absoluto como peso no treinamento (sample_weight)
+    weights = np.abs(labels_df.loc[y_train.index, "ret"])
+    meta_model.fit(X_train, y_train, sample_weight=weights)
     
     meta_model.evaluate(X_test, y_test)
     prob_predictions = meta_model.predict_proba(X_test)[:, 1]

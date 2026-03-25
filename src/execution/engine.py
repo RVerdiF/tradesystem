@@ -13,6 +13,8 @@ import asyncio
 import pandas as pd
 from loguru import logger
 
+import MetaTrader5 as mt5
+
 from config.settings import execution_config
 from src.execution.audit import audit
 from src.execution.risk import RiskManager
@@ -62,12 +64,20 @@ class AsyncTradingEngine:
             return
 
         try:
-            # 2. Requisita novos dados (simulado ou do feed de streaming real)
-            # Na Fase 6 completa isso viria direto do copy_rates / copy_ticks
-            df_snapshot = pd.DataFrame() # self.data_feed.get_snapshot(symbol)
+            # Requisita dados históricos para o cálculo de indicadores (ex: RSI, FracDiff precisam de janela)
+            if execution_config.mode == "live":
+                rates = mt5.copy_rates_from_pos(symbol, mt5.TIMEFRAME_M5, 0, 500)
+                if rates is None or len(rates) == 0:
+                    return
+                df_snapshot = pd.DataFrame(rates)
+                df_snapshot['time'] = pd.to_datetime(df_snapshot['time'], unit='s')
+                df_snapshot.set_index('time', inplace=True)
+            else:
+                df_snapshot = pd.DataFrame() # Simulado / mock
             
-            # Se não há barra nova, ignora
-            if df_snapshot.empty:
+            # Se não há barra ou está incompleto, ignora
+            if df_snapshot.empty or len(df_snapshot) < 50:
+                logger.warning("Dados incompletos para {}. Aguardando mais barras.", symbol)
                 return
 
             # 3. Predição Completa (Alpha -> MT5 Bar -> FeatureGen -> ML Meta)
@@ -94,7 +104,8 @@ class AsyncTradingEngine:
                 # Sizing final (converte Kelly em contratos)
                 target_volume = kelly_f * self.max_position
                 
-                if self.risk.validate_order(0, target_volume, self.max_position):
+                # Valida usando a posição atual (caso close_positions tenha falhado parcialmente)
+                if self.risk.validate_order(abs(self.om.get_net_position(symbol)), target_volume, self.max_position):
                     self.om.send_market_order(symbol, "buy", target_volume)
                     
             elif alpha_side == -1 and net_position >= 0 and meta_label == 1 and kelly_f > 0:
@@ -103,7 +114,7 @@ class AsyncTradingEngine:
                 
                 target_volume = kelly_f * self.max_position
                 
-                if self.risk.validate_order(0, target_volume, self.max_position):
+                if self.risk.validate_order(abs(self.om.get_net_position(symbol)), target_volume, self.max_position):
                     self.om.send_market_order(symbol, "sell", target_volume)
 
         except Exception as e:
@@ -111,8 +122,15 @@ class AsyncTradingEngine:
 
     async def run_forever(self) -> None:
         """Loop infinito de sondagem (Polling loop asíncrono)."""
+        if execution_config.mode == "live":
+            if not mt5.initialize():
+                logger.critical("Falha ao inicializar MT5. Erro: {}", mt5.last_error())
+                return
+                
         self.is_running = True
         logger.success("Iniciando Event Loop Assíncrono do TradeSystem5000...")
+        
+        last_heartbeat = time.time()
 
         while self.is_running:
             start_time = time.monotonic()
@@ -129,6 +147,12 @@ class AsyncTradingEngine:
             elapsed = time.monotonic() - start_time
             sleep_time = max(0.0, execution_config.poll_interval - elapsed)
             await asyncio.sleep(sleep_time)
+            
+            # Heartbeat (A cada ~60s)
+            current_time = time.time()
+            if current_time - last_heartbeat >= 60.0:
+                logger.debug("Heartbeat: Engine rodando. Último ciclo: {:.3f}s", elapsed)
+                last_heartbeat = current_time
 
     def stop(self) -> None:
         """Interrompe o loop principal."""

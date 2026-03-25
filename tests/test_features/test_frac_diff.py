@@ -32,7 +32,7 @@ def random_walk():
 def stationary_series():
     """Série estacionária (ruído branco com média fixa)."""
     np.random.seed(99)
-    n = 300
+    n = 5000
     dates = pd.date_range("2024-02-01", periods=n, freq="5min", tz="UTC")
     values = np.random.randn(n) * 2.0 + 50.0
     return pd.Series(values, index=dates, name="close")
