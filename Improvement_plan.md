@@ -1,39 +1,35 @@
-# Plano de Implementação: Melhoria de Identificação de Oportunidades e Robustez do Modelo
+# Plano de Implementação: Otimização Bayesiana Global e Prevenção de Overfitting
 
-Este documento detalha as etapas para aumentar o volume de sinais gerados pelo Alpha Model que chegam ao Meta-Model e para tornar o treinamento preditivo mais robusto.
+Este plano detalha a implementação da otimização de hiperparâmetros utilizando o Optuna, integrando as métricas de penalização e validação cruzada exigidas pela literatura quantitativa (López de Prado, Ernest Chan).
 
-## Fase 1: Aumento do Fluxo de Dados e Sinais
+## Fase 1: Restrição do Espaço de Busca
+Para evitar o viés de *data-snooping*, o espaço de busca será restrito a um máximo de 5 a 6 parâmetros, todos com justificativa econômica.
 
-O objetivo é reduzir a restrição do funil de eventos para alimentar o modelo com mais dados.
+* [ ] **1.1. Arquivo:** `config/settings.py` (ou no próprio script do Optuna)
+* [ ] **1.2. Ação:** Definir os limites estatísticos (ranges) dos parâmetros:
+    * `cusum_threshold`: Volatilidade baseada no mercado (ex: 0.01 a 0.05).
+    * `alpha_fast` / `alpha_slow`: Períodos clássicos de momentum (ex: 5-20 / 20-60).
+    * `pt_sl` (Profit Taking / Stop Loss): Múltiplos da volatilidade diária (ex: 1.0 a 3.0).
+    * `xgb_max_depth`: Limitar severamente para evitar árvores complexas (ex: 2 a 4).
 
-* [ ] **1.1 Ajustar Threshold do CUSUM Filter**
-    * **Arquivo:** `config/settings.py`
-    * **Ação:** Reduzir a variável `cusum_threshold_pct` para `0.5` ou um valor estatisticamente menor que a volatilidade média diária.
-* [ ] **1.2 Alterar Amostragem de Barras**
-    * **Arquivo:** `src/main_backtest.py`
-    * **Ação:** Substituir a amostragem baseada em tempo (Time Bars) por `volume_bars` ou `dollar_bars` (disponíveis em `src/data/bar_sampler.py`).
+## Fase 2: Criação do Motor de Otimização (Optuna)
+Implementação do otimizador utilizando o estimador TPE (Tree-structured Parzen Estimator) com pruning.
 
-## Fase 2: Aprimoramento e Robustez do Treinamento
+* [ ] **2.1. Arquivo:** Criar `src/optimization/tuner.py`
+* [ ] **2.2. Ação:** Desenvolver a função `objective(trial)` que inicializa o pipeline completo (`run_pipeline`).
+* [ ] **2.3. Ação:** Configurar o `optuna.create_study(direction='maximize', sampler=optuna.samplers.TPESampler())`.
 
-O objetivo é evitar o underfitting e garantir que a validação reflita o desempenho real.
+## Fase 3: Função Objetivo e Penalização de Overfitting
+A métrica de *fitness* deve descartar configurações não generalizáveis.
 
-* [ ] **2.1 Atualizar o Algoritmo do Meta-Classificador**
-    * **Arquivo:** `src/modeling/classifier.py`
-    * **Ação:** Aumentar o `max_depth` da Random Forest atual ou substituí-la pelo XGBoost (`XGBClassifier`).
-* [ ] **2.2 Implementar Pesos por Retorno Absoluto (Sample Weighting)**
-    * **Arquivo:** `src/main_backtest.py`
-    * **Ação:** Passar o valor absoluto dos retornos no parâmetro `sample_weight` ao chamar o método `.fit()` do classificador.
-* [ ] **2.3 Configurar Validação Cruzada Purificada**
-    * **Arquivo:** `src/main_backtest.py`
-    * **Ação:** Substituir o K-Fold padrão pelo `PurgedKFold` ou `CPCV` (`src/backtest/cpcv.py` ou `src/modeling/purge_embargo.py`), utilizando pelo menos 10 splits e embargo configurado.
+* [ ] **3.1. Arquivo:** `src/optimization/tuner.py`
+* [ ] **3.2. Ação - Filtro de Frequência:** Retornar Sharpe Ratio = 0.0 se o número total de trades na validação cruzada (CPCV) for inferior a um limite estatisticamente significativo (ex: < 30 trades).
+* [ ] **3.3. Ação - Sharpe Lift:** Aplicar penalidade ou rejeitar o trial se o desempenho do Meta-Model for inferior ao do Alpha puro ($Sharpe_{Meta} \le Sharpe_{Alpha}$).
+* [ ] **3.4. Ação - Generalization Gap:** Penalizar o Sharpe de Validação se a diferença entre o Sharpe de Treino e Validação for superior a um limite aceitável (indicador claro de under/overfitting).
 
-## Fase 3: Diagnóstico de Features e Atribuição
+## Fase 4: Avaliação do Deflated Sharpe Ratio (DSR)
+Após a conclusão da otimização, é necessário descontar o efeito das múltiplas tentativas.
 
-Garantir que os sinais filtrados possuem valor preditivo de fato.
-
-* [ ] **3.1 Otimizar Diferenciação Fracionária**
-    * **Arquivo:** `src/features/frac_diff.py`
-    * **Ação:** Executar `find_min_d()` nas séries de preços para encontrar o menor *d* que passe no teste ADF e atualizar a geração de features com este valor.
-* [ ] **3.2 Analisar o Sharpe Lift**
-    * **Arquivo:** `src/main_backtest.py`
-    * **Ação:** Rodar `attribution_analysis` de `src/backtest/attribution.py`. O Sharpe Ratio do portfólio filtrado pelo Meta-Model deve ser superior ao da estratégia Alpha original.
+* [ ] **4.1. Arquivo:** Criar `src/backtest/dsr.py` (ou integrar em `metrics.py`)
+* [ ] **4.2. Ação:** Ao final dos *N* trials do Optuna, extrair a variância dos resultados (Sharpes testados) e o número total de trials executados.
+* [ ] **4.3. Ação:** Calcular o **Deflated Sharpe Ratio (DSR)** sobre o melhor modelo encontrado, utilizando a fórmula de López de Prado para confirmar se o Sharpe reportado ainda é estatisticamente significativo a 95% de confiança após descontar o número de testes realizados.

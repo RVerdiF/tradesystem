@@ -197,6 +197,26 @@ class MLConfig:
 
 
 # ---------------------------------------------------------------------------
+# Otimização (Fase Extra)
+# ---------------------------------------------------------------------------
+@dataclass(frozen=True)
+class OptimizationConfig:
+    """Configuração para o otimizador bayesiano (Optuna)."""
+
+    # Ranges de busca sugeridos (Fase 1 do plano)
+    cusum_range: tuple[float, float] = (0.01, 0.05)
+    fast_span_range: tuple[int, int] = (5, 20)
+    slow_span_range: tuple[int, int] = (20, 60)
+    pt_sl_range: tuple[float, float] = (1.0, 3.0)
+    max_depth_range: tuple[int, int] = (2, 4)
+
+    # Parâmetros de execução
+    n_trials: int = 50
+    min_trades: int = 30
+    timeout: int = 3600  # 1 hora
+
+
+# ---------------------------------------------------------------------------
 # Execução (Fase 6 — Paper Trading / Live)
 # ---------------------------------------------------------------------------
 @dataclass(frozen=True)
@@ -222,6 +242,7 @@ log_config = LogConfig()
 feature_config = FeatureConfig()
 labeling_config = LabelingConfig()
 ml_config = MLConfig()
+optimization_config = OptimizationConfig()
 execution_config = ExecutionConfig()
 
 

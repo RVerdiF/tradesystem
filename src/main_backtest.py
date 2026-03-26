@@ -12,6 +12,7 @@ from loguru import logger
 # Importa módulos das fases
 from src.features.indicators import compute_all_features
 from src.features.frac_diff import frac_diff_ffd, find_min_d
+from src.features.cusum_filter import adaptive_cusum_events
 from src.data.bar_sampler import volume_bars, dollar_bars
 from src.labeling.alpha import TrendFollowingAlpha, get_signal_events
 from src.labeling.volatility import get_volatility_targets
@@ -92,9 +93,12 @@ def fetch_yfinance_data(symbol="PETR4.SA", years=5, interval="1d"):
     logger.success(f"Dados baixados: {len(df)} barras ({interval}).")
     return df
 
-def run_pipeline(df, interval="1d", use_volume_bars=False):
+def run_pipeline(df, interval="1d", use_volume_bars=False, params=None):
     """Executa o core do pipeline de backtest dado um DataFrame OHLCV."""
     
+    if params is None:
+        params = {}
+
     # ---------------------------------------------------------
     # Fase 1.2: Amostragem de Barras (Volume/Dollar)
     # ---------------------------------------------------------
@@ -135,29 +139,43 @@ def run_pipeline(df, interval="1d", use_volume_bars=False):
     # Fase 3: Alpha e Labeling (Tripla Barreira)
     # ---------------------------------------------------------
     logger.info("--- Fase 3: Alpha e Labeling ---")
-    alpha_model = TrendFollowingAlpha(fast_span=2, slow_span=10)
+    
+    # Extrai spans dos params ou usa hardcoded
+    fast_span = params.get("alpha_fast", 2)
+    slow_span = params.get("alpha_slow", 10)
+    
+    alpha_model = TrendFollowingAlpha(fast_span=fast_span, slow_span=slow_span)
     signal = alpha_model.generate_signal(df)
     
     signal_events = get_signal_events(signal)
     
+    # Filtro CUSUM (Fase 1 do plano de otimização)
+    if "cusum_threshold" in params:
+        cusum_ts = adaptive_cusum_events(df["close"], threshold_multiplier=params["cusum_threshold"])
+        signal_events = signal_events.intersection(cusum_ts)
+        logger.info("Eventos após filtro CUSUM: {}", len(signal_events))
+
     if len(signal_events) == 0:
         logger.error("Nenhum sinal gerado pelo Alpha Model. Tente ajustar os parâmetros.")
-        return
+        return None
         
     target_vol = get_volatility_targets(df["close"], signal_events, span=50)
+    
+    pt_sl = params.get("pt_sl", (1.0, 1.0))
     
     events = create_events(
         close=df["close"],
         event_timestamps=target_vol.index,
         target_vol=target_vol,
         side=signal.loc[target_vol.index],
-        max_holding=20
+        max_holding=20,
+        pt_sl=pt_sl
     )
     
     labels_df = get_labels(df["close"], events)
     if labels_df is None or labels_df.empty:
         logger.error("Nenhuma label gerada. Encerrando.")
-        return
+        return None
         
     labels_df = labels_df.dropna(subset=["label"])
     
@@ -182,6 +200,10 @@ def run_pipeline(df, interval="1d", use_volume_bars=False):
     all_test_preds = []
     all_test_probs = []
     all_test_labels = []
+    all_train_sharpes = []
+
+    # Params para o MetaClassifier
+    max_depth = params.get("xgb_max_depth", 5)
 
     for i, (train_idx, test_idx) in enumerate(splits):
         if len(train_idx) < 10: continue
@@ -189,12 +211,26 @@ def run_pipeline(df, interval="1d", use_volume_bars=False):
         X_train, y_train = X.iloc[train_idx], y_meta.iloc[train_idx]
         X_test, y_test = X.iloc[test_idx], y_meta.iloc[test_idx]
         
-        # Fase 2.1: Usando MetaClassifier (que agora suporta XGBoost)
-        model = MetaClassifier(n_estimators=150, max_depth=5, use_xgboost=True)
+        model = MetaClassifier(n_estimators=150, max_depth=max_depth, use_xgboost=True)
         
-        # Fase 2.2: Sample Weighting por Retorno Absoluto
         weights = np.abs(labels_df.loc[X_train.index, "ret"])
         model.fit(X_train, y_train, sample_weight=weights)
+        
+        # Sharpe de treino para diagnóstico
+        train_probs = model.predict_proba(X_train)[:, 1]
+        train_preds = model.predict(X_train)
+        train_labels = labels_df.loc[X_train.index].copy()
+        
+        train_trades = pd.DataFrame({
+            "ret": train_labels["ret"],
+            "side": train_labels["side"],
+            "meta_label": train_preds,
+            "bet_size": train_probs
+        }, index=X_train.index)
+        
+        train_attr = trade_level_attribution(train_trades)
+        train_sr = attribution_analysis(train_attr["net_return"], train_attr["alpha_contribution"], periods_per_year=ppy)["sharpe_full_system"]
+        all_train_sharpes.append(train_sr)
         
         probs = model.predict_proba(X_test)[:, 1]
         preds = model.predict(X_test)
@@ -205,11 +241,11 @@ def run_pipeline(df, interval="1d", use_volume_bars=False):
 
     if not all_test_preds:
         logger.error("Falha ao gerar folds de validação.")
-        return
+        return None
 
-    # Consolida resultados do teste (out-of-sample)
-    # Nota: No CPCV real, as mesmas amostras aparecem em múltiplos caminhos. 
-    # Aqui simplificamos pegando a média das predições para as métricas agregadas.
+    avg_train_sharpe = np.mean(all_train_sharpes) if all_train_sharpes else 0.0
+
+    # Consolida resultados do teste
     y_pred_all = pd.concat(all_test_preds).groupby(level=0).mean() > 0.5
     y_prob_all = pd.concat(all_test_probs).groupby(level=0).mean()
     y_test_all = pd.concat(all_test_labels).groupby(level=0).first()
@@ -219,7 +255,6 @@ def run_pipeline(df, interval="1d", use_volume_bars=False):
     # ---------------------------------------------------------
     logger.info("--- Fase 5: Métricas e Atribuição de Performance ---")
     
-    # Filtra as labels originais para o que foi testado no CV
     test_labels = labels_df.loc[y_test_all.index].copy()
     
     trades = pd.DataFrame({
@@ -240,7 +275,7 @@ def run_pipeline(df, interval="1d", use_volume_bars=False):
     
     logger.info(">>> Análise de Atribuição (Sharpe Lift) <<<")
     attr_results = attribution_analysis(net_returns, alpha_returns, periods_per_year=ppy)
-    attribution_summary(trade_attr)
+    summary = attribution_summary(trade_attr)
     
     if attr_results["sharpe_lift_meta"] > 0:
         logger.success(f"Meta-Model agregou valor! Sharpe Lift: {attr_results['sharpe_lift_meta']:.2f}")
@@ -248,6 +283,16 @@ def run_pipeline(df, interval="1d", use_volume_bars=False):
         logger.warning(f"Meta-Model não superou o Alpha. Sharpe Lift: {attr_results['sharpe_lift_meta']:.2f}")
     
     logger.success("Pipeline orquestrado com sucesso!")
+
+    return {
+        "sharpe": attr_results["sharpe_full_system"],
+        "sharpe_alpha": attr_results["sharpe_alpha_only"],
+        "sharpe_lift": attr_results["sharpe_lift_meta"],
+        "sharpe_train": avg_train_sharpe,
+        "n_trades": len(trades),
+        "net_returns": net_returns,
+        "alpha_returns": alpha_returns
+    }
 
 def main():
     parser = argparse.ArgumentParser(description="TradeSystem5000 Backtest Orchestrator")
@@ -265,11 +310,10 @@ def main():
         logger.info("Iniciando Modo SINTÉTICO (2000 dias)...")
         df = generate_synthetic_data(n_days=2000)
     elif args.mode == "yfinance":
-        # Se usar volume bars, tenta pegar dado de menor granularidade (5m) para melhor amostragem
         if args.volume_bars and args.interval == "1h":
             logger.info("Volume Bars solicitado: Alterando intervalo yfinance para 5m para melhor precisão.")
             args.interval = "5m"
-            args.years = min(args.years, 0.16) # Limite yfinance para 5m
+            args.years = min(args.years, 0.16)
             
         logger.info(f"Iniciando Modo YFINANCE (Ativo: {args.symbol}, Intervalo: {args.interval})...")
         df = fetch_yfinance_data(symbol=args.symbol, years=args.years, interval=args.interval)
