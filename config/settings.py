@@ -139,7 +139,7 @@ class FeatureConfig:
     ffd_adf_pvalue: float = 0.05    # p-value alvo do teste ADF
 
     # CUSUM
-    cusum_threshold_pct: float = 1.0  # % de desvio para trigger
+    cusum_threshold_pct: float = 0.1  # % de desvio para trigger
     cusum_ewm_span: int = 50          # span do EWMA para threshold adaptativo
 
     # Indicadores — Momentum

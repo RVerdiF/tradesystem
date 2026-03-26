@@ -20,12 +20,18 @@ from sklearn.base import BaseEstimator, ClassifierMixin
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import classification_report, roc_auc_score
 
+try:
+    from xgboost import XGBClassifier
+    HAS_XGB = True
+except ImportError:
+    HAS_XGB = False
+
 
 class MetaClassifier(BaseEstimator, ClassifierMixin):
     """
     Meta-Classificador Secundário para filtrar sinais do modelo primário.
 
-    Wraps um sklearn.ensemble.RandomForestClassifier (ou XGBoost futuro).
+    Wraps um XGBoost Classifier ou RandomForestClassifier.
 
     Parameters
     ----------
@@ -34,34 +40,48 @@ class MetaClassifier(BaseEstimator, ClassifierMixin):
     max_depth : int, optional
         Profundidade máxima. Regularização severa é importante em finanças 
         (overfitting é o maior vilão).
-    class_weight : str or dict, default="balanced_subsample"
-        Essencial já que a classe de sucesso (1) pode ser muito desbalanceada
-        em relação ao falha (0).
+    class_weight : str or dict, default="balanced"
+        Essencial já que a classe de sucesso (1) pode ser muito desbalanceada.
     n_jobs : int, default=-1
         Processamento paralelo.
     """
 
     def __init__(
         self,
-        n_estimators: int = 1000,
-        max_depth: int | None = 3,
-        class_weight: str | dict | None = "balanced_subsample",
+        n_estimators: int = 200,
+        max_depth: int | None = 5,
+        class_weight: str | dict | None = "balanced",
         n_jobs: int = -1,
         random_state: int | None = 42,
+        use_xgboost: bool = True,
     ) -> None:
         self.n_estimators = n_estimators
         self.max_depth = max_depth
         self.class_weight = class_weight
         self.n_jobs = n_jobs
         self.random_state = random_state
+        self.use_xgboost = use_xgboost and HAS_XGB
 
-        self.model = RandomForestClassifier(
-            n_estimators=self.n_estimators,
-            max_depth=self.max_depth,
-            class_weight=self.class_weight,
-            n_jobs=self.n_jobs,
-            random_state=self.random_state,
-        )
+        if self.use_xgboost:
+            logger.info("Usando XGBoost Classifier para Meta-Model.")
+            # XGBoost não aceita "balanced" diretamente no class_weight, 
+            # mas podemos setar scale_pos_weight posteriormente ou usar parâmetros padrão.
+            self.model = XGBClassifier(
+                n_estimators=self.n_estimators,
+                max_depth=self.max_depth,
+                n_jobs=self.n_jobs,
+                random_state=self.random_state,
+                eval_metric="logloss",
+            )
+        else:
+            logger.info("Usando Random Forest para Meta-Model.")
+            self.model = RandomForestClassifier(
+                n_estimators=self.n_estimators,
+                max_depth=self.max_depth,
+                class_weight="balanced_subsample" if self.class_weight == "balanced" else self.class_weight,
+                n_jobs=self.n_jobs,
+                random_state=self.random_state,
+            )
 
         self.is_fitted_ = False
 

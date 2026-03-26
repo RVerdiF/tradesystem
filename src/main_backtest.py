@@ -11,13 +11,15 @@ from loguru import logger
 
 # Importa módulos das fases
 from src.features.indicators import compute_all_features
-from src.features.frac_diff import frac_diff_ffd
+from src.features.frac_diff import frac_diff_ffd, find_min_d
+from src.data.bar_sampler import volume_bars, dollar_bars
 from src.labeling.alpha import TrendFollowingAlpha, get_signal_events
 from src.labeling.volatility import get_volatility_targets
 from src.labeling.triple_barrier import create_events, get_labels
 from src.modeling.classifier import MetaClassifier
 from src.backtest.metrics import performance_report
-from src.backtest.attribution import attribution_analysis, trade_level_attribution
+from src.backtest.cpcv import CombinatorialPurgedCV
+from src.backtest.attribution import attribution_analysis, trade_level_attribution, attribution_summary
 
 def generate_synthetic_data(n_days=1000):
     """Gera dados sintéticos de preços OHLCV (Random Walk) para demonstração."""
@@ -90,16 +92,27 @@ def fetch_yfinance_data(symbol="PETR4.SA", years=5, interval="1d"):
     logger.success(f"Dados baixados: {len(df)} barras ({interval}).")
     return df
 
-def run_pipeline(df, interval="1d"):
+def run_pipeline(df, interval="1d", use_volume_bars=False):
     """Executa o core do pipeline de backtest dado um DataFrame OHLCV."""
     
+    # ---------------------------------------------------------
+    # Fase 1.2: Amostragem de Barras (Volume/Dollar)
+    # ---------------------------------------------------------
+    if use_volume_bars:
+        logger.info("--- Fase 1.2: Aplicando Amostragem de Barras de Volume ---")
+        # Tratamos OHLCV como "ticks" para o sampler
+        ticks_pseudo = df.rename(columns={"close": "last"})
+        df = volume_bars(ticks_pseudo, threshold=None) # Usa default da config
+        interval = "volume"
+
     # Mapeamento de períodos por ano para métricas anualizadas (SR, etc.)
     periods_map = {
         "1d": 252,
         "1h": 252 * 7,      # Aproximação pregão B3
         "60m": 252 * 7,
         "15m": 252 * 7 * 4,
-        "5m": 252 * 7 * 12
+        "5m": 252 * 7 * 12,
+        "volume": 252 * 7 * 6 # Estimativa para volume bars
     }
     ppy = periods_map.get(interval, 252)
 
@@ -109,9 +122,10 @@ def run_pipeline(df, interval="1d"):
     logger.info("--- Fase 2: Feature Engineering ---")
     features = compute_all_features(df)
     
-    # Diferenciação Fracionária
-    # Nota: Com janelas de pesos muito grandes em intraday (muitos dados), pode ser pesado.
-    features["ffd"] = frac_diff_ffd(df["close"], d=0.4)
+    # Fase 3.1: Otimização de Diferenciação Fracionária
+    logger.info("Fase 3.1: Otimizando d para FFD...")
+    optimal_d = find_min_d(df["close"])
+    features["ffd"] = frac_diff_ffd(df["close"], d=optimal_d)
     
     features = features.dropna()
     df = df.reindex(features.index)
@@ -121,7 +135,7 @@ def run_pipeline(df, interval="1d"):
     # Fase 3: Alpha e Labeling (Tripla Barreira)
     # ---------------------------------------------------------
     logger.info("--- Fase 3: Alpha e Labeling ---")
-    alpha_model = TrendFollowingAlpha(fast_span=5, slow_span=20)
+    alpha_model = TrendFollowingAlpha(fast_span=2, slow_span=10)
     signal = alpha_model.generate_signal(df)
     
     signal_events = get_signal_events(signal)
@@ -152,75 +166,86 @@ def run_pipeline(df, interval="1d"):
     y_meta = (labels_df.loc[common_idx, "label"] == 1).astype(int)
     
     # ---------------------------------------------------------
-    # Fase 4: Machine Learning (Classificador Secundário)
+    # Fase 4: Machine Learning (Classificador Secundário com CV Purificada)
     # ---------------------------------------------------------
-    logger.info("--- Fase 4: Classificador Secundário (Meta-Model) ---")
+    logger.info("--- Fase 4: Meta-Model com Validação Cruzada Purificada (CPCV) ---")
     
-    if len(X) < 10:
-        logger.warning(f"Amostragem muito pequena ({len(X)} eventos). ML pode não generalizar.")
+    if len(X) < 20:
+        logger.warning(f"Amostragem muito pequena ({len(X)} eventos).")
+
+    # Amostras info para Purga e Embargo (t0 -> t1)
+    samples_info = events.loc[common_idx, "t1"]
+    
+    cv = CombinatorialPurgedCV(n_groups=6, n_test_groups=2, samples_info=samples_info)
+    splits = cv.split(X)
+    
+    all_test_preds = []
+    all_test_probs = []
+    all_test_labels = []
+
+    for i, (train_idx, test_idx) in enumerate(splits):
+        if len(train_idx) < 10: continue
         
-    split_idx = int(len(X) * 0.7)
-    train_idx = X.index[:split_idx]
-    
-    # Adicionar embargo (zona de exclusão) para evitar Data Leakage
-    # max_holding é 20 barras, então pulamos 20 eventos (se houver o suficiente)
-    gap = min(20, int(len(X) * 0.1)) # Limita o embargo a no máximo 10% da amostra
-    test_start_idx = split_idx + gap
-    
-    if test_start_idx >= len(X) - 5: # Precisa de pelo menos 5 pro teste
-        logger.warning(f"Embargo de {gap} barras muito grande. Tentando rodar sem embargo.")
-        test_start_idx = split_idx
+        X_train, y_train = X.iloc[train_idx], y_meta.iloc[train_idx]
+        X_test, y_test = X.iloc[test_idx], y_meta.iloc[test_idx]
         
-    test_idx = X.index[test_start_idx:]
-    
-    X_train, y_train = X.loc[train_idx], y_meta.loc[train_idx]
-    X_test, y_test = X.loc[test_idx], y_meta.loc[test_idx]
-    
-    train_mask = X_train.notna().all(axis=1) & y_train.notna()
-    test_mask  = X_test.notna().all(axis=1) & y_test.notna()
-    X_train, y_train = X_train[train_mask], y_train[train_mask]
-    X_test, y_test = X_test[test_mask], y_test[test_mask]
-    
-    logger.info(f"Treino: {len(X_train)} eventos | Teste: {len(X_test)} eventos")
-    
-    if len(X_train) == 0 or len(X_test) == 0:
-        logger.error("Sem dados suficientes para Treino/Teste após limpeza.")
+        # Fase 2.1: Usando MetaClassifier (que agora suporta XGBoost)
+        model = MetaClassifier(n_estimators=150, max_depth=5, use_xgboost=True)
+        
+        # Fase 2.2: Sample Weighting por Retorno Absoluto
+        weights = np.abs(labels_df.loc[X_train.index, "ret"])
+        model.fit(X_train, y_train, sample_weight=weights)
+        
+        probs = model.predict_proba(X_test)[:, 1]
+        preds = model.predict(X_test)
+        
+        all_test_preds.append(pd.Series(preds, index=X_test.index))
+        all_test_probs.append(pd.Series(probs, index=X_test.index))
+        all_test_labels.append(y_test)
+
+    if not all_test_preds:
+        logger.error("Falha ao gerar folds de validação.")
         return
 
-    meta_model = MetaClassifier(n_estimators=100, max_depth=3)
-    
-    # Usando o retorno absoluto como peso no treinamento (sample_weight)
-    weights = np.abs(labels_df.loc[y_train.index, "ret"])
-    meta_model.fit(X_train, y_train, sample_weight=weights)
-    
-    meta_model.evaluate(X_test, y_test)
-    prob_predictions = meta_model.predict_proba(X_test)[:, 1]
-    meta_predictions = meta_model.predict(X_test)
+    # Consolida resultados do teste (out-of-sample)
+    # Nota: No CPCV real, as mesmas amostras aparecem em múltiplos caminhos. 
+    # Aqui simplificamos pegando a média das predições para as métricas agregadas.
+    y_pred_all = pd.concat(all_test_preds).groupby(level=0).mean() > 0.5
+    y_prob_all = pd.concat(all_test_probs).groupby(level=0).mean()
+    y_test_all = pd.concat(all_test_labels).groupby(level=0).first()
     
     # ---------------------------------------------------------
     # Fase 5: Backtest, Métricas e Atribuição
     # ---------------------------------------------------------
     logger.info("--- Fase 5: Métricas e Atribuição de Performance ---")
-    test_labels = labels_df.loc[test_idx[test_mask]].copy()
+    
+    # Filtra as labels originais para o que foi testado no CV
+    test_labels = labels_df.loc[y_test_all.index].copy()
     
     trades = pd.DataFrame({
         "ret": test_labels["ret"],
         "side": test_labels["side"],
-        "meta_label": meta_predictions,
-        "bet_size": prob_predictions,
+        "meta_label": y_pred_all.astype(int),
+        "bet_size": y_prob_all,
         "cost": 0.0005 
-    }, index=test_idx[test_mask])
+    }, index=y_test_all.index)
     
     trade_attr = trade_level_attribution(trades)
     
     net_returns = trade_attr["net_return"]
     alpha_returns = trade_attr["alpha_contribution"]
     
-    logger.info(">>> Performance Final (Conjunto de Teste) <<<")
+    logger.info(">>> Performance Final (OOS - Out-of-Sample) <<<")
     performance_report(net_returns, periods_per_year=ppy)
     
-    logger.info(">>> Análise de Atribuição <<<")
-    attribution_analysis(net_returns, alpha_returns, periods_per_year=ppy)
+    logger.info(">>> Análise de Atribuição (Sharpe Lift) <<<")
+    attr_results = attribution_analysis(net_returns, alpha_returns, periods_per_year=ppy)
+    attribution_summary(trade_attr)
+    
+    if attr_results["sharpe_lift_meta"] > 0:
+        logger.success(f"Meta-Model agregou valor! Sharpe Lift: {attr_results['sharpe_lift_meta']:.2f}")
+    else:
+        logger.warning(f"Meta-Model não superou o Alpha. Sharpe Lift: {attr_results['sharpe_lift_meta']:.2f}")
     
     logger.success("Pipeline orquestrado com sucesso!")
 
@@ -231,7 +256,8 @@ def main():
     parser.add_argument("--symbol", type=str, default="PETR4.SA", help="Ativo (ex: PETR4.SA).")
     parser.add_argument("--years", type=float, default=2, help="Anos de história (limite 2 p/ 1h em yfinance).")
     parser.add_argument("--interval", type=str, choices=["1d", "1h", "15m", "5m"], default="1h", 
-                        help="Intervalo das barras (ex: 1d, 1h). Padrão alterado para 1h.")
+                        help="Intervalo das barras (ex: 1d, 1h).")
+    parser.add_argument("--volume-bars", action="store_true", help="Usa amostragem de barras de volume (Fase 1.2).")
     
     args = parser.parse_args()
     
@@ -239,13 +265,19 @@ def main():
         logger.info("Iniciando Modo SINTÉTICO (2000 dias)...")
         df = generate_synthetic_data(n_days=2000)
     elif args.mode == "yfinance":
+        # Se usar volume bars, tenta pegar dado de menor granularidade (5m) para melhor amostragem
+        if args.volume_bars and args.interval == "1h":
+            logger.info("Volume Bars solicitado: Alterando intervalo yfinance para 5m para melhor precisão.")
+            args.interval = "5m"
+            args.years = min(args.years, 0.16) # Limite yfinance para 5m
+            
         logger.info(f"Iniciando Modo YFINANCE (Ativo: {args.symbol}, Intervalo: {args.interval})...")
         df = fetch_yfinance_data(symbol=args.symbol, years=args.years, interval=args.interval)
     else:
         logger.error("Modo 'real' com MT5 será desenvolvido na Fase 6.")
         sys.exit(1)
         
-    run_pipeline(df, interval=args.interval)
+    run_pipeline(df, interval=args.interval, use_volume_bars=args.volume_bars)
 
 if __name__ == "__main__":
     main()
