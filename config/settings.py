@@ -135,11 +135,11 @@ class FeatureConfig:
 
     # Diferenciação Fracionária (FFD)
     ffd_d: float = 0.4              # d inicial para FFD
-    ffd_threshold: float = 1e-5     # corte de pesos
+    ffd_threshold: float = 1e-4     # corte de pesos (Ajustado p/ 1 ano)
     ffd_adf_pvalue: float = 0.05    # p-value alvo do teste ADF
 
     # CUSUM
-    cusum_threshold_pct: float = 0.1  # % de desvio para trigger
+    cusum_threshold_pct: float = 0.0435  # % de desvio para trigger (Otimizado PETR4.SA)
     cusum_ewm_span: int = 50          # span do EWMA para threshold adaptativo
 
     # Indicadores — Momentum
@@ -164,8 +164,8 @@ class LabelingConfig:
     """Parâmetros para rotulagem e alpha models (Fase 3)."""
 
     # Alpha — Trend Following
-    trend_fast_span: int = 10        # EMA rápida (períodos)
-    trend_slow_span: int = 50        # EMA lenta (períodos)
+    trend_fast_span: int = 11        # EMA rápida (períodos) (Otimizado PETR4.SA)
+    trend_slow_span: int = 58        # EMA lenta (períodos) (Otimizado PETR4.SA)
 
     # Alpha — Mean Reversion
     mean_rev_window: int = 20        # Janela do Z-score
@@ -176,7 +176,7 @@ class LabelingConfig:
     vol_span: int = 20               # Span EWMA para volatilidade dos retornos
 
     # Tripla Barreira
-    pt_sl_ratio: tuple[float, float] = (1.0, 1.0)  # (profit_take, stop_loss) em múltiplos de vol
+    pt_sl_ratio: tuple[float, float] = (2.77, 2.98)  # (profit_take, stop_loss) (Otimizado PETR4.SA)
     max_holding_periods: int = 10    # Barreira vertical (barras máximas)
     min_return: float = 0.0          # Retorno mínimo para considerar label +1
 
@@ -191,6 +191,7 @@ class MLConfig:
     # Validação Cruzada
     cv_splits: int = 5
     embargo_pct: float = 0.01        # 1% das barras da base como embargo pós-teste
+    xgb_max_depth: int = 4           # Profundidade máxima XGBoost (Otimizado PETR4.SA)
 
     # Bet Sizing
     max_leverage: int = 5            # Alavancagem máxima (lotes)

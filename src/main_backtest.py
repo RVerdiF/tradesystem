@@ -8,6 +8,7 @@ import sys
 import numpy as np
 import pandas as pd
 from loguru import logger
+from config.settings import feature_config, labeling_config, ml_config
 
 # Importa módulos das fases
 from src.features.indicators import compute_all_features
@@ -60,17 +61,23 @@ def fetch_yfinance_data(symbol="PETR4.SA", years=5, interval="1d"):
     logger.info(f"Baixando dados do Yahoo Finance para {symbol} (Intervalo: {interval})...")
     
     # Ajusta o tempo de lookback se for intraday (yfinance tem limites rígidos)
+    # 1h -> 730 dias, outros intraday -> 60 dias. Usamos margem de segurança (729/59).
+    requested_days = int(years * 365)
+    
     if interval in ["1h", "60m"]:
-        if years > 2:
-            logger.warning("Intervalo 1h limitado a 2 anos (730 dias) no Yahoo Finance. Ajustando...")
-            years = 2
+        days = min(requested_days, 729)
+        if requested_days > 729:
+            logger.warning("Intervalo 1h limitado a 730 dias no Yahoo Finance. Usando 729 dias.")
     elif interval in ["1m", "2m", "5m", "15m", "30m", "90m"]:
-        if years > 0.16:
-            logger.warning(f"Intervalo {interval} limitado a 60 dias no Yahoo Finance. Ajustando...")
-            years = 0.16 # ~60 dias
+        max_d = 6 if interval == "1m" else 59
+        days = min(requested_days, max_d)
+        if requested_days > max_d:
+            logger.warning(f"Intervalo {interval} limitado a {max_d+1} dias no Yahoo Finance. Usando {days} dias.")
+    else:
+        days = requested_days
 
-    end = pd.Timestamp.today()
-    start = end - pd.Timedelta(days=int(years * 365))
+    end = pd.Timestamp.now()
+    start = end - pd.Timedelta(days=days)
     
     df = yf.download(symbol, start=start, end=end, interval=interval, progress=False)
     
@@ -140,9 +147,9 @@ def run_pipeline(df, interval="1d", use_volume_bars=False, params=None):
     # ---------------------------------------------------------
     logger.info("--- Fase 3: Alpha e Labeling ---")
     
-    # Extrai spans dos params ou usa hardcoded
-    fast_span = params.get("alpha_fast", 2)
-    slow_span = params.get("alpha_slow", 10)
+    # Extrai spans dos params ou usa os padrões do config
+    fast_span = params.get("alpha_fast", labeling_config.trend_fast_span)
+    slow_span = params.get("alpha_slow", labeling_config.trend_slow_span)
     
     alpha_model = TrendFollowingAlpha(fast_span=fast_span, slow_span=slow_span)
     signal = alpha_model.generate_signal(df)
@@ -150,8 +157,9 @@ def run_pipeline(df, interval="1d", use_volume_bars=False, params=None):
     signal_events = get_signal_events(signal)
     
     # Filtro CUSUM (Fase 1 do plano de otimização)
-    if "cusum_threshold" in params:
-        cusum_ts = adaptive_cusum_events(df["close"], threshold_multiplier=params["cusum_threshold"])
+    if "cusum_threshold" in params or hasattr(feature_config, "cusum_threshold_pct"):
+        threshold = params.get("cusum_threshold", feature_config.cusum_threshold_pct)
+        cusum_ts = adaptive_cusum_events(df["close"], threshold_multiplier=threshold)
         signal_events = signal_events.intersection(cusum_ts)
         logger.info("Eventos após filtro CUSUM: {}", len(signal_events))
 
@@ -159,9 +167,9 @@ def run_pipeline(df, interval="1d", use_volume_bars=False, params=None):
         logger.error("Nenhum sinal gerado pelo Alpha Model. Tente ajustar os parâmetros.")
         return None
         
-    target_vol = get_volatility_targets(df["close"], signal_events, span=50)
+    target_vol = get_volatility_targets(df["close"], signal_events, span=labeling_config.vol_span)
     
-    pt_sl = params.get("pt_sl", (1.0, 1.0))
+    pt_sl = params.get("pt_sl", labeling_config.pt_sl_ratio)
     
     events = create_events(
         close=df["close"],
@@ -203,7 +211,7 @@ def run_pipeline(df, interval="1d", use_volume_bars=False, params=None):
     all_train_sharpes = []
 
     # Params para o MetaClassifier
-    max_depth = params.get("xgb_max_depth", 5)
+    max_depth = params.get("xgb_max_depth", ml_config.xgb_max_depth)
 
     for i, (train_idx, test_idx) in enumerate(splits):
         if len(train_idx) < 10: continue
