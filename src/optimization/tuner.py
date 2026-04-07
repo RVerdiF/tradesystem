@@ -11,7 +11,7 @@ import optuna
 import pandas as pd
 import numpy as np
 from loguru import logger
-from src.main_backtest import run_pipeline, generate_synthetic_data, fetch_yfinance_data
+from src.main_backtest import run_pipeline, fetch_mt5_data
 from config.settings import optimization_config
 from src.backtest.dsr import deflated_sharpe_ratio
 
@@ -106,10 +106,32 @@ def run_optimization(df, interval):
     else:
         logger.warning("ALERTA DE OVERFITTING: O melhor Sharpe pode ser sorte (DSR = {:.2f})", dsr_score)
     
-    return study
+    # Prepara dicionário de parâmetros normalizado (separar pt_sl, etc)
+    # A estrutura deve bater com a forma como é injetada em run_pipeline / train_model
+    best_params = dict(study.best_params)
+    
+    # Recria o dicionário na estrutura final desejada (em train_model / main_backtest)
+    params = {
+        "cusum_threshold": best_params.get("cusum_threshold"),
+        "alpha_fast": best_params.get("alpha_fast"),
+        "alpha_slow": best_params.get("alpha_slow"),
+        "pt_sl": (best_params.get("pt_mult"), best_params.get("sl_mult")),
+        "xgb_max_depth": best_params.get("xgb_max_depth")
+    }
+    
+    return {
+        "study": study,
+        "params": params,
+        "metadata": {
+            "dsr_score": dsr_score,
+            "best_sharpe": study.best_value,
+            "n_trials": len(study.trials)
+        }
+    }
 
 if __name__ == "__main__":
     # Script para teste rápido da otimização
-    logger.info("Rodando teste de otimização com dados sintéticos...")
-    df_test = generate_synthetic_data(n_days=1500)
-    run_optimization(df_test, interval="1d")
+    logger.info("Rodando teste de otimização com dados reais do MT5...")
+    df_test = fetch_mt5_data(symbol="PETR4", n_bars=1500, interval="1d")
+    results = run_optimization(df_test, interval="1d")
+    print(results)

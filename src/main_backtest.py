@@ -11,6 +11,8 @@ from loguru import logger
 from config.settings import feature_config, labeling_config, ml_config
 
 # Importa módulos das fases
+from src.data.mt5_connector import mt5_session
+from src.data.extractor import extract_ohlc, INTERVAL_TO_TF
 from src.features.indicators import compute_all_features
 from src.features.frac_diff import frac_diff_ffd, find_min_d
 from src.features.cusum_filter import adaptive_cusum_events
@@ -99,6 +101,29 @@ def fetch_yfinance_data(symbol="PETR4.SA", years=5, interval="1d"):
     df = df[["open", "high", "low", "close", "volume"]].dropna()
     logger.success(f"Dados baixados: {len(df)} barras ({interval}).")
     return df
+
+def fetch_mt5_data(symbol="PETR4", years=5, interval="1h", n_bars=5000):
+    """Baixa dados históricos do MetaTrader 5 usando os módulos de dados."""
+    logger.info(f"Baixando dados do MT5 para {symbol} (Intervalo: {interval})...")
+    
+    tf = INTERVAL_TO_TF.get(interval, 60)
+    
+    try:
+        with mt5_session() as conn:
+            df = extract_ohlc(symbol=symbol, timeframe=tf, n_bars=n_bars)
+            
+        if df.empty:
+            logger.error(f"Nenhum dado encontrado no MT5 para {symbol}.")
+            sys.exit(1)
+            
+        # O extractor já retorna time como index e colunas em minúsculas
+        # Usa tick_volume como volume (comum no backtest MT5)
+        df = df[["open", "high", "low", "close", "tick_volume"]].rename(columns={"tick_volume": "volume"}).dropna()
+        logger.success(f"Dados do MT5 baixados: {len(df)} barras ({interval}).")
+        return df
+    except Exception as e:
+        logger.error(f"Erro ao extrair dados do MT5: {e}")
+        sys.exit(1)
 
 def run_pipeline(df, interval="1d", use_volume_bars=False, params=None):
     """Executa o core do pipeline de backtest dado um DataFrame OHLCV."""
@@ -304,11 +329,12 @@ def run_pipeline(df, interval="1d", use_volume_bars=False, params=None):
 
 def main():
     parser = argparse.ArgumentParser(description="TradeSystem5000 Backtest Orchestrator")
-    parser.add_argument("--mode", choices=["synthetic", "yfinance", "real"], default="yfinance", 
-                        help="Modo de dados. Padrão: yfinance.")
-    parser.add_argument("--symbol", type=str, default="PETR4.SA", help="Ativo (ex: PETR4.SA).")
+    parser.add_argument("--mode", choices=["synthetic", "yfinance", "mt5"], default="mt5", 
+                        help="Modo de dados. Padrão: mt5.")
+    parser.add_argument("--symbol", type=str, default="PETR4.SA", help="Ativo (ex: PETR4.SA). (Sufixo .SA ignorado no MT5)")
     parser.add_argument("--years", type=float, default=2, help="Anos de história (limite 2 p/ 1h em yfinance).")
-    parser.add_argument("--interval", type=str, choices=["1d", "1h", "15m", "5m"], default="1h", 
+    parser.add_argument("--n-bars", type=int, default=5000, help="Quantidade de barras para MT5.")
+    parser.add_argument("--interval", type=str, choices=["1d", "1h", "15m", "5m", "1m"], default="1h", 
                         help="Intervalo das barras (ex: 1d, 1h).")
     parser.add_argument("--volume-bars", action="store_true", help="Usa amostragem de barras de volume (Fase 1.2).")
     
@@ -325,8 +351,12 @@ def main():
             
         logger.info(f"Iniciando Modo YFINANCE (Ativo: {args.symbol}, Intervalo: {args.interval})...")
         df = fetch_yfinance_data(symbol=args.symbol, years=args.years, interval=args.interval)
+    elif args.mode == "mt5":
+        symbol = args.symbol.replace(".SA", "")
+        logger.info(f"Iniciando Modo MT5 (Ativo: {symbol}, Intervalo: {args.interval})...")
+        df = fetch_mt5_data(symbol=symbol, years=args.years, interval=args.interval, n_bars=args.n_bars)
     else:
-        logger.error("Modo 'real' com MT5 será desenvolvido na Fase 6.")
+        logger.error("Modo inválido.")
         sys.exit(1)
         
     run_pipeline(df, interval=args.interval, use_volume_bars=args.volume_bars)

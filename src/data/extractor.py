@@ -40,6 +40,20 @@ TIMEFRAME_MAP: dict[int, str] = {
     43200: "MN1",
 }
 
+# Mapeamento reverso de strings CLI (yfinance style) para timeframes MT5
+INTERVAL_TO_TF: dict[str, int] = {
+    "1m": 1,
+    "5m": 5,
+    "15m": 15,
+    "30m": 30,
+    "1h": 60,
+    "60m": 60,
+    "4h": 240,
+    "1d": 1440,
+    "1wk": 10080,
+    "1mo": 43200,
+}
+
 
 class DataExtractionError(Exception):
     """Erro na extração de dados do MT5."""

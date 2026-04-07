@@ -36,6 +36,8 @@ from config.settings import (
 )
 
 # Pipeline de dados e features
+from src.data.mt5_connector import mt5_session
+from src.data.extractor import extract_ohlc, INTERVAL_TO_TF
 from src.features.indicators import compute_all_features
 from src.features.frac_diff import frac_diff_ffd, find_min_d
 from src.features.cusum_filter import adaptive_cusum_events
@@ -49,6 +51,13 @@ from src.labeling.triple_barrier import create_events, get_labels
 from src.modeling.classifier import MetaClassifier
 from src.modeling.bet_sizing import compute_kelly_fraction
 
+# Optimization Store
+from src.optimization.params_store import (
+    save_optimized_params,
+    load_optimized_params,
+    params_exist,
+)
+
 # Execução
 from src.execution.engine import AsyncTradingEngine
 
@@ -56,7 +65,7 @@ from src.execution.engine import AsyncTradingEngine
 # ---------------------------------------------------------------------------
 # 1. Treinamento do modelo
 # ---------------------------------------------------------------------------
-def train_model(df: pd.DataFrame, interval: str = "1h") -> dict:
+def train_model(df: pd.DataFrame, interval: str = "1h", params: dict | None = None) -> dict:
     """
     Treina o Meta-Modelo usando o pipeline completo e retorna os artefatos
     necessários para execução em tempo real.
@@ -79,18 +88,25 @@ def train_model(df: pd.DataFrame, interval: str = "1h") -> dict:
     df_aligned = df.reindex(features.index)
     logger.info(f"Features: {features.shape}")
 
+    if params is None:
+        params = {}
+        
+    fast_span = params.get("alpha_fast", labeling_config.trend_fast_span)
+    slow_span = params.get("alpha_slow", labeling_config.trend_slow_span)
+
     # --- Alpha ---
     alpha = TrendFollowingAlpha(
-        fast_span=labeling_config.trend_fast_span,
-        slow_span=labeling_config.trend_slow_span,
+        fast_span=fast_span,
+        slow_span=slow_span,
     )
     signal = alpha.generate_signal(df_aligned)
     signal_events = get_signal_events(signal)
 
     # CUSUM filter para aumentar eventos
+    cusum_threshold = params.get("cusum_threshold", feature_config.cusum_threshold_pct)
     cusum_ts = adaptive_cusum_events(
         df_aligned["close"],
-        threshold_multiplier=feature_config.cusum_threshold_pct,
+        threshold_multiplier=cusum_threshold,
     )
     # União: Alpha events + CUSUM events (mais amostras para treinar)
     all_events = signal_events.union(cusum_ts).sort_values()
@@ -107,13 +123,15 @@ def train_model(df: pd.DataFrame, interval: str = "1h") -> dict:
     # Direção do alpha nos eventos (ffill para CUSUM events sem cruzamento)
     side = signal.reindex(target_vol.index, method="ffill")
 
+    pt_sl = params.get("pt_sl", labeling_config.pt_sl_ratio)
+    
     events = create_events(
         close=df_aligned["close"],
         event_timestamps=target_vol.index,
         target_vol=target_vol,
         side=side,
         max_holding=labeling_config.max_holding_periods,
-        pt_sl=labeling_config.pt_sl_ratio,
+        pt_sl=pt_sl,
     )
 
     labels_df = get_labels(df_aligned["close"], events)
@@ -133,9 +151,10 @@ def train_model(df: pd.DataFrame, interval: str = "1h") -> dict:
         logger.warning("Poucas amostras. O modelo pode não generalizar.")
 
     # --- Treino no dataset completo ---
+    max_depth = params.get("xgb_max_depth", ml_config.xgb_max_depth)
     model = MetaClassifier(
         n_estimators=150,
-        max_depth=ml_config.xgb_max_depth,
+        max_depth=max_depth,
         use_xgboost=True,
     )
     weights = np.abs(labels_df.loc[y.index, "ret"])
@@ -284,6 +303,28 @@ def fetch_training_data(symbol: str, years: float, interval: str) -> pd.DataFram
     logger.success(f"Dados de treino: {len(df)} barras ({interval})")
     return df
 
+def fetch_mt5_training_data(symbol: str, interval: str, n_bars: int) -> pd.DataFrame:
+    """Baixa dados do MT5 para treinar o modelo."""
+    tf = INTERVAL_TO_TF.get(interval, 60)
+    logger.info(f"Baixando {n_bars} barras ({interval}) do MT5 para {symbol}...")
+    
+    try:
+        with mt5_session() as conn:
+            df = extract_ohlc(symbol=symbol, timeframe=tf, n_bars=n_bars)
+            
+        if df.empty:
+            logger.error(f"Nenhum dado encontrado no MT5 para {symbol}.")
+            sys.exit(1)
+            
+        # O extractor já retorna time como index e colunas em minúsculas
+        # Usa tick_volume como volume
+        df = df[["open", "high", "low", "close", "tick_volume"]].rename(columns={"tick_volume": "volume"}).dropna()
+        logger.success(f"Dados de treino MT5: {len(df)} barras ({interval})")
+        return df
+    except Exception as e:
+        logger.error(f"Erro ao extrair dados de treino do MT5: {e}")
+        sys.exit(1)
+
 
 # ---------------------------------------------------------------------------
 # 5. Main
@@ -310,16 +351,24 @@ def main():
     )
     parser.add_argument(
         "--symbol", type=str, default="PETR4.SA",
-        help="Ativo a ser monitorado (padrão: PETR4.SA)",
+        help="Ativo a ser monitorado (padrão: PETR4.SA, .SA ignorado no MT5)",
+    )
+    parser.add_argument(
+        "--data-source", type=str, default="mt5", choices=["mt5", "yfinance"],
+        help="Fonte de dados para treino (padrão: mt5)",
     )
     parser.add_argument(
         "--interval", type=str, default="1h",
-        choices=["1d", "1h", "15m", "5m"],
+        choices=["1d", "1h", "15m", "5m", "1m"],
         help="Intervalo das barras para treino (padrão: 1h)",
     )
     parser.add_argument(
         "--years", type=float, default=2,
-        help="Anos de histórico para treino (padrão: 2)",
+        help="Anos de histórico para treino (padrão: 2 para yfinance)",
+    )
+    parser.add_argument(
+        "--n-bars", type=int, default=5000,
+        help="Quantidade de barras para treino (padrão: 5000 para mt5)",
     )
     parser.add_argument(
         "--max-position", type=float, default=2.0,
@@ -329,12 +378,20 @@ def main():
         "--load-model", type=str, default=None,
         help="Caminho para carregar modelo pré-treinado (.pkl).",
     )
+    parser.add_argument(
+        "--force-optimize", action="store_true",
+        help="Força re-otimização dos hiperparâmetros (ignora arquivo JSON existente).",
+    )
 
     args = parser.parse_args()
+
+    if args.data_source == "mt5":
+        args.symbol = args.symbol.replace(".SA", "")
 
     logger.info("=" * 60)
     logger.info("  TradeSystem5000 — Paper / Live Execution")
     logger.info(f"  Modo: {execution_config.mode.upper()}")
+    logger.info(f"  Datasource: {args.data_source.upper()}")
     logger.info(f"  Ativo: {args.symbol}")
     logger.info("=" * 60)
 
@@ -346,18 +403,45 @@ def main():
             sys.exit(1)
         logger.success("MetaTrader 5 conectado.")
 
+    # --- Auto-Otimização (Param Store) ---
+    logger.info("Verificando parâmetros otimizados...")
+    if not params_exist(args.symbol) or args.force_optimize:
+        logger.info(f"Otimizando parâmetros para {args.symbol}...")
+        
+        # Otimização precisa dos dados
+        if args.data_source == "mt5":
+            df_opt = fetch_mt5_training_data(args.symbol, args.interval, args.n_bars)
+        else:
+            df_opt = fetch_training_data(args.symbol, args.years, args.interval)
+            
+        from src.optimization.tuner import run_optimization
+        opt_results = run_optimization(df_opt, interval=args.interval)
+        
+        save_optimized_params(
+            symbol=args.symbol, 
+            params=opt_results["params"], 
+            metadata=opt_results["metadata"]
+        )
+        logger.success("Parâmetros otimizados e salvos com sucesso!")
+        
+    store_data = load_optimized_params(args.symbol)
+    optimized_params = store_data["params"] if store_data else None
+
     # --- Modelo ---
     model_path = Path("models") / f"model_{args.symbol}.pkl"
 
     if args.load_model:
         artifacts = load_model(Path(args.load_model))
-    elif model_path.exists():
+    elif model_path.exists() and not args.force_optimize:
         logger.info(f"Modelo existente encontrado: {model_path}")
         artifacts = load_model(model_path)
     else:
-        logger.info("Nenhum modelo encontrado. Iniciando treinamento...")
-        df = fetch_training_data(args.symbol, args.years, args.interval)
-        artifacts = train_model(df, interval=args.interval)
+        logger.info("Nenhum modelo encontrado (ou força-otimização). Iniciando treinamento...")
+        if args.data_source == "mt5":
+            df = fetch_mt5_training_data(args.symbol, args.interval, args.n_bars)
+        else:
+            df = fetch_training_data(args.symbol, args.years, args.interval)
+        artifacts = train_model(df, interval=args.interval, params=optimized_params)
         save_model(artifacts, model_path)
 
     # --- Pipeline ---
