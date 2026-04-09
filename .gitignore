@@ -210,3 +210,9 @@ logs/
 
 # Artifacts
 artifacts/
+
+# Notebooks
+notebooks/
+
+# Models
+models/

@@ -1,3 +1,19 @@
+"""
+Script de Otimização TradeSystem5000
+
+Como utilizar via linha de comando (CMD/PowerShell):
+
+Uso básico (recomenda-se o uso do módulo com -m):
+    uv run python -m src.optimization.run_opt --symbol PETR4
+
+Uso com parâmetros customizados:
+    uv run python -m src.optimization.run_opt --symbol VALE3 --n-bars 50000 --interval 1h
+
+Argumentos:
+    --symbol:   Ativo para otimizar (obrigatório). Ex: PETR4
+    --n-bars:   Quantidade de candles para o histórico (padrão: 10000)
+    --interval: Tempo gráfico (padrão: 1h). Opções: 1m, 5m, 15m, 30m, 1h, 1d
+"""
 import argparse
 from loguru import logger
 from src.main_backtest import fetch_mt5_data
