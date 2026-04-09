@@ -20,6 +20,7 @@ RAW_DATA_DIR = DATA_DIR / "raw"
 PROCESSED_DATA_DIR = DATA_DIR / "processed"
 SAMPLES_DATA_DIR = DATA_DIR / "samples"
 LOG_DIR = PROJECT_ROOT / "logs"
+DB_PATH = PROJECT_ROOT / "data" / "tradesystem.db"
 
 # Garante que diretórios existam
 for _d in (RAW_DATA_DIR, PROCESSED_DATA_DIR, SAMPLES_DATA_DIR, LOG_DIR):
