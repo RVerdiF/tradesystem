@@ -101,8 +101,8 @@ class AsyncTradingEngine:
                 # Comprar! Fecha posicao vendida antes
                 self.om.close_positions(symbol)
                 
-                # Sizing final (converte Kelly em contratos)
-                target_volume = kelly_f * self.max_position
+                # Sizing final (arredondado para o inteiro mais prximo e garantindo lote mnimo 1)
+                target_volume = float(max(1, int(round(kelly_f * self.max_position))))
                 
                 # Valida usando a posição atual (caso close_positions tenha falhado parcialmente)
                 if self.risk.validate_order(abs(self.om.get_net_position(symbol)), target_volume, self.max_position):
@@ -112,7 +112,7 @@ class AsyncTradingEngine:
                 # Vender!
                 self.om.close_positions(symbol)
                 
-                target_volume = kelly_f * self.max_position
+                target_volume = float(max(1, int(round(kelly_f * self.max_position))))
                 
                 if self.risk.validate_order(abs(self.om.get_net_position(symbol)), target_volume, self.max_position):
                     self.om.send_market_order(symbol, "sell", target_volume)

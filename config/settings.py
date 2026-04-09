@@ -90,7 +90,7 @@ class RiskConfig:
 
     max_daily_loss_pct: float = 0.02       # 2% do capital
     max_drawdown_pct: float = 0.05         # 5% drawdown máximo
-    max_position_size: float = 1.0         # lote máximo por trade
+    max_position_size: float = 200.0         # lote máximo por trade
     max_open_positions: int = 5
     kelly_fraction: float = 0.5            # Kelly fracionário (50%)
 
@@ -195,7 +195,7 @@ class MLConfig:
     xgb_max_depth: int = 4           # Profundidade máxima XGBoost (Otimizado PETR4.SA)
 
     # Bet Sizing
-    max_leverage: int = 5            # Alavancagem máxima (lotes)
+    max_leverage: int = 200            # Alavancagem máxima (lotes)
 
 
 # ---------------------------------------------------------------------------
@@ -236,7 +236,7 @@ class OptimizationConfig:
 class ExecutionConfig:
     """Parâmetros do motor de execução."""
 
-    mode: str = "paper"              # 'paper' ou 'live'
+    mode: str = "live"              # 'paper' ou 'live'
     poll_interval: float = 0.5       # Segundos entre leitura de ticks
     max_slippage_ticks: int = 5      # Desvio máximo aceito em envio a mercado
     magic_number: int = 5000         # Identificador das ordens do sistema

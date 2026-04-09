@@ -216,3 +216,7 @@ notebooks/
 
 # Models
 models/
+
+# databases
+data/
+data/tradesystem.db

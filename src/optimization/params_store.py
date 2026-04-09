@@ -10,6 +10,7 @@ garantindo:
 
 from __future__ import annotations
 
+import re
 import json
 from datetime import datetime
 
@@ -24,6 +25,18 @@ init_db()
 def _normalize_symbol(symbol: str) -> str:
     """Remove sufixo .SA para manter coerência entre MT5 e Yahoo Finance."""
     return symbol.replace(".SA", "")
+
+
+def get_continuous_symbol(symbol: str) -> str:
+    """
+    Retorna o símbolo contínuo para ativos da B3 que possuem séries mensais.
+    Ex: WINJ26 -> WIN$, WDOM25 -> WDO$
+    """
+    # Regex para WIN, WDO, IND, DOL + Letra do Mês + Ano (2 dígitos)
+    match = re.match(r"^(WIN|WDO|IND|DOL)[FGHJKMNQUVXZ]\d{2}$", symbol, re.IGNORECASE)
+    if match:
+        return f"{match.group(1).upper()}$"
+    return symbol
 
 
 def save_optimized_params(symbol: str, params: dict, metadata: dict | None = None) -> None:
@@ -79,6 +92,18 @@ def load_optimized_params(symbol: str) -> dict | None:
         ).fetchone()
 
     if row is None:
+        # Fallback para símbolo contínuo (ex: WINJ26 -> WIN$)
+        continuous_symbol = get_continuous_symbol(symbol)
+        if continuous_symbol != symbol:
+            with get_connection() as conn:
+                row = conn.execute(
+                    "SELECT symbol, params, metadata FROM optimized_params WHERE symbol = ?",
+                    (continuous_symbol,),
+                ).fetchone()
+            if row:
+                logger.info(f"Usando fallback contínuo: {continuous_symbol} para {symbol}")
+
+    if row is None:
         logger.info(f"Nenhum parâmetro encontrado no banco para {symbol}.")
         return None
 
@@ -103,4 +128,17 @@ def params_exist(symbol: str) -> bool:
             (symbol,),
         ).fetchone()
 
-    return row is not None
+    if row is not None:
+        return True
+
+    # Fallback
+    continuous_symbol = get_continuous_symbol(symbol)
+    if continuous_symbol != symbol:
+        with get_connection() as conn:
+            row = conn.execute(
+                "SELECT 1 FROM optimized_params WHERE symbol = ?",
+                (continuous_symbol,),
+            ).fetchone()
+        return row is not None
+
+    return False

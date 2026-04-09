@@ -371,8 +371,8 @@ def main():
         help="Quantidade de barras para treino (padrão: 5000 para mt5)",
     )
     parser.add_argument(
-        "--max-position", type=float, default=2.0,
-        help="Posição máxima em lotes (padrão: 2.0)",
+        "--max-position", type=float, default=200.0,
+        help="Posição máxima em lotes (padrão: 200.0)",
     )
     parser.add_argument(
         "--load-model", type=str, default=None,
