@@ -21,13 +21,25 @@ class RiskManager:
     Avalia se o sistema como um todo está autorizado a enviar novas ordens.
     """
 
-    def __init__(self, start_balance: float | None = None) -> None:
+    def __init__(
+        self, 
+        start_balance: float | None = None,
+        trade_type: str = risk_config.trade_type,
+        start_time: str = risk_config.trading_start_time,
+        end_time: str = risk_config.trading_end_time
+    ) -> None:
         """
         Parameters
         ----------
         start_balance : float, opcional
             Saldo inicial para cálculo de perda diária. 
             No MT5 Real, isso é carregado via `account_info`.
+        trade_type : str
+            'day_trade' ou 'swing_trade'.
+        start_time : str
+            Horário de início (HH:MM:SS).
+        end_time : str
+            Horário de término (HH:MM:SS).
         """
         self.start_balance = start_balance
         self.current_equity = start_balance
@@ -35,6 +47,10 @@ class RiskManager:
         
         self.max_daily_loss_pct = risk_config.max_daily_loss_pct
         self.max_drawdown_pct = risk_config.max_drawdown_pct
+        
+        self.trade_type = trade_type
+        self.start_time = datetime.time.fromisoformat(start_time)
+        self.end_time = datetime.time.fromisoformat(end_time)
         
         self.is_halted = False
         self.halt_reason = ""
@@ -73,8 +89,20 @@ class RiskManager:
         """
         Verifica se alguma regra de risco macro foi violada.
         """
-        if self.is_halted:
-            return  # Já está travado
+        # Se estiver travado por PnL ou Drawdown, não libera por horário
+        if self.is_halted and "WINDOW" not in self.halt_reason:
+            return
+
+        # 0. Verificação de Horário
+        now = datetime.datetime.now().time()
+        if now < self.start_time or now > self.end_time:
+            self.is_halted = True
+            self.halt_reason = f"OUTSIDE TRADING WINDOW ({now.strftime('%H:%M:%S')})"
+            return
+        elif "WINDOW" in self.halt_reason:
+            # Se estava travado por horário e agora está dentro, libera
+            self.is_halted = False
+            self.halt_reason = ""
 
         # 1. Perda Diária (Daily Loss)
         daily_pnl_pct = (self.current_equity / self.start_balance) - 1.0

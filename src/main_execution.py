@@ -329,12 +329,18 @@ def fetch_mt5_training_data(symbol: str, interval: str, n_bars: int) -> pd.DataF
 # ---------------------------------------------------------------------------
 # 5. Main
 # ---------------------------------------------------------------------------
-async def run(pipeline: LivePipeline, symbols: list[str], max_position: float):
+async def run(
+    pipeline: LivePipeline, 
+    symbols: list[str], 
+    max_position: float,
+    trade_type: str
+):
     """Inicia o motor assíncrono."""
     engine = AsyncTradingEngine(
         model_pipeline=pipeline,
         symbols=symbols,
         max_position=max_position,
+        trade_type=trade_type
     )
     try:
         await engine.run_forever()
@@ -373,6 +379,11 @@ def main():
     parser.add_argument(
         "--max-position", type=float, default=200.0,
         help="Posição máxima em lotes (padrão: 200.0)",
+    )
+    parser.add_argument(
+        "--trade-type", type=str, default="day_trade",
+        choices=["day_trade", "swing_trade"],
+        help="Modalidade de trading (padrão: day_trade)",
     )
     parser.add_argument(
         "--load-model", type=str, default=None,
@@ -448,7 +459,12 @@ def main():
     pipeline = LivePipeline(artifacts)
 
     # --- Execução ---
-    asyncio.run(run(pipeline, symbols=[args.symbol], max_position=args.max_position))
+    asyncio.run(run(
+        pipeline=pipeline, 
+        symbols=[args.symbol], 
+        max_position=args.max_position,
+        trade_type=args.trade_type
+    ))
 
 
 if __name__ == "__main__":

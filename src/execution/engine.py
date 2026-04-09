@@ -30,7 +30,8 @@ class AsyncTradingEngine:
         self, 
         model_pipeline, 
         symbols: list[str],
-        max_position: float = 1.0
+        max_position: float = 1.0,
+        trade_type: str = "day_trade"
     ) -> None:
         """
         Parameters
@@ -42,25 +43,32 @@ class AsyncTradingEngine:
             Lista de ativos monitorados.
         max_position : float
             Máximo em lotes.
+        trade_type : str
+            'day_trade' ou 'swing_trade'.
         """
         self.model_pipeline = model_pipeline
         self.symbols = symbols
         self.max_position = max_position
+        self.trade_type = trade_type
         
-        self.risk = RiskManager()
+        self.risk = RiskManager(trade_type=trade_type)
         self.om = OrderManager()
         
         self.is_running = False
         
-        logger.info("Engine inicializado. Modo: {}", execution_config.mode.upper())
+        logger.info("Engine inicializado. Modo: {} | Modalidade: {}", execution_config.mode.upper(), self.trade_type.upper())
 
     async def _process_symbol(self, symbol: str) -> None:
         """Lógica executada a cada iteração do polling para um ativo."""
         
-        # 1. Checa circuit breakers (Se estourou PnL)
+        # 1. Checa circuit breakers (Se estourou PnL ou fora do horário)
         if not self.risk.can_trade():
-            # Se bateu circuit breaker, garante que estamos zerados e pausa
-            self.om.close_positions(symbol)
+            # Se a modalidade for Day Trade, fecha tudo ao bater o horário (ou circuit breaker)
+            # Se for Swing Trade, só fecha se NÃO for motivo de horário (ou seja, foi circuit breaker de PnL)
+            if self.trade_type == "day_trade" or "WINDOW" not in self.risk.halt_reason:
+                if self.om.get_net_position(symbol) != 0:
+                    logger.warning("Fechando posições para {} devido a: {}", symbol, self.risk.halt_reason)
+                    self.om.close_positions(symbol)
             return
 
         try:

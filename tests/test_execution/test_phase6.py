@@ -161,6 +161,31 @@ class TestAudit:
 # Testes — Risk Manager (Circuit Breakers)
 # ---------------------------------------------------------------------------
 
+@pytest.fixture(autouse=True)
+def mock_trading_context():
+    """Garante que os testes rodam sempre dentro do horário e em modo paper."""
+    import datetime
+    from unittest.mock import MagicMock
+    with (
+        patch("src.execution.risk.datetime.datetime") as mock_dt,
+        patch("src.execution.order_manager.execution_config") as mock_exec,
+        patch("src.execution.risk.risk_config") as mock_risk
+    ):
+        # Sempre 10:00 da manhã
+        mock_dt.now.return_value.time.return_value = datetime.time(10, 0, 0)
+        
+        # Modo Paper por padrão nos testes
+        mock_exec.mode = "paper"
+        
+        # Configurações de risco padrão para os testes
+        mock_risk.max_daily_loss_pct = 0.02
+        mock_risk.max_drawdown_pct = 0.05
+        mock_risk.trading_start_time = "09:00:00"
+        mock_risk.trading_end_time = "17:55:00"
+        mock_risk.trade_type = "day_trade"
+        
+        yield
+
 class TestRiskManager:
 
     def test_initial_state_can_trade(self):

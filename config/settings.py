@@ -93,6 +93,11 @@ class RiskConfig:
     max_position_size: float = 200.0         # lote máximo por trade
     max_open_positions: int = 5
     kelly_fraction: float = 0.5            # Kelly fracionário (50%)
+    
+    # Horários e Modalidade
+    trading_start_time: str = "09:00:00"
+    trading_end_time: str = "17:55:00"
+    trade_type: str = "day_trade"  # 'day_trade' ou 'swing_trade'
 
 
 # ---------------------------------------------------------------------------
