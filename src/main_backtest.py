@@ -8,7 +8,7 @@ import sys
 import numpy as np
 import pandas as pd
 from loguru import logger
-from config.settings import feature_config, labeling_config, ml_config
+from config.settings import feature_config, labeling_config, ml_config, FeatureConfig
 
 # Importa módulos das fases
 from src.data.mt5_connector import mt5_session
@@ -156,12 +156,28 @@ def run_pipeline(df, interval="1d", use_volume_bars=False, params=None):
     # Fase 2: Feature Engineering
     # ---------------------------------------------------------
     logger.info("--- Fase 2: Feature Engineering ---")
-    features = compute_all_features(df)
+    
+    feat_keys = ["rsi_period", "macd_fast", "macd_slow", "macd_signal", "atr_period", "bb_period", "bb_std", "zscore_window"]
+    feat_overrides = {k: params[k] for k in feat_keys if k in params}
+    
+    if feat_overrides:
+        from dataclasses import asdict
+        base = asdict(feature_config)
+        base.update(feat_overrides)
+        dynamic_config = FeatureConfig(**base)
+    else:
+        dynamic_config = feature_config
+
+    features = compute_all_features(df, config=dynamic_config)
     
     # Fase 3.1: Otimização de Diferenciação Fracionária
-    logger.info("Fase 3.1: Otimizando d para FFD...")
-    optimal_d = find_min_d(df["close"])
-    features["ffd"] = frac_diff_ffd(df["close"], d=optimal_d)
+    if "ffd_d" in params:
+        logger.info(f"Fase 3.1: Usando d={params['ffd_d']:.4f} otimizado para FFD...")
+        features["ffd"] = frac_diff_ffd(df["close"], d=params["ffd_d"])
+    else:
+        logger.info("Fase 3.1: Otimizando d para FFD...")
+        optimal_d = find_min_d(df["close"])
+        features["ffd"] = frac_diff_ffd(df["close"], d=optimal_d)
     
     features = features.dropna()
     df = df.reindex(features.index)

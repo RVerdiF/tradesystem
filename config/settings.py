@@ -211,10 +211,21 @@ class OptimizationConfig:
     pt_sl_range: tuple[float, float] = (1.0, 3.0)
     max_depth_range: tuple[int, int] = (2, 4)
 
+    # Registros adicionais (Features)
+    rsi_period_range: tuple[int, int] = (7, 28)
+    macd_fast_range: tuple[int, int] = (6, 20)
+    macd_slow_range: tuple[int, int] = (20, 40)
+    macd_signal_range: tuple[int, int] = (5, 15)
+    atr_period_range: tuple[int, int] = (7, 28)
+    bb_period_range: tuple[int, int] = (10, 40)
+    bb_std_range: tuple[float, float] = (1.5, 3.0)
+    zscore_window_range: tuple[int, int] = (20, 100)
+    ffd_d_range: tuple[float, float] = (0.1, 0.7)
+
     # Parâmetros de execução
-    n_trials: int = 50
+    n_trials: int = 80
     min_trades: int = 30
-    timeout: int = 3600  # 1 hora
+    timeout: int = 5400  # 1.5 horas
 
 
 # ---------------------------------------------------------------------------

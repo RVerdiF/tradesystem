@@ -29,12 +29,24 @@ def objective(trial, df, interval):
             trial.suggest_float("pt_mult", *optimization_config.pt_sl_range),
             trial.suggest_float("sl_mult", *optimization_config.pt_sl_range)
         ),
-        "xgb_max_depth": trial.suggest_int("xgb_max_depth", *optimization_config.max_depth_range)
+        "xgb_max_depth": trial.suggest_int("xgb_max_depth", *optimization_config.max_depth_range),
+        "rsi_period": trial.suggest_int("rsi_period", *optimization_config.rsi_period_range),
+        "macd_fast": trial.suggest_int("macd_fast", *optimization_config.macd_fast_range),
+        "macd_slow": trial.suggest_int("macd_slow", *optimization_config.macd_slow_range),
+        "macd_signal": trial.suggest_int("macd_signal", *optimization_config.macd_signal_range),
+        "atr_period": trial.suggest_int("atr_period", *optimization_config.atr_period_range),
+        "bb_period": trial.suggest_int("bb_period", *optimization_config.bb_period_range),
+        "bb_std": trial.suggest_float("bb_std", *optimization_config.bb_std_range),
+        "zscore_window": trial.suggest_int("zscore_window", *optimization_config.zscore_window_range),
+        "ffd_d": trial.suggest_float("ffd_d", *optimization_config.ffd_d_range),
     }
     
     # Garantir que slow > fast
     if params["alpha_slow"] <= params["alpha_fast"]:
         return -1.0 # Penaliza configurações inválidas
+        
+    if params["macd_slow"] <= params["macd_fast"]:
+        return -1.0
     
     # Executa o pipeline completo (com CPCV)
     try:
@@ -111,13 +123,10 @@ def run_optimization(df, interval):
     best_params = dict(study.best_params)
     
     # Recria o dicionário na estrutura final desejada (em train_model / main_backtest)
-    params = {
-        "cusum_threshold": best_params.get("cusum_threshold"),
-        "alpha_fast": best_params.get("alpha_fast"),
-        "alpha_slow": best_params.get("alpha_slow"),
-        "pt_sl": (best_params.get("pt_mult"), best_params.get("sl_mult")),
-        "xgb_max_depth": best_params.get("xgb_max_depth")
-    }
+    params = dict(best_params)
+    params["pt_sl"] = (best_params.get("pt_mult"), best_params.get("sl_mult"))
+    params.pop("pt_mult", None)
+    params.pop("sl_mult", None)
     
     return {
         "study": study,
