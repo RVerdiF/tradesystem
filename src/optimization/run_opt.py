@@ -17,7 +17,7 @@ Argumentos:
 """
 import argparse
 from loguru import logger
-from src.main_backtest import fetch_mt5_data
+from src.main_backtest import fetch_mt5_data, run_pipeline
 from src.optimization.tuner import run_optimization
 from src.optimization.params_store import save_optimized_params
 
@@ -41,24 +41,42 @@ def main():
         
         # Executa a otimização (run_optimization já retorna os metadados necessários)
         opt_results = run_optimization(df, interval=args.interval, n_trials=args.n_trials)
+        best_params = opt_results["params"]
+        metadata = opt_results["metadata"]
         
         # Opcionalmente podemos salvar os parâmetros utilizando nossa store
         save_optimized_params(
             symbol=symbol,
-            params=opt_results["params"],
-            metadata=opt_results["metadata"]
+            params=best_params,
+            metadata=metadata
         )
         
-        study = opt_results["study"]
+        # Fase Final: Re-executa o pipeline para obter métricas de desempenho completas (OOS)
+        logger.info("Gerando relatório de desempenho final...")
+        oos_results = run_pipeline(df, interval=args.interval, params=best_params)
         
-        print("\n" + "="*50)
-        print("RESULTADOS DA OTIMIZAÇÃO")
-        print("="*50)
-        print(f"Melhor Sharpe (Fitness): {study.best_value:.4f}")
-        print(f"Parâmetros Otimizados:")
-        for key, value in study.best_params.items():
-            print(f"  - {key}: {value}")
-        print("="*50)
+        if oos_results:
+            print("\n" + "="*50)
+            print("        RESULTADOS DA MELHOR CONFIGURAÇÃO")
+            print("="*50)
+            print(f"Ativo:              {symbol}")
+            print(f"Sharpe (Sistema):    {oos_results['sharpe']:.4f}")
+            print(f"Sharpe (Alpha):     {oos_results['sharpe_alpha']:.4f}")
+            print(f"Sharpe Lift:        {oos_results['sharpe_lift']:.4f}")
+            print(f"Calmar Ratio:       {oos_results['calmar_ratio']:.4f}")
+            print(f"Total de Trades:     {oos_results['n_trades']}")
+            print(f"Score DSR:          {metadata['dsr_score']:.4f}")
+            
+            sig_status = "CONFIRMADO" if metadata['dsr_score'] >= 0.95 else "FALHOU (Possível Overfit)"
+            print(f"Significância:      {sig_status}")
+            
+            print("\nParâmetros Otimizados:")
+            for key, value in best_params.items():
+                print(f"  - {key}: {value}")
+            print("="*50 + "\n")
+        else:
+            logger.error("Não foi possível gerar métricas de desempenho final.")
+
         
     except Exception as e:
         logger.error(f"Erro durante a execução da otimização: {e}")

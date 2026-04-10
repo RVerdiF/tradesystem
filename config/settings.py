@@ -198,7 +198,11 @@ class MLConfig:
     # Validação Cruzada
     cv_splits: int = 5
     embargo_pct: float = 0.01        # 1% das barras da base como embargo pós-teste
-    xgb_max_depth: int = 4           # Profundidade máxima XGBoost (Otimizado PETR4.SA)
+    xgb_max_depth: int = 4           # Produção (reduzido de 8)
+    xgb_gamma: float = 1.0           # Penalização de folhas (Produção)
+    xgb_min_child_weight: float = 10.0 # Peso mínimo (Produção)
+    xgb_lambda: float = 1.0          # L2 Regularization
+    xgb_alpha: float = 0.0           # L1 Regularization
 
     # Bet Sizing
     max_leverage: int = 200            # Alavancagem máxima (lotes)
@@ -212,13 +216,17 @@ class OptimizationConfig:
     """Configuração para o otimizador bayesiano (Optuna)."""
 
     # Ranges de busca sugeridos (Fase 1 do plano)
-    cusum_range: tuple[float, float] = (0.01, 0.05)
+    cusum_range: tuple[float, float] = (0.002, 0.01)
     fast_span_range: tuple[int, int] = (5, 20)
     slow_span_range: tuple[int, int] = (20, 60)
     pt_sl_range: tuple[float, float] = (1.0, 3.0)
     be_trigger_range: tuple[float, float] = (0.0, 0.9)
     meta_threshold_range: tuple[float, float] = (0.4, 0.7)
-    max_depth_range: tuple[int, int] = (2, 4)
+    max_depth_range: tuple[int, int] = (3, 6)
+    gamma_range: tuple[float, float] = (0.1, 5.0)
+    min_child_weight_range: tuple[float, float] = (5.0, 20.0)
+    lambda_range: tuple[float, float] = (0.0, 10.0)
+    alpha_range: tuple[float, float] = (0.0, 10.0)
 
     # Registros adicionais (Features)
     rsi_period_range: tuple[int, int] = (7, 28)

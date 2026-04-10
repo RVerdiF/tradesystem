@@ -50,6 +50,10 @@ class MetaClassifier(BaseEstimator, ClassifierMixin):
         self,
         n_estimators: int = 200,
         max_depth: int | None = 5,
+        gamma: float = 0.0,
+        min_child_weight: float = 1.0,
+        reg_lambda: float = 1.0,
+        reg_alpha: float = 0.0,
         class_weight: str | dict | None = "balanced",
         n_jobs: int = -1,
         random_state: int | None = 42,
@@ -57,6 +61,10 @@ class MetaClassifier(BaseEstimator, ClassifierMixin):
     ) -> None:
         self.n_estimators = n_estimators
         self.max_depth = max_depth
+        self.gamma = gamma
+        self.min_child_weight = min_child_weight
+        self.reg_lambda = reg_lambda
+        self.reg_alpha = reg_alpha
         self.class_weight = class_weight
         self.n_jobs = n_jobs
         self.random_state = random_state
@@ -69,9 +77,14 @@ class MetaClassifier(BaseEstimator, ClassifierMixin):
             self.model = XGBClassifier(
                 n_estimators=self.n_estimators,
                 max_depth=self.max_depth,
+                gamma=self.gamma,
+                min_child_weight=self.min_child_weight,
+                reg_lambda=self.reg_lambda,
+                reg_alpha=self.reg_alpha,
                 n_jobs=self.n_jobs,
                 random_state=self.random_state,
                 eval_metric="logloss",
+                scale_pos_weight=1,
             )
         else:
             logger.info("Usando Random Forest para Meta-Model.")
@@ -102,7 +115,26 @@ class MetaClassifier(BaseEstimator, ClassifierMixin):
             Pesos para cada amostra (p. ex., retorno absoluto para dar
             mais peso a predições de trades maiores).
         """
-        logger.info("Treinando MetaClassifier com {} amostras e {} features", min(X.shape), X.shape[1] if len(X.shape)>1 else 0)
+        # Inserir um debug print preventivo
+        if isinstance(X, pd.DataFrame):
+            nans = X.isnull().sum().sum()
+            if nans > 0:
+                logger.warning("Valores nulos no X_train: {} (Verifique FracDiff/build_training_dataset)", nans)
+        
+        logger.info("Treinando MetaClassifier com {} amostras e {} features", X.shape[0], X.shape[1] if len(X.shape)>1 else 0)
+
+        # Tratamento de desbalanceamento para XGBoost (López de Prado)
+        if self.use_xgboost and self.class_weight == "balanced":
+            classes, counts = np.unique(y, return_counts=True)
+            if len(classes) == 2:
+                # scale_pos_weight = sum(negative) / sum(positive)
+                idx_0 = np.where(classes == 0)[0]
+                idx_1 = np.where(classes == 1)[0]
+                
+                if len(idx_0) > 0 and len(idx_1) > 0:
+                    spw = counts[idx_0[0]] / counts[idx_1[0]]
+                    self.model.set_params(scale_pos_weight=spw)
+                    logger.debug("XGBoost scale_pos_weight ajustado para balanceamento: {:.4f}", spw)
 
         self.model.fit(X, y, sample_weight=sample_weight)
         self.is_fitted_ = True

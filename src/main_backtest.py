@@ -254,6 +254,10 @@ def run_pipeline(df, interval="1d", use_volume_bars=False, params=None):
 
     # Params para o MetaClassifier
     max_depth = params.get("xgb_max_depth", ml_config.xgb_max_depth)
+    gamma = params.get("xgb_gamma", ml_config.xgb_gamma)
+    min_child_weight = params.get("xgb_min_child_weight", ml_config.xgb_min_child_weight)
+    reg_lambda = params.get("xgb_lambda", ml_config.xgb_lambda)
+    reg_alpha = params.get("xgb_alpha", ml_config.xgb_alpha)
     meta_threshold = params.get("meta_threshold", 0.5)
 
     for i, (train_idx, test_idx) in enumerate(splits):
@@ -262,7 +266,15 @@ def run_pipeline(df, interval="1d", use_volume_bars=False, params=None):
         X_train, y_train = X.iloc[train_idx], y_meta.iloc[train_idx]
         X_test, y_test = X.iloc[test_idx], y_meta.iloc[test_idx]
         
-        model = MetaClassifier(n_estimators=150, max_depth=max_depth, use_xgboost=True)
+        model = MetaClassifier(
+            n_estimators=150, 
+            max_depth=max_depth,
+            gamma=gamma,
+            min_child_weight=min_child_weight,
+            reg_lambda=reg_lambda,
+            reg_alpha=reg_alpha,
+            use_xgboost=True
+        )
         
         weights = np.abs(labels_df.loc[X_train.index, "ret"])
         model.fit(X_train, y_train, sample_weight=weights)

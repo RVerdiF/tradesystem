@@ -74,6 +74,9 @@ class BrazilianCostModel:
         float
             Custo total em unidades monetárias.
         """
+        if quantity == 0:
+            return 0.0
+
         volume = price * quantity
 
         # Corretagem

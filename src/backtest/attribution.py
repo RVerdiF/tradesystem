@@ -127,7 +127,18 @@ def trade_level_attribution(
 
     # Custo
     if "cost" in result.columns:
-        result["net_return"] = result["sized_return"] - result["cost"]
+        # Aplicar custo apenas se houver execução (meta_label != 0 ou bet_size > 0)
+        mask = pd.Series(True, index=result.index)
+        if "meta_label" in result.columns:
+            mask = mask & (result["meta_label"] != 0)
+        if "bet_size" in result.columns:
+            mask = mask & (result["bet_size"] > 0)
+        
+        result["net_return"] = np.where(
+            mask,
+            result["sized_return"] - result["cost"],
+            result["sized_return"]
+        )
     else:
         result["net_return"] = result["sized_return"]
 

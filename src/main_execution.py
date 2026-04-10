@@ -1,19 +1,33 @@
 """
-Entry point para execução em Tempo Real (Live / Paper Trading).
+Entry point para execução em Tempo Real (Live / Paper Trading) do TradeSystem5000.
 
-Fluxo:
-  1. Treina o Meta-Modelo usando dados históricos (yfinance ou MT5).
-  2. Serializa o modelo treinado em disco (model.pkl).
-  3. Monta um pipeline callable que encapsula: Features → Alpha → Meta → Kelly.
-  4. Inicia o AsyncTradingEngine com o pipeline.
+Este script gerencia o ciclo de vida completo da execução:
+1.  **Parâmetros**: Carrega parâmetros otimizados do banco de dados/store (SQLite). 
+    Se não existirem, executa a otimização bayesiana automaticamente.
+2.  **Modelo**: Treina o Meta-Modelo (XGBoost) usando dados históricos da fonte escolhida 
+    (MT5 ou yfinance) ou carrega um modelo existente (.pkl).
+3.  **Engine**: Inicializa o motor de trading assíncrono (AsyncTradingEngine).
+4.  **Pipeline**: Monta um pipeline callable que encapsula: Features → Alpha → Meta-Modelo → Kelly Sizing.
 
 Uso:
-  # Treinar modelo e iniciar paper trading:
-  python -m src.main_execution --symbol PETR4.SA --interval 1h
+  # Execução padrão (usa MT5, busca parâmetros e treina se necessário):
+  python -m src.main_execution --symbol WINJ26 --interval 5m
 
-  # Reusar modelo já treinado:
-  python -m src.main_execution --symbol PETR4.SA --interval 1h --load-model models/model_PETR4.SA.pkl
+  # Forçar re-otimização e re-treinamento:
+  python -m src.main_execution --symbol PETR4.SA --force-optimize
+
+  # Usar yfinance e definir limites de posição:
+  python -m src.main_execution --symbol PETR4.SA --data-source yfinance --max-position 100
+
+Argumentos Principais:
+  --symbol: Ativo (ex: WINJ26, PETR4.SA).
+  --data-source: 'mt5' (padrão) ou 'yfinance'.
+  --interval: Barra (1m, 5m, 15m, 1h, 1d).
+  --trade-type: 'day_trade' (padrão) ou 'swing_trade'.
+  --load-model: Caminho para um arquivo .pkl de modelo já treinado.
+  --force-optimize: Ignora parâmetros/modelos salvos e refaz todo o processo.
 """
+
 
 from __future__ import annotations
 
