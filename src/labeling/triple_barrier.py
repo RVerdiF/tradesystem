@@ -114,13 +114,14 @@ def apply_triple_barrier(
     close: pd.Series,
     events: pd.DataFrame,
     pt_sl: tuple[float, float] | None = None,
+    be_trigger: float = 0.0,
 ) -> pd.DataFrame:
     """
     Aplica o método da Tripla Barreira e retorna a primeira barreira tocada.
 
     Para cada evento, verifica qual barreira é atingida primeiro:
     - Superior: retorno ≥ ``pt * trgt``
-    - Inferior: retorno ≤ ``-sl * trgt``
+    - Inferior: retorno ≤ ``-sl * trgt`` (ou breakeven se ativado)
     - Vertical: tempo atingiu ``t1``
 
     Parameters
@@ -132,6 +133,8 @@ def apply_triple_barrier(
     pt_sl : tuple[float, float], optional
         Multiplicadores (profit_take, stop_loss). Se 0, desativa a barreira.
         Default: usa o valor armazenado em ``events.attrs``.
+    be_trigger : float, optional
+        Gatilho para breakeven (fração do Take Profit). Ex: 0.5.
 
     Returns
     -------
@@ -181,8 +184,8 @@ def apply_triple_barrier(
         upper = trgt * pt_mult if pt_mult > 0 else np.inf
         lower = -trgt * sl_mult if sl_mult > 0 else -np.inf
 
-        # Encontra primeira barreira tocada
-        touch_ts, touch_ret, barrier_type = _find_first_touch(
+        # Encontra primeira barreira tocada (com suporte a breakeven)
+        touch_ts, touch_ret, barrier_type = _find_dynamic_touch(
             close_values=close_values,
             start=start_loc,
             end=end_loc,
@@ -190,6 +193,7 @@ def apply_triple_barrier(
             side=int(side),
             upper=upper,
             lower=lower,
+            be_trigger=be_trigger,
         )
 
         # Converte índice de volta para timestamp
@@ -267,6 +271,53 @@ def _find_first_touch(
     return end, final_ret, 2  # vertical
 
 
+@njit
+def _find_dynamic_touch(
+    close_values: np.ndarray,
+    start: int,
+    end: int,
+    entry_price: float,
+    side: int,
+    upper: float,
+    lower: float,
+    be_trigger: float = 0.0,
+) -> tuple[int, float, int]:
+    """
+    Encontra a primeira barreira tocada com suporte a Breakeven.
+
+    Se be_trigger > 0 e o retorno atingir (upper * be_trigger),
+    o Stop Loss (lower) é movido para o breakeven (0.0001).
+
+    Returns
+    -------
+    tuple[int, float, int]
+        (index_do_toque, retorno, tipo_barreira)
+        tipo_barreira: 0=pt, 1=sl, 2=vertical
+    """
+    breakeven_active = False
+
+    for i in range(start + 1, end + 1):
+        # Retorno relativo à entrada, ajustado pela direção
+        ret = (close_values[i] / entry_price - 1.0) * side
+
+        # 1. Checa ativação de Breakeven
+        if not breakeven_active and be_trigger > 0 and ret >= (upper * be_trigger):
+            lower = 0.0001  # Move o Stop para a entrada (leve margem para custos)
+            breakeven_active = True
+
+        # 2. Barreira superior (Take Profit)
+        if ret >= upper:
+            return i, ret, 0  # pt
+
+        # 3. Barreira inferior (Stop Loss ou Breakeven)
+        if ret <= lower:
+            return i, ret, 1  # sl
+
+    # Barreira vertical (tempo esgotado)
+    final_ret = (close_values[end] / entry_price - 1.0) * side
+    return end, final_ret, 2  # vertical
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -277,6 +328,7 @@ def get_labels(
     close: pd.Series,
     events: pd.DataFrame,
     pt_sl: tuple[float, float] | None = None,
+    be_trigger: float = 0.0,
     min_return: float | None = None,
 ) -> pd.DataFrame:
     """
@@ -295,6 +347,8 @@ def get_labels(
         Eventos com t1, trgt, side.
     pt_sl : tuple, optional
         Multiplicadores PT/SL.
+    be_trigger : float, optional
+        Gatilho para breakeven.
     min_return : float, optional
         Retorno mínimo para considerar label != 0.
 
@@ -307,7 +361,7 @@ def get_labels(
     if min_return is None:
         min_return = labeling_config.min_return
 
-    result = apply_triple_barrier(close, events, pt_sl)
+    result = apply_triple_barrier(close, events, pt_sl, be_trigger=be_trigger)
 
     if len(result) == 0:
         return result

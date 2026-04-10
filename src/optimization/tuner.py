@@ -20,7 +20,7 @@ def objective(trial, df, interval):
     Função objetivo para o Optuna.
     Implementa as fases 1 e 3 do plano de implementação.
     """
-    # Fase 1: Espaço de busca restrito
+    # Fase 1: Espaço de busca restrito + Gestão Dinâmica
     params = {
         "cusum_threshold": trial.suggest_float("cusum_threshold", *optimization_config.cusum_range),
         "alpha_fast": trial.suggest_int("alpha_fast", *optimization_config.fast_span_range),
@@ -29,6 +29,8 @@ def objective(trial, df, interval):
             trial.suggest_float("pt_mult", *optimization_config.pt_sl_range),
             trial.suggest_float("sl_mult", *optimization_config.pt_sl_range)
         ),
+        "be_trigger": trial.suggest_float("be_trigger", *optimization_config.be_trigger_range),
+        "meta_threshold": trial.suggest_float("meta_threshold", *optimization_config.meta_threshold_range),
         "xgb_max_depth": trial.suggest_int("xgb_max_depth", *optimization_config.max_depth_range),
         "rsi_period": trial.suggest_int("rsi_period", *optimization_config.rsi_period_range),
         "macd_fast": trial.suggest_int("macd_fast", *optimization_config.macd_fast_range),
@@ -60,12 +62,14 @@ def objective(trial, df, interval):
 
     # Fase 3: Função Objetivo e Penalização de Overfitting
     
-    # 3.2 Filtro de Frequência: < 30 trades = Sharpe 0
-    if results["n_trades"] < optimization_config.min_trades:
-        logger.warning(f"Trial {trial.number} rejeitado: poucos trades ({results['n_trades']})")
-        return 0.0
+    # 3.2 Filtro de Frequência Contínuo (Evita Cliffs)
+    fitness = results.get("calmar_ratio", results["sharpe"])
+    min_trades = optimization_config.min_trades
     
-    fitness = results["sharpe"]
+    if results["n_trades"] < min_trades:
+        penalty = results["n_trades"] / min_trades
+        fitness *= penalty
+        logger.debug(f"Trial {trial.number}: Penalidade de frequência (trades={results['n_trades']}, penalty={penalty:.2f})")
     
     # 3.3 Sharpe Lift: Se Sharpe_Meta <= Sharpe_Alpha, penalizamos drasticamente
     if results["sharpe_lift"] <= 0:
@@ -83,9 +87,12 @@ def objective(trial, df, interval):
     
     return fitness
 
-def run_optimization(df, interval):
+def run_optimization(df, interval, n_trials=None):
     """Configura e executa o estudo do Optuna."""
-    logger.info("Iniciando Otimização Bayesiana ({} trials)...", optimization_config.n_trials)
+    if n_trials is None:
+        n_trials = optimization_config.n_trials
+        
+    logger.info("Iniciando Otimização Bayesiana ({} trials)...", n_trials)
     
     study = optuna.create_study(
         direction='maximize', 
@@ -95,7 +102,7 @@ def run_optimization(df, interval):
     
     study.optimize(
         lambda trial: objective(trial, df, interval), 
-        n_trials=optimization_config.n_trials,
+        n_trials=n_trials,
         timeout=optimization_config.timeout,
         show_progress_bar=True
     )

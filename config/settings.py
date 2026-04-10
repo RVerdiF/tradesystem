@@ -183,6 +183,7 @@ class LabelingConfig:
 
     # Tripla Barreira
     pt_sl_ratio: tuple[float, float] = (2.77, 2.98)  # (profit_take, stop_loss) (Otimizado PETR4.SA)
+    be_trigger: float = 0.0          # Gatilho de breakeven (0.0 = desativado)
     max_holding_periods: int = 10    # Barreira vertical (barras máximas)
     min_return: float = 0.0          # Retorno mínimo para considerar label +1
 
@@ -215,6 +216,8 @@ class OptimizationConfig:
     fast_span_range: tuple[int, int] = (5, 20)
     slow_span_range: tuple[int, int] = (20, 60)
     pt_sl_range: tuple[float, float] = (1.0, 3.0)
+    be_trigger_range: tuple[float, float] = (0.0, 0.9)
+    meta_threshold_range: tuple[float, float] = (0.4, 0.7)
     max_depth_range: tuple[int, int] = (2, 4)
 
     # Registros adicionais (Features)

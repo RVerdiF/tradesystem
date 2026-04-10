@@ -7,12 +7,13 @@ Uso básico (recomenda-se o uso do módulo com -m):
     uv run python -m src.optimization.run_opt --symbol PETR4
 
 Uso com parâmetros customizados:
-    uv run python -m src.optimization.run_opt --symbol VALE3 --n-bars 50000 --interval 1h
+    uv run python -m src.optimization.run_opt --symbol VALE3 --n-bars 50000 --interval 1h --n-trials 100
 
 Argumentos:
     --symbol:   Ativo para otimizar (obrigatório). Ex: PETR4
     --n-bars:   Quantidade de candles para o histórico (padrão: 10000)
     --interval: Tempo gráfico (padrão: 1h). Opções: 1m, 5m, 15m, 30m, 1h, 1d
+    --n-trials: Número de tentativas de otimização (opcional, padrão: definido em config)
 """
 import argparse
 from loguru import logger
@@ -25,6 +26,7 @@ def main():
     parser.add_argument("--symbol", type=str, required=True, help="Ativo para otimizar (ex: PETR4)")
     parser.add_argument("--n-bars", type=int, default=10000, help="Número de barras para extrair (padrão: 10000)")
     parser.add_argument("--interval", type=str, default="1h", choices=["1m", "5m", "15m", "30m", "1h", "1d"], help="Intervalo (padrão: 1h)")
+    parser.add_argument("--n-trials", type=int, default=None, help="Número de tentativas de otimização (opcional)")
     
     args = parser.parse_args()
     
@@ -38,7 +40,7 @@ def main():
         df = fetch_mt5_data(symbol=symbol, n_bars=args.n_bars, interval=args.interval)
         
         # Executa a otimização (run_optimization já retorna os metadados necessários)
-        opt_results = run_optimization(df, interval=args.interval)
+        opt_results = run_optimization(df, interval=args.interval, n_trials=args.n_trials)
         
         # Opcionalmente podemos salvar os parâmetros utilizando nossa store
         save_optimized_params(

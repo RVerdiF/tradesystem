@@ -211,6 +211,7 @@ def run_pipeline(df, interval="1d", use_volume_bars=False, params=None):
     target_vol = get_volatility_targets(df["close"], signal_events, span=labeling_config.vol_span)
     
     pt_sl = params.get("pt_sl", labeling_config.pt_sl_ratio)
+    be_trigger = params.get("be_trigger", 0.0)
     
     events = create_events(
         close=df["close"],
@@ -221,7 +222,7 @@ def run_pipeline(df, interval="1d", use_volume_bars=False, params=None):
         pt_sl=pt_sl
     )
     
-    labels_df = get_labels(df["close"], events)
+    labels_df = get_labels(df["close"], events, be_trigger=be_trigger)
     if labels_df is None or labels_df.empty:
         logger.error("Nenhuma label gerada. Encerrando.")
         return None
@@ -253,6 +254,7 @@ def run_pipeline(df, interval="1d", use_volume_bars=False, params=None):
 
     # Params para o MetaClassifier
     max_depth = params.get("xgb_max_depth", ml_config.xgb_max_depth)
+    meta_threshold = params.get("meta_threshold", 0.5)
 
     for i, (train_idx, test_idx) in enumerate(splits):
         if len(train_idx) < 10: continue
@@ -267,13 +269,13 @@ def run_pipeline(df, interval="1d", use_volume_bars=False, params=None):
         
         # Sharpe de treino para diagnóstico
         train_probs = model.predict_proba(X_train)[:, 1]
-        train_preds = model.predict(X_train)
+        train_preds = train_probs > meta_threshold
         train_labels = labels_df.loc[X_train.index].copy()
         
         train_trades = pd.DataFrame({
             "ret": train_labels["ret"],
             "side": train_labels["side"],
-            "meta_label": train_preds,
+            "meta_label": train_preds.astype(int),
             "bet_size": train_probs
         }, index=X_train.index)
         
@@ -282,7 +284,7 @@ def run_pipeline(df, interval="1d", use_volume_bars=False, params=None):
         all_train_sharpes.append(train_sr)
         
         probs = model.predict_proba(X_test)[:, 1]
-        preds = model.predict(X_test)
+        preds = probs > meta_threshold
         
         all_test_preds.append(pd.Series(preds, index=X_test.index))
         all_test_probs.append(pd.Series(probs, index=X_test.index))
@@ -295,8 +297,8 @@ def run_pipeline(df, interval="1d", use_volume_bars=False, params=None):
     avg_train_sharpe = np.mean(all_train_sharpes) if all_train_sharpes else 0.0
 
     # Consolida resultados do teste
-    y_pred_all = pd.concat(all_test_preds).groupby(level=0).mean() > 0.5
     y_prob_all = pd.concat(all_test_probs).groupby(level=0).mean()
+    y_pred_all = y_prob_all > meta_threshold
     y_test_all = pd.concat(all_test_labels).groupby(level=0).first()
     
     # ---------------------------------------------------------
@@ -320,7 +322,9 @@ def run_pipeline(df, interval="1d", use_volume_bars=False, params=None):
     alpha_returns = trade_attr["alpha_contribution"]
     
     logger.info(">>> Performance Final (OOS - Out-of-Sample) <<<")
-    performance_report(net_returns, periods_per_year=ppy)
+    from src.backtest.metrics import calmar_ratio
+    perf = performance_report(net_returns, periods_per_year=ppy)
+    calmar = calmar_ratio(net_returns, periods_per_year=ppy)
     
     logger.info(">>> Análise de Atribuição (Sharpe Lift) <<<")
     attr_results = attribution_analysis(net_returns, alpha_returns, periods_per_year=ppy)
@@ -338,6 +342,7 @@ def run_pipeline(df, interval="1d", use_volume_bars=False, params=None):
         "sharpe_alpha": attr_results["sharpe_alpha_only"],
         "sharpe_lift": attr_results["sharpe_lift_meta"],
         "sharpe_train": avg_train_sharpe,
+        "calmar_ratio": calmar,
         "n_trades": len(trades),
         "net_returns": net_returns,
         "alpha_returns": alpha_returns
