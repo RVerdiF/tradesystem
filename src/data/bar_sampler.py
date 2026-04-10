@@ -1,10 +1,22 @@
 """
-1.5 — Amostragem de Barras Alternativas.
+Amostragem de Barras Alternativas — TradeSystem5000.
 
-Transforma dados de ticks em barras de volume e barras de dólar,
-reduzindo a heterocedasticidade e normalizando a distribuição dos retornos.
+Este módulo transforma dados brutos de ticks em barras OHLCV baseadas em
+critérios alternativos ao tempo (Volume e Valor Financeiro/Dólar).
 
-Referência: López de Prado, *Advances in Financial Machine Learning*, Cap. 2.
+A amostragem alternativa visa reduzir a heterocedasticidade e normalizar a
+distribuição dos retornos, propriedades fundamentais para o sucesso de modelos
+de Machine Learning em finanças.
+
+Funcionalidades:
+- **volume_bars**: Barras geradas por volume acumulado.
+- **dollar_bars**: Barras geradas por valor financeiro acumulado (Preço x Volume).
+- **tick_bars**: Barras geradas por contagem fixa de ticks.
+
+Referências
+-----------
+López de Prado, M. (2018). Advances in Financial Machine Learning. John Wiley & Sons.
+Capítulo 2.
 """
 
 from __future__ import annotations

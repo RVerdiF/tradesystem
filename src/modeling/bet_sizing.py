@@ -1,11 +1,21 @@
 """
-4.4 — Bet Sizing (Kelly Fracionário).
+Dimensionamento de Apostas (Bet Sizing) — TradeSystem5000.
 
-Usa as probabilidades de sucesso (saída do Meta-Model) e as odds estimadas
-para calcular o tamanho ótimo da aposta, limitando a alavancagem com o 
-critério de Kelly Fracionário para segurança.
+Este módulo implementa estratégias de dimensionamento de posição baseadas na
+probabilidade de sucesso (saída do Meta-Modelo) e no critério de Kelly.
 
-Referência: López de Prado, *Advances in Financial Machine Learning*, Cap. 10.
+O objetivo é otimizar o crescimento da banca a longo prazo, limitando a
+alavancagem através do Kelly Fracionário para garantir a sobrevivência e
+mitigar erros de estimação.
+
+Funcionalidades:
+- **compute_kelly_fraction**: Cálculo da fração ótima de Kelly (Fractional Kelly).
+- **discretize_bet**: Conversão de frações contínuas em lotes operacionais (discretos).
+
+Referências
+-----------
+López de Prado, M. (2018). Advances in Financial Machine Learning. John Wiley & Sons.
+Capítulo 10.
 """
 
 from __future__ import annotations
@@ -60,7 +70,7 @@ def compute_kelly_fraction(
 
     # O edge deve ser positivo p - q/odds > 0
     f_optimal = p - (q / odds)
-    
+
     # Kelly fracionário para suavizar retornos e mitigar estimações ruins da prob
     f_frac = f_optimal * fraction
 
@@ -70,7 +80,7 @@ def compute_kelly_fraction(
 
     if isinstance(f_final, pd.Series):
         f_final.name = "bet_size"
-    
+
     return f_final
 
 
@@ -109,22 +119,22 @@ def discretize_bet(
 
     # Multiplica a fração pelo tamanho máximo (regra de três simples para escalar o Kelly)
     continuous_pos = kelly_fraction * max_position
-    
+
     # Arredonda para o step_size mais próximo e casta pra inteiro
     discrete_pos = (np.round(continuous_pos / step_size) * step_size).astype(int)
 
     # Clip final just in case
     discrete_pos = discrete_pos.clip(lower=0, upper=max_position)
-    
+
     # Debug info global se for uma série maior, pra não spammar os logs
     if len(discrete_pos) > 1:
         avg_pos = discrete_pos.mean()
         max_pos_reached = discrete_pos.max()
         logger.info(
-            "Discretized Pos: Max sugerido={}, Média={:.2f}, Bets ignorados={}", 
-            max_pos_reached, 
-            avg_pos, 
+            "Discretized Pos: Max sugerido={}, Média={:.2f}, Bets ignorados={}",
+            max_pos_reached,
+            avg_pos,
             (discrete_pos == 0).sum()
         )
-        
+
     return discrete_pos

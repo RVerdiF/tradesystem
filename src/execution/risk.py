@@ -1,8 +1,18 @@
 """
-6.3 — Circuit Breakers (Gerenciamento de Risco da Conta).
+Gerenciamento de Risco e Circuit Breakers — TradeSystem5000.
 
-Impede operações caso os limites de Drawdown, Exposição Máxima 
-ou Perda Diária Máxima sejam atingidos.
+Este módulo implementa a camada de proteção macro (nível de conta), impedindo
+operações se limites críticos de perda ou tempo forem atingidos.
+
+Regras de Proteção:
+- **Daily Loss**: Limite de perda percentual diária sobre o saldo inicial.
+- **Max Drawdown**: Limite de queda a partir do pico de equity da conta.
+- **Trading Window**: Restrição horária para operações (Day Trade safety).
+- **Exposure Limits**: Validação de volume máximo por ativo.
+
+Referências
+-----------
+López de Prado, M. (2018). Advances in Financial Machine Learning. John Wiley & Sons.
 """
 
 from __future__ import annotations
@@ -11,7 +21,7 @@ import datetime
 
 from loguru import logger
 
-from config.settings import risk_config, execution_config
+from config.settings import risk_config
 from src.execution.audit import audit
 
 
@@ -22,7 +32,7 @@ class RiskManager:
     """
 
     def __init__(
-        self, 
+        self,
         start_balance: float | None = None,
         trade_type: str = risk_config.trade_type,
         start_time: str = risk_config.trading_start_time,
@@ -44,17 +54,17 @@ class RiskManager:
         self.start_balance = start_balance
         self.current_equity = start_balance
         self.highest_equity = start_balance
-        
+
         self.max_daily_loss_pct = risk_config.max_daily_loss_pct
         self.max_drawdown_pct = risk_config.max_drawdown_pct
-        
+
         self.trade_type = trade_type
         self.start_time = datetime.time.fromisoformat(start_time)
         self.end_time = datetime.time.fromisoformat(end_time)
-        
+
         self.is_halted = False
         self.halt_reason = ""
-        
+
         # Reset diário
         self.last_trading_day = datetime.date.today()
 
@@ -65,7 +75,7 @@ class RiskManager:
         No MT5 balance = saldo fechado, equity = saldo + lucro flutuante.
         """
         today = datetime.date.today()
-        
+
         # Se mudou o dia de trading, reseta o balanço inicial para o dia
         if today > self.last_trading_day:
             self.start_balance = balance  # Novo dia começa com o saldo atual
@@ -73,13 +83,13 @@ class RiskManager:
             self.is_halted = False
             self.halt_reason = ""
             logger.info("Novo dia de trading. Saldo inicial resetado para: {:.2f}", self.start_balance)
-            
+
         if self.start_balance is None:
             self.start_balance = balance
             self.highest_equity = equity
 
         self.current_equity = equity
-        
+
         if equity > self.highest_equity:
             self.highest_equity = equity
 
@@ -127,7 +137,7 @@ class RiskManager:
         if self.is_halted:
             logger.warning("TRADING HALTED: {}", self.halt_reason)
             return False
-            
+
         return True
 
     def validate_order(self, current_exposure: float, new_volume: float, max_exposure: float) -> bool:
@@ -136,11 +146,11 @@ class RiskManager:
         """
         if self.is_halted:
             return False
-            
+
         if (current_exposure + new_volume) > max_exposure:
             msg = f"Rejeitado: Exposição {current_exposure + new_volume} excede limite {max_exposure}."
             logger.warning(msg)
             audit.log_error("RiskManager", msg)
             return False
-            
+
         return True

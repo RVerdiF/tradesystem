@@ -1,31 +1,18 @@
 """
-Entry point para execução em Tempo Real (Live / Paper Trading) do TradeSystem5000.
+Execução em Tempo Real (Live/Paper) — TradeSystem5000.
 
-Este script gerencia o ciclo de vida completo da execução:
-1.  **Parâmetros**: Carrega parâmetros otimizados do banco de dados/store (SQLite). 
-    Se não existirem, executa a otimização bayesiana automaticamente.
-2.  **Modelo**: Treina o Meta-Modelo (XGBoost) usando dados históricos da fonte escolhida 
-    (MT5 ou yfinance) ou carrega um modelo existente (.pkl).
-3.  **Engine**: Inicializa o motor de trading assíncrono (AsyncTradingEngine).
-4.  **Pipeline**: Monta um pipeline callable que encapsula: Features → Alpha → Meta-Modelo → Kelly Sizing.
+Este módulo orquestra o ciclo de vida da execução em tempo real, integrando
+o MetaTrader 5 (MT5) com a inteligência do Meta-Modelo (AFML).
 
-Uso:
-  # Execução padrão (usa MT5, busca parâmetros e treina se necessário):
-  python -m src.main_execution --symbol WINJ26 --interval 5m
+Fluxo de Operação:
+1.  **Carregamento**: Busca parâmetros otimizados e modelos treinados.
+2.  **Preparação**: Valida a conectividade com o MT5 e sincroniza dados.
+3.  **Pipeline**: Constrói o fluxo assíncrono [Features -> Alpha -> Meta-Modelo -> Kelly].
+4.  **Engine**: Inicializa o motor de trading para monitoramento e envio de ordens.
 
-  # Forçar re-otimização e re-treinamento:
-  python -m src.main_execution --symbol PETR4.SA --force-optimize
-
-  # Usar yfinance e definir limites de posição:
-  python -m src.main_execution --symbol PETR4.SA --data-source yfinance --max-position 100
-
-Argumentos Principais:
-  --symbol: Ativo (ex: WINJ26, PETR4.SA).
-  --data-source: 'mt5' (padrão) ou 'yfinance'.
-  --interval: Barra (1m, 5m, 15m, 1h, 1d).
-  --trade-type: 'day_trade' (padrão) ou 'swing_trade'.
-  --load-model: Caminho para um arquivo .pkl de modelo já treinado.
-  --force-optimize: Ignora parâmetros/modelos salvos e refaz todo o processo.
+Referências
+-----------
+López de Prado, M. (2018). Advances in Financial Machine Learning. John Wiley & Sons.
 """
 
 
@@ -44,36 +31,36 @@ from loguru import logger
 # Configurações
 from config.settings import (
     execution_config,
-    labeling_config,
     feature_config,
+    labeling_config,
     ml_config,
 )
+from src.data.extractor import INTERVAL_TO_TF, extract_ohlc
 
 # Pipeline de dados e features
 from src.data.mt5_connector import mt5_session
-from src.data.extractor import extract_ohlc, INTERVAL_TO_TF
-from src.features.indicators import compute_all_features
-from src.features.frac_diff import frac_diff_ffd, find_min_d
-from src.features.cusum_filter import adaptive_cusum_events
-
-# Alpha e Labeling
-from src.labeling.alpha import TrendFollowingAlpha, get_signal_events
-from src.labeling.volatility import get_volatility_targets
-from src.labeling.triple_barrier import create_events, get_labels
-
-# ML
-from src.modeling.classifier import MetaClassifier
-from src.modeling.bet_sizing import compute_kelly_fraction
-
-# Optimization Store
-from src.optimization.params_store import (
-    save_optimized_params,
-    load_optimized_params,
-    params_exist,
-)
 
 # Execução
 from src.execution.engine import AsyncTradingEngine
+from src.features.cusum_filter import adaptive_cusum_events
+from src.features.frac_diff import find_min_d, frac_diff_ffd
+from src.features.indicators import compute_all_features
+
+# Alpha e Labeling
+from src.labeling.alpha import TrendFollowingAlpha, get_signal_events
+from src.labeling.triple_barrier import create_events, get_labels
+from src.labeling.volatility import get_volatility_targets
+from src.modeling.bet_sizing import compute_kelly_fraction
+
+# ML
+from src.modeling.classifier import MetaClassifier
+
+# Optimization Store
+from src.optimization.params_store import (
+    load_optimized_params,
+    params_exist,
+    save_optimized_params,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -81,16 +68,28 @@ from src.execution.engine import AsyncTradingEngine
 # ---------------------------------------------------------------------------
 def train_model(df: pd.DataFrame, interval: str = "1h", params: dict | None = None) -> dict:
     """
-    Treina o Meta-Modelo usando o pipeline completo e retorna os artefatos
-    necessários para execução em tempo real.
+    Treina o Meta-Modelo usando o pipeline AFML para execução em tempo real.
+
+    Realiza o processamento completo: cálculo de features, FFD, geração de eventos
+    via Alpha e CUSUM, meta-labeling e ajuste do classificador XGBoost.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Dados históricos para treinamento.
+    interval : str, optional
+        Timeframe das barras (ex: 1m, 5m, 1h). Default: "1h".
+    params : dict, optional
+        Dicionário de hiperparâmetros otimizados (spans, pt_sl, xgb_params).
 
     Returns
     -------
-    dict com chaves:
-        - "model": MetaClassifier treinado
-        - "optimal_d": d ótimo para FFD
-        - "alpha": instância do TrendFollowingAlpha
-        - "feature_columns": lista de nomes das features usadas
+    dict
+        Dicionário contendo os artefatos treinados:
+        - "model": Instância do MetaClassifier.
+        - "optimal_d": Valor de d usado na Diferenciação Fracionária.
+        - "alpha": Instância do modelo de Alpha.
+        - "feature_columns": Lista de nomes das features utilizadas.
     """
     logger.info("=== Treinamento do Meta-Modelo para Execução ===")
 
@@ -104,7 +103,7 @@ def train_model(df: pd.DataFrame, interval: str = "1h", params: dict | None = No
 
     if params is None:
         params = {}
-        
+
     fast_span = params.get("alpha_fast", labeling_config.trend_fast_span)
     slow_span = params.get("alpha_slow", labeling_config.trend_slow_span)
 
@@ -138,7 +137,7 @@ def train_model(df: pd.DataFrame, interval: str = "1h", params: dict | None = No
     side = signal.reindex(target_vol.index, method="ffill")
 
     pt_sl = params.get("pt_sl", labeling_config.pt_sl_ratio)
-    
+
     events = create_events(
         close=df_aligned["close"],
         event_timestamps=target_vol.index,
@@ -321,15 +320,15 @@ def fetch_mt5_training_data(symbol: str, interval: str, n_bars: int) -> pd.DataF
     """Baixa dados do MT5 para treinar o modelo."""
     tf = INTERVAL_TO_TF.get(interval, 60)
     logger.info(f"Baixando {n_bars} barras ({interval}) do MT5 para {symbol}...")
-    
+
     try:
         with mt5_session() as conn:
             df = extract_ohlc(symbol=symbol, timeframe=tf, n_bars=n_bars)
-            
+
         if df.empty:
             logger.error(f"Nenhum dado encontrado no MT5 para {symbol}.")
             sys.exit(1)
-            
+
         # O extractor já retorna time como index e colunas em minúsculas
         # Usa tick_volume como volume
         df = df[["open", "high", "low", "close", "tick_volume"]].rename(columns={"tick_volume": "volume"}).dropna()
@@ -344,8 +343,8 @@ def fetch_mt5_training_data(symbol: str, interval: str, n_bars: int) -> pd.DataF
 # 5. Main
 # ---------------------------------------------------------------------------
 async def run(
-    pipeline: LivePipeline, 
-    symbols: list[str], 
+    pipeline: LivePipeline,
+    symbols: list[str],
     max_position: float,
     trade_type: str
 ):
@@ -432,23 +431,23 @@ def main():
     logger.info("Verificando parâmetros otimizados...")
     if not params_exist(args.symbol) or args.force_optimize:
         logger.info(f"Otimizando parâmetros para {args.symbol}...")
-        
+
         # Otimização precisa dos dados
         if args.data_source == "mt5":
             df_opt = fetch_mt5_training_data(args.symbol, args.interval, args.n_bars)
         else:
             df_opt = fetch_training_data(args.symbol, args.years, args.interval)
-            
+
         from src.optimization.tuner import run_optimization
         opt_results = run_optimization(df_opt, interval=args.interval)
-        
+
         save_optimized_params(
-            symbol=args.symbol, 
-            params=opt_results["params"], 
+            symbol=args.symbol,
+            params=opt_results["params"],
             metadata=opt_results["metadata"]
         )
         logger.success("Parâmetros otimizados e salvos com sucesso!")
-        
+
     store_data = load_optimized_params(args.symbol)
     optimized_params = store_data["params"] if store_data else None
 
@@ -474,8 +473,8 @@ def main():
 
     # --- Execução ---
     asyncio.run(run(
-        pipeline=pipeline, 
-        symbols=[args.symbol], 
+        pipeline=pipeline,
+        symbols=[args.symbol],
         max_position=args.max_position,
         trade_type=args.trade_type
     ))

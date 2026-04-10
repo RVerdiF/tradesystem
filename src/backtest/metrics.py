@@ -1,22 +1,28 @@
 """
-5.3 — Métricas de Performance para Backtesting.
+Métricas de Performance para Backtesting — TradeSystem5000.
 
-Implementa métricas rigorosas para avaliação de estratégias:
-- Sharpe Ratio (anualizado)
-- Sharpe Deflacionado (ajustado por múltiplos testes)
-- Maximum Drawdown
-- Calmar Ratio
-- Probabilidade de Ruína
+Este módulo implementa métricas estatísticas e de risco para avaliação
+rigorosa de estratégias de trading, seguindo os padrões AFML.
 
-Referência: López de Prado, *Advances in Financial Machine Learning*, Cap. 14.
+Métricas incluídas:
+- **Sharpe Ratio**: Anualizado e ajustado.
+- **Deflated Sharpe Ratio (DSR)**: Ajuste para múltiplos testes.
+- **Maximum Drawdown (MDD)**: Maior queda do pico ao vale.
+- **Calmar Ratio**: Retorno ajustado pelo drawdown máximo.
+- **Probabilidade de Ruína**: Risco de atingir um nível crítico de perda.
+
+Referências
+-----------
+López de Prado, M. (2018). Advances in Financial Machine Learning. John Wiley & Sons.
+Capítulo 14.
 """
 
 from __future__ import annotations
 
 import numpy as np
 import pandas as pd
-from scipy import stats as scipy_stats
 from loguru import logger
+from scipy import stats as scipy_stats
 
 
 # ---------------------------------------------------------------------------

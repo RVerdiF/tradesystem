@@ -1,23 +1,46 @@
 """
-Módulo de Avaliação de Features e Auditoria Matemática.
+Avaliação de Features e Auditoria de Modelos — TradeSystem5000.
 
-Implementa SHAP (Shapley Additive Explanations) e MDA (Mean Decrease Accuracy)
-para validar a utilidade das features e evitar overfitting.
+Este módulo implementa técnicas avançadas de explicabilidade e auditoria de
+features para validar a utilidade das variáveis e evitar overfitting.
 
-Referência: López de Prado, *Advances in Financial Machine Learning*, Cap. 8.
+Métodos:
+- **SHAP (Shapley Additive Explanations)**: Atribuição de importância baseada em teoria dos jogos.
+- **MDA (Mean Decrease Accuracy)**: Importância por permutação (redução de acurácia).
+
+Referências
+-----------
+López de Prado, M. (2018). Advances in Financial Machine Learning. John Wiley & Sons.
+Capítulo 8.
 """
 
-import pandas as pd
 import numpy as np
+import pandas as pd
 import shap
-from sklearn.metrics import roc_auc_score
 from loguru import logger
+from sklearn.metrics import roc_auc_score
 
 
 def evaluate_features_shap(model, X: pd.DataFrame, y: pd.Series) -> pd.DataFrame:
     """
     Calcula a importância das features via SHAP (Shapley Additive Explanations).
-    Exibe os valores no terminal/logger.
+
+    Utiliza o TreeExplainer para extrair as contribuições médias absolutas de cada
+    feature para a predição do modelo.
+
+    Parameters
+    ----------
+    model : MetaClassifier
+        Modelo treinado (ou qualquer modelo compatível com SHAP TreeExplainer).
+    X : pd.DataFrame
+        Conjunto de features (X_train ou X_test).
+    y : pd.Series
+        Alvos (utilizados para contexto, opcional em alguns explicadores).
+
+    Returns
+    -------
+    pd.DataFrame
+        DataFrame ordenado com colunas ['col_name', 'feature_importance_vals'].
     """
     logger.info("Iniciando avaliação explicativa SHAP...")
 
@@ -61,8 +84,27 @@ def evaluate_features_mda(
     model, X: pd.DataFrame, y: pd.Series, n_repeats: int = 5
 ) -> pd.Series:
     """
-    Mean Decrease Accuracy (MDA) - via Permutação.
-    Mede a queda no ROC-AUC ao aleatorizar (shuffling) cada feature.
+    Calcula a importância via Mean Decrease Accuracy (MDA) por Permutação.
+
+    Mede a queda na performance do modelo (ROC-AUC) ao embaralhar os valores
+    de cada feature individualmente. Features que causam maior queda são
+    consideradas mais importantes.
+
+    Parameters
+    ----------
+    model : MetaClassifier
+        Modelo treinado.
+    X : pd.DataFrame
+        Conjunto de features.
+    y : pd.Series
+        Alvos verdadeiros.
+    n_repeats : int, optional
+        Número de permutações por feature para estabilizar a estimativa. Default: 5.
+
+    Returns
+    -------
+    pd.Series
+        Série com a queda média no ROC-AUC por feature.
     """
     logger.info("Iniciando auditoria matemática (MDA) via Permutação...")
 

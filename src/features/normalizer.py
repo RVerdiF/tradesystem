@@ -1,10 +1,20 @@
 """
-2.4 — Normalização Temporal.
+Normalização Temporal de Features — TradeSystem5000.
 
-Normaliza features com métodos point-in-time para eliminar diferenças de
-escala entre indicadores, sem introduzir look-ahead bias.
+Este módulo implementa técnicas de normalização point-in-time para garantir
+que as features tenham escalas comparáveis sem introduzir viés de antecipação
+(look-ahead bias).
 
-Referência: López de Prado, *Advances in Financial Machine Learning*, Cap. 3.
+Funcionalidades:
+- **rolling_zscore**: Normalização gaussiana via média e desvio móvel.
+- **expanding_rank**: Rank percentual expandido (estabilidade em caudas longas).
+- **normalize_features**: Processamento em lote de múltiplos métodos.
+- **validate_no_lookahead**: Verificação rigorosa contra vazamento de dados futuros.
+
+Referências
+-----------
+López de Prado, M. (2018). Advances in Financial Machine Learning. John Wiley & Sons.
+Capítulo 3.
 """
 
 from __future__ import annotations

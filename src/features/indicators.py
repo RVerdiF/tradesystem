@@ -1,12 +1,22 @@
 """
-2.3 — Indicadores Técnicos e de Microestrutura.
+Indicadores Técnicos e de Microestrutura — TradeSystem5000.
 
-Implementa features point-in-time (sem look-ahead) organizadas em:
-- **Momentum**: RSI, MACD, ROC
-- **Volatilidade**: ATR, Bollinger Width, desvio padrão móvel
-- **Microestrutura**: Order Flow Imbalance (OFI), VPIN estimado
+Este módulo implementa features financeiras point-in-time (sem look-ahead),
+organizadas em categorias de momentum, volatilidade e microestrutura.
 
-Referência: López de Prado, *AFML*, Caps. 18-19.
+Categorias:
+- **Momentum**: RSI, ROC, Distância de Médias Móveis.
+- **Volatilidade**: ATR, Rolling Vol, Garman-Klass, Momentos (Skew/Kurtosis).
+- **Microestrutura**: Order Flow Imbalance (OFI), VPIN, Volume Spread Analysis.
+
+Funcionalidades:
+- **compute_all_features**: Geração em lote de todas as features para o pipeline.
+- Implementações vetorizadas via Pandas/NumPy para eficiência.
+
+Referências
+-----------
+López de Prado, M. (2018). Advances in Financial Machine Learning. John Wiley & Sons.
+Capítulos 18 e 19.
 """
 
 from __future__ import annotations
@@ -105,10 +115,6 @@ def atr(
     ).max(axis=1)
 
     result = tr.ewm(alpha=1 / period, min_periods=period, adjust=False).mean()
-    result.name = "atr"
-    return result
-
-
     result.name = "atr"
     return result
 

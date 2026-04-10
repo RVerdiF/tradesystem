@@ -1,8 +1,19 @@
 """
-1.4 — Limpeza de Dados.
+Limpeza e Saneamento de Dados — TradeSystem5000.
 
-Filtros para remoção de bad ticks (spikes), preenchimento de lacunas temporais,
-e validação de integridade de dados OHLC.
+Este módulo fornece ferramentas para filtrar ruídos, remover spikes (bad ticks)
+e validar a integridade estrutural de dados OHLCV e ticks.
+
+Funcionalidades:
+- **remove_spikes**: Filtro baseado em Z-score rolling para preços.
+- **remove_tick_spikes**: Filtro de retornos impossíveis entre ticks.
+- **fill_gaps**: Preenchimento de lacunas temporais (ffill, interpolation).
+- **validate_ohlc**: Verificação de consistência lógica (High >= Low, etc).
+
+Referências
+-----------
+López de Prado, M. (2018). Advances in Financial Machine Learning. John Wiley & Sons.
+Capítulo 3 (Data Cleaning).
 """
 
 from __future__ import annotations

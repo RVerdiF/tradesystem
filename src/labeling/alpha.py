@@ -1,13 +1,19 @@
 """
-3.1 — Módulo Alpha (Sinal Direcional Primário).
+Módulo Alpha (Sinal Direcional Primário) — TradeSystem5000.
 
-Define a interface base ``AlphaModel`` e implementações concretas:
-- ``TrendFollowingAlpha``: cruzamento de EMAs (trend following)
-- ``MeanReversionAlpha``: Z-score de preço vs. média (mean reversion)
+Este módulo define a interface e implementações para o modelo de Alpha,
+responsável por gerar a aposta direcional primária do sistema {-1, 0, +1}.
 
-O Alpha gera sinais {-1, 0, +1} que servem de entrada para a Tripla Barreira.
+Implementações:
+- **TrendFollowingAlpha**: Estratégia de seguimento de tendência via cruzamento de EMAs.
+- **MeanReversionAlpha**: Estratégia de reversão à média baseada em Z-score dinâmico.
 
-Referência: López de Prado, *Advances in Financial Machine Learning*, Cap. 3.
+O sinal do Alpha serve como gatilho (trigger) para o método da Tripla Barreira.
+
+Referências
+-----------
+López de Prado, M. (2018). Advances in Financial Machine Learning. John Wiley & Sons.
+Capítulo 3.
 """
 
 from __future__ import annotations

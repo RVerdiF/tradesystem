@@ -1,12 +1,19 @@
 """
-5.4 — Análise de Atribuição (Alpha vs. Meta-Labeling).
+Análise de Atribuição (Alpha vs. Meta-Labeling) — TradeSystem5000.
 
-Decompõe a performance total do sistema em contribuições de cada componente:
-- **Alpha Model**: contribuição do sinal direcional primário
-- **Meta-Labeling**: contribuição do filtro/dimensionamento do modelo secundário
-- **Custos**: impacto dos custos operacionais
+Este módulo decompõe a performance total do sistema em contribuições de cada
+componente da arquitetura AFML:
+- **Alpha Model**: Contribuição do sinal direcional primário (aposta original).
+- **Meta-Labeling**: Valor agregado pela filtragem/sizing do modelo secundário.
+- **Custos**: Impacto dos custos operacionais e slippage no retorno líquido.
 
-Referência: López de Prado, *Advances in Financial Machine Learning*, Cap. 3/15.
+A atribuição permite identificar se o meta-modelo está efetivamente mitigando
+falsos positivos do alpha e melhorando o Sharpe Ratio final (Sharpe Lift).
+
+Referências
+-----------
+López de Prado, M. (2018). Advances in Financial Machine Learning. John Wiley & Sons.
+Capítulos 3 e 15.
 """
 
 from __future__ import annotations
@@ -133,7 +140,7 @@ def trade_level_attribution(
             mask = mask & (result["meta_label"] != 0)
         if "bet_size" in result.columns:
             mask = mask & (result["bet_size"] > 0)
-        
+
         result["net_return"] = np.where(
             mask,
             result["sized_return"] - result["cost"],

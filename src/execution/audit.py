@@ -1,14 +1,19 @@
 """
-6.4 — Auditoria e Logging.
+Auditoria e Registro Operacional — TradeSystem5000.
 
-Registra todas as ações do sistema em um banco SQLite estruturado,
-facilmente consultável para reconciliação e auditoria posterior.
-Também exibe alertas visuais via Loguru.
+Este módulo implementa a camada de persistência para auditoria do sistema,
+registrando sinais, ordens e erros em um banco de dados SQLite estruturado.
 
-Tabelas utilizadas (criadas por ``src.db.init_db``):
-    audit_signals  — sinais gerados pelo meta-modelo
-    audit_orders   — ordens enviadas ou simuladas
-    audit_errors   — erros operacionais do sistema
+Funcionalidades:
+- **log_signal**: Registro de sinais do meta-modelo e Kelly sizing.
+- **log_order**: Registro de ordens enviadas ou simuladas (tickets).
+- **log_error**: Registro de falhas operacionais e exceções críticas.
+- Interface de consulta para reconciliação e debugging pós-execução.
+
+Referências
+-----------
+López de Prado, M. (2018). Advances in Financial Machine Learning. John Wiley & Sons.
+Capítulo 15.
 """
 
 from __future__ import annotations

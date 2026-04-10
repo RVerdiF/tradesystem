@@ -1,11 +1,22 @@
 """
-3.2 — Volatilidade Dinâmica.
+Volatilidade Dinâmica para Labeling — TradeSystem5000.
 
-Calcula a volatilidade dos retornos usando EWMA (Exponentially Weighted
-Moving Average) para ajustar dinamicamente a largura das barreiras de
-Stop Loss e Take Profit no Método da Tripla Barreira.
+Este módulo calcula a volatilidade dos retornos utilizando EWMA (Exponentially
+Weighted Moving Average) para ajuste dinâmico das barreiras de saída.
 
-Referência: López de Prado, *Advances in Financial Machine Learning*, Cap. 3.2.
+O ajuste dinâmico garante que os alvos de lucro e limites de perda sejam
+proporcionais ao regime de risco atual do mercado, mantendo a consistência
+estatística dos rótulos.
+
+Funcionalidades:
+- **daily_vol**: Estimativa de volatilidade via EWMA dos retornos.
+- **get_volatility_targets**: Mapeamento da volatilidade para timestamps de eventos.
+- **vol_regime**: Identificação de regimes de aceleração de volatilidade.
+
+Referências
+-----------
+López de Prado, M. (2018). Advances in Financial Machine Learning. John Wiley & Sons.
+Capítulo 3.2.
 """
 
 from __future__ import annotations

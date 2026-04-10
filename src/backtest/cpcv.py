@@ -1,15 +1,19 @@
 """
-5.1 — Combinatorial Purged Cross-Validation (CPCV).
+Combinatorial Purged Cross-Validation (CPCV) — TradeSystem5000.
 
-Gera múltiplos caminhos de backtest combinatórios a partir de N grupos,
-cada caminho sendo uma sequência contígua de blocos teste enquanto os
-demais servem como treino — com purga e embargo aplicados.
+O CPCV gera múltiplos caminhos de backtest combinatórios a partir de N grupos.
+Diferente do K-Fold tradicional, ele permite que múltiplos blocos de teste
+sejam combinados para formar diversos "caminhos" históricos (backtest paths).
 
-Permite avaliar a distribuição de performance do modelo sob inúmeros
-cenários históricos não-lineares, reduzindo o risco de overfitting e
-o viés de seleção de caminho.
+Funcionalidades:
+- Divisão combinatória de grupos (Purged and Embargoed).
+- Reconstrução de caminhos de backtest (Backtest Paths).
+- Mitigação do viés de seleção de caminho e overfitting.
 
-Referência: López de Prado, *Advances in Financial Machine Learning*, Cap. 12.
+Referências
+-----------
+López de Prado, M. (2018). Advances in Financial Machine Learning. John Wiley & Sons.
+Capítulo 12.
 """
 
 from __future__ import annotations
@@ -20,7 +24,7 @@ import numpy as np
 import pandas as pd
 from loguru import logger
 
-from src.modeling.purge_embargo import get_train_times, apply_embargo
+from src.modeling.purge_embargo import apply_embargo, get_train_times
 
 
 # ---------------------------------------------------------------------------

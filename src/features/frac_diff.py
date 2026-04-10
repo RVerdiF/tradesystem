@@ -1,11 +1,20 @@
 """
-2.1 — Diferenciação Fracionária (Fixed-Width Window).
+Diferenciação Fracionária (FFD) — TradeSystem5000.
 
-Implementa a transformação FFD para tornar séries financeiras estacionárias
-preservando o máximo de memória (informação). Inclui busca automática do
-``d`` mínimo via teste ADF.
+Este módulo implementa a técnica de Diferenciação Fracionária (FracDiff) com
+janela de largura fixa (Fixed-Width Window). O objetivo é tornar a série
+financeira estacionária preservando o máximo possível de "memória" (correlação
+serial de longo prazo).
 
-Referência: López de Prado, *Advances in Financial Machine Learning*, Cap. 5.
+Funcionalidades:
+- **frac_diff_ffd**: Aplicação da transformação FFD via convolução.
+- **find_min_d**: Busca automatizada do parâmetro 'd' mínimo via teste ADF.
+- **get_weights_ffd**: Cálculo dos pesos iterativos da diferenciação.
+
+Referências
+-----------
+López de Prado, M. (2018). Advances in Financial Machine Learning. John Wiley & Sons.
+Capítulo 5.
 """
 
 from __future__ import annotations

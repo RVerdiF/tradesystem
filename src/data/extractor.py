@@ -1,8 +1,17 @@
 """
-1.2 — Pipeline de Extração de Dados.
+Extração de Dados do MetaTrader 5 — TradeSystem5000.
 
-Funções para download automatizado de ticks e barras OHLC do MetaTrader 5,
-com suporte a download incremental e validação de integridade.
+Este módulo gerencia o download automatizado de dados históricos (ticks e barras)
+diretamente do terminal MetaTrader 5, com suporte a download incremental.
+
+Funcionalidades:
+- **extract_ticks**: Download de histórico de ticks em range temporal.
+- **extract_ohlc**: Download de barras OHLCV por posição ou data.
+- **extract_ohlc_incremental**: Sincronização eficiente de dados locais com o servidor.
+
+Referências
+-----------
+López de Prado, M. (2018). Advances in Financial Machine Learning. John Wiley & Sons.
 """
 
 from __future__ import annotations

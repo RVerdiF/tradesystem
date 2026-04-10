@@ -1,10 +1,17 @@
 """
-6.2 — Gerenciador de Ordens (MT5 Integration).
+Gerenciador de Ordens (MetaTrader 5 Integration) — TradeSystem5000.
 
-Lida com a comunicação de baixo nível com a MetaTrader 5:
-- order_send com validação e slicing
-- tracking de posições em aberto
-- fechamento de posições
+Este módulo abstrai a comunicação de baixo nível com a API do MetaTrader 5
+para envio de ordens, controle de posições e fechamento de exposições.
+
+Funcionalidades:
+- Envio de ordens a mercado (Buy/Sell) com tratamento de erros.
+- Rastreamento de posições líquidas por Magic Number.
+- Fechamento em lote de posições por símbolo (Panic/Circuit Breaker).
+
+Referências
+-----------
+Documentação Oficial do MQL5 Python Integration (order_send).
 """
 
 from __future__ import annotations
@@ -12,7 +19,7 @@ from __future__ import annotations
 import MetaTrader5 as mt5
 from loguru import logger
 
-from config.settings import execution_config, mt5_config
+from config.settings import execution_config
 from src.execution.audit import audit
 
 
@@ -92,7 +99,7 @@ class OrderManager:
         # Envio de ordem real
         logger.debug("Enviando requisição: {}", request)
         result = mt5.order_send(request)
-        
+
         return self.wait_order_result(result)
 
     def close_positions(self, symbol: str) -> None:
@@ -112,20 +119,20 @@ class OrderManager:
                 action_close = "sell" if pos.type == mt5.ORDER_TYPE_BUY else "buy"
                 logger.info("Fechando Posição {} de {}", pos.ticket, symbol)
                 self.send_market_order(symbol, action=action_close, volume=pos.volume)
-                
+
     def get_net_position(self, symbol: str) -> float:
         """Retorna a exposição líquida aberta (positiva = long, negativa = short)."""
         if execution_config.mode != "live":
             return 0.0
-            
+
         positions = mt5.positions_get(symbol=symbol)
         if positions is None or len(positions) == 0:
             return 0.0
-            
+
         net_vol = 0.0
         for pos in positions:
             if pos.magic == self.magic_number:
                 vol = pos.volume if pos.type == mt5.ORDER_TYPE_BUY else -pos.volume
                 net_vol += vol
-                
+
         return net_vol

@@ -1,14 +1,21 @@
 """
-3.3 — Método da Tripla Barreira.
+Método da Tripla Barreira — TradeSystem5000.
 
-Implementa a rotulagem baseada em três barreiras simultâneas:
-- **Superior (Take Profit)**: preço atinge lucro alvo
-- **Inferior (Stop Loss)**: preço atinge perda máxima
-- **Vertical (Tempo)**: tempo máximo de permanência esgotado
+Este módulo implementa a técnica de rotulagem de Tripla Barreira, que avalia
+o resultado de um sinal através de três limites simultâneos:
+1.  **Barreira Superior (Profit Take)**: Meta de lucro proporcional à volatilidade.
+2.  **Barreira Inferior (Stop Loss)**: Limite de perda com suporte a breakeven.
+3.  **Barreira Vertical (Time Stop)**: Tempo máximo de permanência na posição.
 
-Cada observação recebe o label da primeira barreira tocada.
+Funcionalidades:
+- **apply_triple_barrier**: Aplicação dos limites e detecção do primeiro toque.
+- **create_events**: Preparação estruturada dos eventos de entrada.
+- **get_labels**: Atribuição de classes {-1, 0, 1} para o Alpha.
 
-Referência: López de Prado, *Advances in Financial Machine Learning*, Cap. 3.4.
+Referências
+-----------
+López de Prado, M. (2018). Advances in Financial Machine Learning. John Wiley & Sons.
+Capítulo 3.4.
 """
 
 from __future__ import annotations

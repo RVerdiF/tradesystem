@@ -1,20 +1,28 @@
 """
-4.3 — Classificador Secundário (Meta-Model).
+Classificador Secundário (Meta-Model) — TradeSystem5000.
 
-O meta-model não prevê a direção do mercado (o Alpha Model já o fez), mas sim
-o "tamanho do acerto" ou a probabilidade de o trade ser bem sucedido.
-Usa as features do momento da entrada (T0) e os meta-labels (0, 1) produzidos
-pelo módulo da Tripla Barreira.
+Este módulo implementa o Meta-Classificador responsável por filtrar os sinais
+do modelo primário (Alpha), estimando a probabilidade de um sinal ser um
+verdadeiro positivo.
 
-Random Forest ou XGBoost são adequados por lidarem bem com não-linearidades e outliers.
+O Meta-Modelo utiliza algoritmos de boosting (XGBoost) ou florestas aleatórias
+(Random Forest) treinados sobre o dataset rotulado via Tripla Barreira.
 
-Referência: López de Prado, *Advances in Financial Machine Learning*, Cap. 3 / Cap. 7.
+Funcionalidades:
+- **MetaClassifier**: Wrapper scikit-learn compatível para XGBoost/RandomForest.
+- Suporte a pesos de amostra (sample_weight) baseados no retorno absoluto.
+- Ajuste automático de desbalanceamento de classes (scale_pos_weight).
+
+Referências
+-----------
+López de Prado, M. (2018). Advances in Financial Machine Learning. John Wiley & Sons.
+Capítulos 3 e 7.
 """
 
 from __future__ import annotations
 
-import pandas as pd
 import numpy as np
+import pandas as pd
 from loguru import logger
 from sklearn.base import BaseEstimator, ClassifierMixin
 from sklearn.ensemble import RandomForestClassifier
@@ -72,7 +80,7 @@ class MetaClassifier(BaseEstimator, ClassifierMixin):
 
         if self.use_xgboost:
             logger.info("Usando XGBoost Classifier para Meta-Model.")
-            # XGBoost não aceita "balanced" diretamente no class_weight, 
+            # XGBoost não aceita "balanced" diretamente no class_weight,
             # mas podemos setar scale_pos_weight posteriormente ou usar parâmetros padrão.
             self.model = XGBClassifier(
                 n_estimators=self.n_estimators,
@@ -120,7 +128,7 @@ class MetaClassifier(BaseEstimator, ClassifierMixin):
             nans = X.isnull().sum().sum()
             if nans > 0:
                 logger.warning("Valores nulos no X_train: {} (Verifique FracDiff/build_training_dataset)", nans)
-        
+
         logger.info("Treinando MetaClassifier com {} amostras e {} features", X.shape[0], X.shape[1] if len(X.shape)>1 else 0)
 
         # Tratamento de desbalanceamento para XGBoost (López de Prado)
@@ -130,7 +138,7 @@ class MetaClassifier(BaseEstimator, ClassifierMixin):
                 # scale_pos_weight = sum(negative) / sum(positive)
                 idx_0 = np.where(classes == 0)[0]
                 idx_1 = np.where(classes == 1)[0]
-                
+
                 if len(idx_0) > 0 and len(idx_1) > 0:
                     spw = counts[idx_0[0]] / counts[idx_1[0]]
                     self.model.set_params(scale_pos_weight=spw)

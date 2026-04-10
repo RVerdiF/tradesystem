@@ -1,8 +1,19 @@
 """
-1.3 — Armazenamento em Parquet.
+Armazenamento em Formato Parquet — TradeSystem5000.
 
-Classe ``ParquetStore`` para leitura e escrita de alta performance em Parquet,
-com particionamento por símbolo e data, compressão snappy e append eficiente.
+Este módulo implementa a camada de persistência em disco utilizando o formato
+Apache Parquet, otimizado para leitura e escrita de grandes volumes de séries
+temporais financeiras.
+
+Funcionalidades:
+- **ParquetStore**: Classe para persistência com compressão Snappy.
+- Particionamento por símbolo e tipo de dado.
+- Suporte nativo a append eficiente e remoção de duplicatas.
+
+Referências
+-----------
+Apache Arrow / PyArrow Documentation.
+López de Prado, M. (2018). Advances in Financial Machine Learning. John Wiley & Sons.
 """
 
 from __future__ import annotations

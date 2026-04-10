@@ -1,8 +1,17 @@
 """
-1.1 — Conectividade e Autenticação com MetaTrader 5.
+Conectividade com MetaTrader 5 — TradeSystem5000.
 
-Implementa um context manager para conexão segura ao terminal MT5,
-com retry automático e backoff exponencial para resiliência de rede.
+Este módulo implementa a camada de comunicação de baixo nível com o terminal
+MetaTrader 5, garantindo resiliência através de retries e backoff exponencial.
+
+Funcionalidades:
+- **MT5Connector**: Gerenciador de conexão robusto (Context Manager).
+- **mt5_session**: Atalho funcional para sessões rápidas.
+- Suporte a autenticação em múltiplos servidores e contas.
+
+Referências
+-----------
+Documentação Oficial do MQL5 Python Integration.
 """
 
 from __future__ import annotations

@@ -1,14 +1,19 @@
 """
-4.1 — Purga e Embargo de Dados (Purging & Embargoing).
+Purga e Embargo de Dados (Purging & Embargoing) — TradeSystem5000.
 
-Evita o vazamento de dados (data leakage) em séries temporais financeiras
-durante a validação cruzada.
-- **Purga**: remove amostras no conjunto de treino cujos períodos de avaliação
-  se sobrepõem aos blocos de teste.
-- **Embargo**: remove um período logo após o bloco de teste para evitar viés
-  causado por autocorrelação serial.
+Este módulo implementa as técnicas de saneamento de amostras necessárias para
+evitar o vazamento de dados (data leakage) em Cross-Validation de séries
+temporais financeiras sobrepostas.
 
-Referência: López de Prado, *Advances in Financial Machine Learning*, Cap. 7.
+Ações:
+- **Purging**: Remove amostras de treino que se sobrepõem temporalmente ao teste.
+- **Embargoing**: Remove um buffer temporal pós-teste para mitigar o viés de
+  autocorrelação serial.
+
+Referências
+-----------
+López de Prado, M. (2018). Advances in Financial Machine Learning. John Wiley & Sons.
+Capítulo 7.
 """
 
 from __future__ import annotations

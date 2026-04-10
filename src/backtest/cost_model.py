@@ -1,19 +1,22 @@
 """
-5.2 — Modelagem de Custos Reais.
+Modelagem de Custos Reais (B3) — TradeSystem5000.
 
-Modelo de custos para o mercado brasileiro (B3), incluindo:
-- Corretagem (por contrato)
-- Emolumentos B3
-- Taxa de liquidação
-- ISS sobre corretagem
-- Slippage estimado (impacto de mercado)
+Este módulo implementa modelos de custos operacionais específicos para o
+mercado brasileiro (B3) e estimativas de slippage.
 
-Referência: Tabela de custos da B3 + López de Prado, *AFML*, Cap. 15.
+Componentes:
+- **BrazilianCostModel**: Corretagem, emolumentos B3, taxa de liquidação e ISS.
+- **SlippageModel**: Estimativa de impacto de mercado baseada no spread e volume.
+
+Referências
+-----------
+López de Prado, M. (2018). Advances in Financial Machine Learning. John Wiley & Sons.
+Capítulo 15.
+Tabela de Tarifas B3 (Ações e Derivativos).
 """
 
 from __future__ import annotations
 
-import numpy as np
 import pandas as pd
 from loguru import logger
 

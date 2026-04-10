@@ -1,11 +1,23 @@
 """
-2.2 — Filtro CUSUM para Amostragem Baseada em Eventos.
+Filtro CUSUM para Amostragem Baseada em Eventos — TradeSystem5000.
 
-Implementa o filtro CUSUM simétrico para detectar mudanças estruturais
-na série de preços, gerando timestamps de eventos para amostragem.
-Inclui versão adaptativa com threshold baseado em volatilidade EWMA.
+Este módulo implementa o filtro de Soma Cumulativa (CUSUM) simétrico, utilizado
+para detectar mudanças estruturais significativas na média de uma série
+temporal (ex: preços ou retornos).
 
-Referência: López de Prado, *Advances in Financial Machine Learning*, Cap. 2.3.6.
+O filtro CUSUM é uma alternativa robusta à amostragem temporal fixa, permitindo
+que o sistema foque o processamento apenas quando há informação relevante
+(eventos).
+
+Funcionalidades:
+- **cusum_events**: Filtro CUSUM simétrico com threshold fixo.
+- **adaptive_cusum_events**: Filtro CUSUM com threshold dinâmico (EWMA Vol).
+- Kernels otimizados via Numba para processamento de alta performance.
+
+Referências
+-----------
+López de Prado, M. (2018). Advances in Financial Machine Learning. John Wiley & Sons.
+Capítulo 2.3.6.
 """
 
 from __future__ import annotations

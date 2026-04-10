@@ -1,17 +1,25 @@
 """
-Gerenciamento e persistência de hiperparâmetros otimizados.
+Gerenciamento e Persistência de Hiperparâmetros — TradeSystem5000.
 
-Substitui a implementação anterior baseada em JSON flat-files por SQLite,
-garantindo:
-- Histórico auditável de otimizações por símbolo (updated_at).
-- Consultas SQL ad-hoc via ``data/tradesystem.db``.
-- API pública 100% compatível com a versão anterior.
+Este módulo implementa a camada de armazenamento para os parâmetros otimizados
+pelo Tuner, utilizando o banco de dados SQLite central para auditoria e
+recuperação eficiente.
+
+Funcionalidades:
+- **save_optimized_params**: Persistência de dicionários de parâmetros e metadados.
+- **load_optimized_params**: Recuperação com suporte a fallback de símbolos contínuos.
+- **params_exist**: Verificação rápida de presença de configurações para um ativo.
+- Normalização de símbolos para consistência entre MT5 e Yahoo Finance.
+
+Referências
+-----------
+López de Prado, M. (2018). Advances in Financial Machine Learning. John Wiley & Sons.
 """
 
 from __future__ import annotations
 
-import re
 import json
+import re
 from datetime import datetime
 
 from loguru import logger

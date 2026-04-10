@@ -1,14 +1,21 @@
 """
-3.4 — Meta-Labeling.
+Meta-Labeling (Rotulagem Secundária) — TradeSystem5000.
 
-Gera rótulos binários para o modelo secundário (meta-model):
-- ``1``: o sinal do Alpha atingiu Take Profit (acertou)
-- ``0``: o sinal do Alpha atingiu Stop Loss ou tempo expirou (errou)
+Este módulo implementa a técnica de Meta-Labeling para treinar um modelo
+secundário (Meta-Modelo) capaz de filtrar os sinais do modelo de Alpha.
 
-O meta-model aprende a filtrar os sinais do Alpha, prevendo quais
-sinais têm maior probabilidade de ser "verdadeiros positivos".
+O Meta-Modelo aprende a prever a probabilidade de sucesso de uma operação,
+atuando como um filtro de falsos positivos e permitindo o dimensionamento
+ótimo das apostas (Bet Sizing).
 
-Referência: López de Prado, *Advances in Financial Machine Learning*, Cap. 3.6.
+Funcionalidades:
+- **get_meta_labels**: Geração de labels binárias {0, 1} baseadas no sucesso do Alpha.
+- **build_training_dataset**: Alinhamento de features e labels para o treinamento.
+
+Referências
+-----------
+López de Prado, M. (2018). Advances in Financial Machine Learning. John Wiley & Sons.
+Capítulo 3.6.
 """
 
 from __future__ import annotations

@@ -1,11 +1,21 @@
 """
-4.2 — Purged K-Fold Cross Validation.
+Validação Cruzada Purificada (Purged K-Fold) — TradeSystem5000.
 
-Estende o K-Fold tradicional do scikit-learn para suportar séries temporais
-financeiras usando Purging e Embargoing, evitando o vazamento (data leakage)
-de informações futuras no treinamento.
+Este módulo implementa a técnica de Purged K-Fold Cross Validation, que adapta
+o K-Fold tradicional para séries temporais financeiras sobrepostas.
 
-Referência: López de Prado, *Advances in Financial Machine Learning*, Cap. 7.4.
+A técnica utiliza Purging (remoção de overlaps entre treino e teste) e
+Embargoing (remoção de períodos pós-teste) para eliminar o vazamento de
+informações futuras (data leakage).
+
+Funcionalidades:
+- **PurgedKFold**: Classe compatível com scikit-learn para validação purificada.
+- **cv_score**: Utilitário para avaliação robusta de modelos com pesos de amostra.
+
+Referências
+-----------
+López de Prado, M. (2018). Advances in Financial Machine Learning. John Wiley & Sons.
+Capítulo 7.4.
 """
 
 from __future__ import annotations
@@ -15,11 +25,11 @@ from typing import Mapping
 
 import numpy as np
 import pandas as pd
-from sklearn.model_selection._split import _BaseKFold
 from loguru import logger
+from sklearn.model_selection._split import _BaseKFold
 
-from src.modeling.purge_embargo import apply_embargo, get_train_times
 from config.settings import ml_config
+from src.modeling.purge_embargo import apply_embargo, get_train_times
 
 
 class PurgedKFold(_BaseKFold):
