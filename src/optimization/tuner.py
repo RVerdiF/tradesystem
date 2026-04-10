@@ -20,38 +20,36 @@ def objective(trial, df, interval):
     Função objetivo para o Optuna.
     Implementa as fases 1 e 3 do plano de implementação.
     """
-    # Fase 1: Espaço de busca restrito + Gestão Dinâmica
+    # Fase 1: Espaço de busca restrito (Top 10 - Faxina Real)
     params = {
-        "cusum_threshold": trial.suggest_float("cusum_threshold", *optimization_config.cusum_range),
+        "cusum_threshold": trial.suggest_float(
+            "cusum_threshold", *optimization_config.cusum_range
+        ),
         "alpha_fast": trial.suggest_int("alpha_fast", *optimization_config.fast_span_range),
         "alpha_slow": trial.suggest_int("alpha_slow", *optimization_config.slow_span_range),
         "pt_sl": (
             trial.suggest_float("pt_mult", *optimization_config.pt_sl_range),
-            trial.suggest_float("sl_mult", *optimization_config.pt_sl_range)
+            trial.suggest_float("sl_mult", *optimization_config.pt_sl_range),
         ),
-        "be_trigger": trial.suggest_float("be_trigger", *optimization_config.be_trigger_range),
-        "meta_threshold": trial.suggest_float("meta_threshold", *optimization_config.meta_threshold_range),
-        "xgb_max_depth": trial.suggest_int("xgb_max_depth", *optimization_config.max_depth_range),
-        "xgb_gamma": trial.suggest_float("xgb_gamma", *optimization_config.gamma_range),
-        "xgb_min_child_weight": trial.suggest_float("xgb_min_child_weight", *optimization_config.min_child_weight_range),
-        "xgb_lambda": trial.suggest_float("xgb_lambda", *optimization_config.lambda_range),
-        "xgb_alpha": trial.suggest_float("xgb_alpha", *optimization_config.alpha_range),
-        "rsi_period": trial.suggest_int("rsi_period", *optimization_config.rsi_period_range),
-        "macd_fast": trial.suggest_int("macd_fast", *optimization_config.macd_fast_range),
-        "macd_slow": trial.suggest_int("macd_slow", *optimization_config.macd_slow_range),
-        "macd_signal": trial.suggest_int("macd_signal", *optimization_config.macd_signal_range),
-        "atr_period": trial.suggest_int("atr_period", *optimization_config.atr_period_range),
-        "bb_period": trial.suggest_int("bb_period", *optimization_config.bb_period_range),
-        "bb_std": trial.suggest_float("bb_std", *optimization_config.bb_std_range),
-        "zscore_window": trial.suggest_int("zscore_window", *optimization_config.zscore_window_range),
-        "ffd_d": trial.suggest_float("ffd_d", *optimization_config.ffd_d_range),
+        "meta_threshold": trial.suggest_float(
+            "meta_threshold", *optimization_config.meta_threshold_range
+        ),
+        "xgb_max_depth": trial.suggest_int(
+            "xgb_max_depth", *optimization_config.max_depth_range
+        ),
+        "ma_dist_fast_period": trial.suggest_int(
+            "ma_dist_fast_period", *optimization_config.ma_dist_fast_range
+        ),
+        "ma_dist_slow_period": trial.suggest_int(
+            "ma_dist_slow_period", *optimization_config.ma_dist_slow_range
+        ),
+        "moments_window": trial.suggest_int(
+            "moments_window", *optimization_config.moments_window_range
+        ),
     }
-    
-    # Garantir que slow > fast
+
+    # Garantir que slow > fast para o Alpha Model
     if params["alpha_slow"] <= params["alpha_fast"]:
-        return -1.0 # Penaliza configurações inválidas
-        
-    if params["macd_slow"] <= params["macd_fast"]:
         return -1.0
     
     # Executa o pipeline completo (com CPCV)

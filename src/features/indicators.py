@@ -21,77 +21,29 @@ from config.settings import feature_config
 # ===========================================================================
 # Momentum
 # ===========================================================================
-def rsi(close: pd.Series, period: int | None = None) -> pd.Series:
+def moving_average_distance(close: pd.Series, period: int) -> pd.Series:
     """
-    Relative Strength Index.
+    Calcula a distância percentual do preço para a média móvel selecionada.
+
+    Normaliza o momentum e evita limites fixos (como no RSI), sendo mais
+    informativo para modelos de ML sobre o "estiramento" do preço.
 
     Parameters
     ----------
     close : pd.Series
-        Série de preços de fechamento.
-    period : int, optional
-        Período do RSI. Default: config.
+        Série de preços.
+    period : int
+        Período da EMA.
 
     Returns
     -------
     pd.Series
-        RSI em [0, 100].
+        Distância percentual: (Close - MA) / MA.
     """
-    if period is None:
-        period = feature_config.rsi_period
-
-    delta = close.diff()
-    gain = delta.where(delta > 0, 0.0)
-    loss = (-delta).where(delta < 0, 0.0)
-
-    avg_gain = gain.ewm(alpha=1 / period, min_periods=period, adjust=False).mean()
-    avg_loss = loss.ewm(alpha=1 / period, min_periods=period, adjust=False).mean()
-
-    rs = avg_gain / avg_loss.replace(0, np.nan)
-    result = 100.0 - (100.0 / (1.0 + rs))
-    result.name = "rsi"
+    ma = close.ewm(span=period, adjust=False).mean()
+    result = (close - ma) / ma.replace(0, np.nan)
+    result.name = f"ma_dist_{period}"
     return result
-
-
-def macd(
-    close: pd.Series,
-    fast: int | None = None,
-    slow: int | None = None,
-    signal: int | None = None,
-) -> pd.DataFrame:
-    """
-    Moving Average Convergence Divergence.
-
-    Parameters
-    ----------
-    close : pd.Series
-        Série de preços de fechamento.
-    fast, slow, signal : int, optional
-        Períodos das EMAs. Default: config.
-
-    Returns
-    -------
-    pd.DataFrame
-        Colunas: ``macd``, ``signal``, ``histogram``.
-    """
-    if fast is None:
-        fast = feature_config.macd_fast
-    if slow is None:
-        slow = feature_config.macd_slow
-    if signal is None:
-        signal = feature_config.macd_signal
-
-    ema_fast = close.ewm(span=fast, adjust=False).mean()
-    ema_slow = close.ewm(span=slow, adjust=False).mean()
-
-    macd_line = ema_fast - ema_slow
-    signal_line = macd_line.ewm(span=signal, adjust=False).mean()
-    histogram = macd_line - signal_line
-
-    return pd.DataFrame(
-        {"macd": macd_line, "signal": signal_line, "histogram": histogram},
-        index=close.index,
-    )
 
 
 def roc(close: pd.Series, period: int = 10) -> pd.Series:
@@ -157,43 +109,8 @@ def atr(
     return result
 
 
-def bollinger_width(
-    close: pd.Series,
-    period: int | None = None,
-    num_std: float | None = None,
-) -> pd.Series:
-    """
-    Largura das Bandas de Bollinger (normalizada pela média).
-
-    Parameters
-    ----------
-    close : pd.Series
-        Série de preços.
-    period : int, optional
-        Período da média/desvio. Default: config.
-    num_std : float, optional
-        Múltiplo do desvio padrão. Default: config.
-
-    Returns
-    -------
-    pd.Series
-        Largura das bandas (adimensional).
-    """
-    if period is None:
-        period = feature_config.bb_period
-    if num_std is None:
-        num_std = feature_config.bb_std
-
-    sma = close.rolling(window=period, min_periods=period).mean()
-    std = close.rolling(window=period, min_periods=period).std()
-
-    upper = sma + num_std * std
-    lower = sma - num_std * std
-
-    # Largura normalizada pela média
-    width = (upper - lower) / sma.replace(0, np.nan)
-    width.name = "bb_width"
-    return width
+    result.name = "atr"
+    return result
 
 
 def rolling_volatility(close: pd.Series, window: int = 20) -> pd.Series:
@@ -400,20 +317,20 @@ def compute_all_features(
 
     features = pd.DataFrame(index=df.index)
 
-    # Momentum
-    features["rsi"] = rsi(df["close"], period=config.rsi_period)
-    macd_df = macd(df["close"], fast=config.macd_fast, slow=config.macd_slow, signal=config.macd_signal)
-    features = pd.concat([features, macd_df], axis=1)
+    # Momentum (Distância de Médias)
+    features["ma_dist_fast"] = moving_average_distance(df["close"], period=config.ma_dist_fast_period)
+    features["ma_dist_slow"] = moving_average_distance(df["close"], period=config.ma_dist_slow_period)
     features["roc"] = roc(df["close"])
 
     # Volatilidade
     features["atr"] = atr(df["high"], df["low"], df["close"], period=config.atr_period)
-    features["bb_width"] = bollinger_width(df["close"], period=config.bb_period, num_std=config.bb_std)
     features["rolling_vol"] = rolling_volatility(df["close"])
-    features["garman_klass"] = garman_klass_volatility(df["open"], df["high"], df["low"], df["close"])
+    features["garman_klass"] = garman_klass_volatility(
+        df["open"], df["high"], df["low"], df["close"]
+    )
 
-    # Momentos
-    moments_df = rolling_moments(df["close"])
+    # Momentos (Skew/Kurt)
+    moments_df = rolling_moments(df["close"], window=config.moments_window)
     features = pd.concat([features, moments_df], axis=1)
 
     # Microestrutura

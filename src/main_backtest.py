@@ -24,6 +24,7 @@ from src.modeling.classifier import MetaClassifier
 from src.backtest.metrics import performance_report
 from src.backtest.cpcv import CombinatorialPurgedCV
 from src.backtest.attribution import attribution_analysis, trade_level_attribution, attribution_summary
+from src.modeling.feature_evaluation import evaluate_features_shap, evaluate_features_mda
 
 def generate_synthetic_data(n_days=1000):
     """Gera dados sintéticos de preços OHLCV (Random Walk) para demonstração."""
@@ -157,11 +158,18 @@ def run_pipeline(df, interval="1d", use_volume_bars=False, params=None):
     # ---------------------------------------------------------
     logger.info("--- Fase 2: Feature Engineering ---")
     
-    feat_keys = ["rsi_period", "macd_fast", "macd_slow", "macd_signal", "atr_period", "bb_period", "bb_std", "zscore_window"]
+    feat_keys = [
+        "atr_period",
+        "zscore_window",
+        "ma_dist_fast_period",
+        "ma_dist_slow_period",
+        "moments_window",
+    ]
     feat_overrides = {k: params[k] for k in feat_keys if k in params}
-    
+
     if feat_overrides:
         from dataclasses import asdict
+
         base = asdict(feature_config)
         base.update(feat_overrides)
         dynamic_config = FeatureConfig(**base)
@@ -277,6 +285,10 @@ def run_pipeline(df, interval="1d", use_volume_bars=False, params=None):
         )
         
         weights = np.abs(labels_df.loc[X_train.index, "ret"])
+        # Normaliza pesos para média 1.0 (min_child_weight do XGB opera sobre a Hessiana = w * p*(1-p))
+        w_mean = weights.mean()
+        if w_mean > 0:
+            weights = weights / w_mean
         model.fit(X_train, y_train, sample_weight=weights)
         
         # Sharpe de treino para diagnóstico
@@ -312,6 +324,29 @@ def run_pipeline(df, interval="1d", use_volume_bars=False, params=None):
     y_prob_all = pd.concat(all_test_probs).groupby(level=0).mean()
     y_pred_all = y_prob_all > meta_threshold
     y_test_all = pd.concat(all_test_labels).groupby(level=0).first()
+
+    # Auditoria de Features (Apenas na execução final, não em trials do Optuna para poupar tempo)
+    # Identificamos a execução final quando 'params' contém chaves de busca completa ou é chamado manualmente
+    if params and "ma_dist_fast_period" in params:
+        logger.info("--- Auditoria de Features Final (Modelo Global) ---")
+        # Treinamos um modelo no dataset completo apenas para explicabilidade
+        full_model = MetaClassifier(
+            n_estimators=150,
+            max_depth=max_depth,
+            gamma=gamma,
+            min_child_weight=min_child_weight,
+            reg_lambda=reg_lambda,
+            reg_alpha=reg_alpha,
+            use_xgboost=True
+        )
+        full_weights = np.abs(labels_df.loc[X.index, "ret"])
+        fw_mean = full_weights.mean()
+        if fw_mean > 0:
+            full_weights = full_weights / fw_mean
+        full_model.fit(X, y_meta, sample_weight=full_weights)
+
+        evaluate_features_shap(full_model, X, y_meta)
+        evaluate_features_mda(full_model, X, y_meta)
     
     # ---------------------------------------------------------
     # Fase 5: Backtest, Métricas e Atribuição

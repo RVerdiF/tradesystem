@@ -148,16 +148,13 @@ class FeatureConfig:
     cusum_threshold_pct: float = 0.0435  # % de desvio para trigger (Otimizado PETR4.SA)
     cusum_ewm_span: int = 50          # span do EWMA para threshold adaptativo
 
-    # Indicadores — Momentum
-    rsi_period: int = 14
-    macd_fast: int = 12
-    macd_slow: int = 26
-    macd_signal: int = 9
+    # Indicadores — Momentum (Fase True Test)
+    ma_dist_fast_period: int = 9
+    ma_dist_slow_period: int = 21
 
-    # Indicadores — Volatilidade
+    # Indicadores — Volatilidade e Estatística
     atr_period: int = 14
-    bb_period: int = 20
-    bb_std: float = 2.0
+    moments_window: int = 40
 
     # Normalização
     zscore_window: int = 50
@@ -199,8 +196,8 @@ class MLConfig:
     cv_splits: int = 5
     embargo_pct: float = 0.01        # 1% das barras da base como embargo pós-teste
     xgb_max_depth: int = 4           # Produção (reduzido de 8)
-    xgb_gamma: float = 1.0           # Penalização de folhas (Produção)
-    xgb_min_child_weight: float = 10.0 # Peso mínimo (Produção)
+    xgb_gamma: float = 0.0           # Desativado (evita árvores vazias em amostras pequenas)
+    xgb_min_child_weight: float = 2.0  # Peso mínimo reduzido (permitir splits em amostras menores)
     xgb_lambda: float = 1.0          # L2 Regularization
     xgb_alpha: float = 0.0           # L1 Regularization
 
@@ -215,29 +212,24 @@ class MLConfig:
 class OptimizationConfig:
     """Configuração para o otimizador bayesiano (Optuna)."""
 
-    # Ranges de busca sugeridos (Fase 1 do plano)
-    cusum_range: tuple[float, float] = (0.005, 0.02)  # Expandido para capturar eventos mais significativos
+    # Ranges de busca fundamentais (Top 10 - "Faxina Real")
+    cusum_range: tuple[float, float] = (0.002, 0.015)
+    pt_sl_range: tuple[float, float] = (1.5, 4.5)
+    meta_threshold_range: tuple[float, float] = (0.60, 0.75)
+    max_depth_range: tuple[int, int] = (3, 6)
+    
+    # Primary Model (Alpha)
     fast_span_range: tuple[int, int] = (5, 20)
     slow_span_range: tuple[int, int] = (20, 60)
-    pt_sl_range: tuple[float, float] = (1.0, 5.0)  # Expandido para permitir alvos mais longos contra slippage
-    be_trigger_range: tuple[float, float] = (0.0, 0.9)
-    meta_threshold_range: tuple[float, float] = (0.60, 0.75)  # Teste C: Forçar seletividade
-    max_depth_range: tuple[int, int] = (3, 6)
-    gamma_range: tuple[float, float] = (0.1, 5.0)
-    min_child_weight_range: tuple[float, float] = (5.0, 20.0)
-    lambda_range: tuple[float, float] = (0.0, 10.0)
-    alpha_range: tuple[float, float] = (0.0, 10.0)
 
-    # Registros adicionais (Features)
-    rsi_period_range: tuple[int, int] = (7, 28)
-    macd_fast_range: tuple[int, int] = (6, 20)
-    macd_slow_range: tuple[int, int] = (20, 40)
-    macd_signal_range: tuple[int, int] = (5, 15)
-    atr_period_range: tuple[int, int] = (7, 28)
-    bb_period_range: tuple[int, int] = (10, 40)
-    bb_std_range: tuple[float, float] = (1.5, 3.0)
-    zscore_window_range: tuple[int, int] = (20, 100)
-    ffd_d_range: tuple[float, float] = (0.1, 0.7)
+    # Novas Features (Busca restrita)
+    ma_dist_fast_range: tuple[int, int] = (7, 15)
+    ma_dist_slow_range: tuple[int, int] = (20, 40)
+    moments_window_range: tuple[int, int] = (20, 100)
+
+    # Parâmetros Travados em Default de Produção (MLConfig)
+    # be_trigger_range, regularizações XGB, FFD e ATR-window
+    # serão usados diretamente dos seus Configs, sem otimização.
 
     # Parâmetros de execução
     n_trials: int = 80

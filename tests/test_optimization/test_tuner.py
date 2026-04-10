@@ -3,6 +3,7 @@ import pandas as pd
 import numpy as np
 from unittest.mock import patch, MagicMock
 from src.optimization.tuner import objective, run_optimization
+from config.settings import OptimizationConfig
 
 @pytest.fixture
 def sample_df():
@@ -23,9 +24,9 @@ def mock_results():
 def test_objective_function(sample_df, mock_results):
     """Test the objective function with mocked pipeline results."""
     trial = MagicMock()
-    # Mock suggestions
-    trial.suggest_float.side_effect = [0.02, 1.5, 1.5] # cusum, pt, sl
-    trial.suggest_int.side_effect = [10, 30, 3] # fast, slow, depth
+    # Mock suggestions (4 floats, 6 ints for 10-parameter Truth Test)
+    trial.suggest_float.side_effect = [0.02, 1.5, 1.5, 0.65] # cusum, pt, sl, meta_threshold
+    trial.suggest_int.side_effect = [10, 30, 3, 9, 21, 40] # fast, slow, depth, ma_dist_fast, ma_dist_slow, moments
 
     with patch("src.optimization.tuner.run_pipeline", return_value=mock_results):
         score = objective(trial, sample_df, "1h")
@@ -36,26 +37,31 @@ def test_objective_invalid_params(sample_df):
     trial = MagicMock()
     # fast=30, slow=10
     trial.suggest_float.return_value = 0.02
-    trial.suggest_int.side_effect = [30, 10, 3] 
+    trial.suggest_int.side_effect = [30, 10, 3, 9, 21, 40] 
     
     score = objective(trial, sample_df, "1h")
     assert score == -1.0
 
 def test_objective_low_trades(sample_df, mock_results):
-    """Test that objective returns 0.0 if trades < min_trades."""
+    """Test that objective penalizes Sharpe if trades < min_trades."""
     trial = MagicMock()
     trial.suggest_float.return_value = 0.02
-    trial.suggest_int.side_effect = [10, 30, 3]
+    trial.suggest_int.side_effect = [10, 30, 3, 9, 21, 40]
     
     mock_results["n_trades"] = 10 # below default 30
     
     with patch("src.optimization.tuner.run_pipeline", return_value=mock_results):
-        score = objective(trial, sample_df, "1h")
-        assert score == 0.0
+        with patch("src.optimization.tuner.optimization_config") as mock_config:
+            mock_config.min_trades = 30
+            score = objective(trial, sample_df, "1h")
+            # 2.0 sharpe * (10/30) penalty = ~0.666
+            assert pytest.approx(score, 0.01) == 2.0 * (10 / 30)
 
 def test_run_optimization_integration(sample_df, mock_results):
     """Test run_optimization with 2 trials to check return structure."""
     with patch("src.optimization.tuner.run_pipeline", return_value=mock_results):
+        # Em vez de mockar um objeto vago, passamos o mock do config real
+        # ou apenas populamos os campos do Truth Test
         with patch("src.optimization.tuner.optimization_config") as mock_config:
             mock_config.n_trials = 2
             mock_config.timeout = 10
@@ -65,6 +71,10 @@ def test_run_optimization_integration(sample_df, mock_results):
             mock_config.slow_span_range = (20, 60)
             mock_config.pt_sl_range = (1.0, 3.0)
             mock_config.max_depth_range = (2, 4)
+            mock_config.meta_threshold_range = (0.6, 0.75)
+            mock_config.ma_dist_fast_range = (7, 15)
+            mock_config.ma_dist_slow_range = (20, 40)
+            mock_config.moments_window_range = (20, 100)
 
             results = run_optimization(sample_df, "1h")
             
