@@ -216,10 +216,10 @@ class OptimizationConfig:
     """Configuração para o otimizador bayesiano (Optuna)."""
 
     # Ranges de busca sugeridos (Fase 1 do plano)
-    cusum_range: tuple[float, float] = (0.002, 0.01)
+    cusum_range: tuple[float, float] = (0.005, 0.02)  # Expandido para capturar eventos mais significativos
     fast_span_range: tuple[int, int] = (5, 20)
     slow_span_range: tuple[int, int] = (20, 60)
-    pt_sl_range: tuple[float, float] = (1.0, 3.0)
+    pt_sl_range: tuple[float, float] = (1.0, 5.0)  # Expandido para permitir alvos mais longos contra slippage
     be_trigger_range: tuple[float, float] = (0.0, 0.9)
     meta_threshold_range: tuple[float, float] = (0.60, 0.75)  # Teste C: Forçar seletividade
     max_depth_range: tuple[int, int] = (3, 6)

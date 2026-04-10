@@ -218,9 +218,87 @@ def rolling_volatility(close: pd.Series, window: int = 20) -> pd.Series:
     return result
 
 
+def garman_klass_volatility(
+    open_p: pd.Series,
+    high: pd.Series,
+    low: pd.Series,
+    close: pd.Series,
+    window: int = 20,
+) -> pd.Series:
+    """
+    Estimador de volatilidade Garman-Klass (baseado em OHLC).
+
+    Incorpora a informação dos preços de abertura, máxima, mínima e fechamento,
+    sendo mais eficiente que estimadores baseados apenas no fechamento.
+    """
+    log_hl = np.log(high / low.replace(0, np.nan)).pow(2)
+    log_co = np.log(close / open_p.replace(0, np.nan)).pow(2)
+
+    # gk_per_bar = 0.5 * (ln(H/L))^2 - (2ln2 - 1) * (ln(C/O))^2
+    gk_var = 0.5 * log_hl - (2 * np.log(2) - 1) * log_co
+
+    # Rolling mean para estabilização (variância -> desvio padrão)
+    result = np.sqrt(gk_var.rolling(window=window, min_periods=window // 2).mean())
+    result.name = "garman_klass"
+    return result
+
+
+def rolling_moments(close: pd.Series, window: int = 40) -> pd.DataFrame:
+    """
+    Calcula Skewness e Kurtosis móvel dos retornos.
+
+    Ajuda a detectar exaustão de tendência e excesso de cauda (eventos extremos).
+    """
+    returns = close.pct_change()
+    skew = returns.rolling(window=window, min_periods=window // 2).skew()
+    kurt = returns.rolling(window=window, min_periods=window // 2).kurt()
+
+    return pd.DataFrame({"skew": skew, "kurt": kurt}, index=close.index)
+
+
 # ===========================================================================
 # Microestrutura
 # ===========================================================================
+def volume_spread_analysis(
+    high: pd.Series,
+    low: pd.Series,
+    close: pd.Series,
+    open_p: pd.Series,
+    volume: pd.Series,
+) -> pd.DataFrame:
+    """
+    Features de Volume Spread Analysis (VSA).
+
+    Avalia a relação entre o esforço (volume) e o resultado (movimento de preço).
+    """
+    spread = high - low
+    avg_spread = spread.rolling(window=20, min_periods=10).mean()
+    rel_spread = spread / avg_spread.replace(0, np.nan)
+
+    # Posição do fechamento na barra (0 = low, 1 = high)
+    bar_pos = (close - low) / spread.replace(0, np.nan)
+
+    # Volume relativo
+    avg_vol = volume.rolling(window=20, min_periods=10).mean()
+    rel_vol = volume / avg_vol.replace(0, np.nan)
+
+    # Candle Wicks (Sombras)
+    # +1 = sombra superior dominante, -1 = inferior dominante
+    upper_wick = high - np.maximum(open_p, close)
+    lower_wick = np.minimum(open_p, close) - low
+    wick_ratio = (upper_wick - lower_wick) / spread.replace(0, np.nan)
+
+    return pd.DataFrame(
+        {
+            "vsa_rel_spread": rel_spread,
+            "vsa_bar_pos": bar_pos,
+            "vsa_rel_vol": rel_vol,
+            "vsa_wick_ratio": wick_ratio,
+        },
+        index=close.index,
+    )
+
+
 def order_flow_imbalance(volume: pd.Series, close: pd.Series) -> pd.Series:
     """
     Order Flow Imbalance estimado via tick rule.
@@ -332,11 +410,19 @@ def compute_all_features(
     features["atr"] = atr(df["high"], df["low"], df["close"], period=config.atr_period)
     features["bb_width"] = bollinger_width(df["close"], period=config.bb_period, num_std=config.bb_std)
     features["rolling_vol"] = rolling_volatility(df["close"])
+    features["garman_klass"] = garman_klass_volatility(df["open"], df["high"], df["low"], df["close"])
+
+    # Momentos
+    moments_df = rolling_moments(df["close"])
+    features = pd.concat([features, moments_df], axis=1)
 
     # Microestrutura
     if "volume" in df.columns:
         features["ofi"] = order_flow_imbalance(df["volume"], df["close"])
         features["vpin"] = vpin(df["volume"], df["close"])
+
+        vsa_df = volume_spread_analysis(df["high"], df["low"], df["close"], df["open"], df["volume"])
+        features = pd.concat([features, vsa_df], axis=1)
 
     logger.success("Features calculadas: {} colunas", len(features.columns))
     return features
