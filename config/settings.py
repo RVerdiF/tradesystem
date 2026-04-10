@@ -221,7 +221,7 @@ class OptimizationConfig:
     slow_span_range: tuple[int, int] = (20, 60)
     pt_sl_range: tuple[float, float] = (1.0, 3.0)
     be_trigger_range: tuple[float, float] = (0.0, 0.9)
-    meta_threshold_range: tuple[float, float] = (0.4, 0.7)
+    meta_threshold_range: tuple[float, float] = (0.60, 0.75)  # Teste C: Forçar seletividade
     max_depth_range: tuple[int, int] = (3, 6)
     gamma_range: tuple[float, float] = (0.1, 5.0)
     min_child_weight_range: tuple[float, float] = (5.0, 20.0)

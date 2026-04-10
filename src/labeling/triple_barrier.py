@@ -115,6 +115,7 @@ def apply_triple_barrier(
     events: pd.DataFrame,
     pt_sl: tuple[float, float] | None = None,
     be_trigger: float = 0.0,
+    open_prices: pd.Series | None = None,
 ) -> pd.DataFrame:
     """
     Aplica o método da Tripla Barreira e retorna a primeira barreira tocada.
@@ -174,11 +175,14 @@ def apply_triple_barrier(
             except KeyError:
                 end_loc = close_idx.searchsorted(t1, side="right") - 1
 
-        if start_loc >= len(close_values) or end_loc < start_loc:
+        if start_loc + 1 >= len(close_values) or end_loc <= start_loc:
             continue
 
-        # Preço de entrada
-        entry_price = close_values[start_loc]
+        # Preço de entrada: Abertura da barra T+1 (se disponível) ou Fechamento da T+1.
+        if open_prices is not None:
+            entry_price = open_prices.values[start_loc + 1]
+        else:
+            entry_price = close_values[start_loc] # Fallback apenas se open não for fornecido
 
         # Calcula barreiras absolutas
         upper = trgt * pt_mult if pt_mult > 0 else np.inf
@@ -330,6 +334,7 @@ def get_labels(
     pt_sl: tuple[float, float] | None = None,
     be_trigger: float = 0.0,
     min_return: float | None = None,
+    open_prices: pd.Series | None = None,
 ) -> pd.DataFrame:
     """
     Pipeline completo: aplica tripla barreira e gera labels.
@@ -361,7 +366,9 @@ def get_labels(
     if min_return is None:
         min_return = labeling_config.min_return
 
-    result = apply_triple_barrier(close, events, pt_sl, be_trigger=be_trigger)
+    result = apply_triple_barrier(
+        close, events, pt_sl, be_trigger=be_trigger, open_prices=open_prices
+    )
 
     if len(result) == 0:
         return result

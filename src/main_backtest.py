@@ -222,7 +222,7 @@ def run_pipeline(df, interval="1d", use_volume_bars=False, params=None):
         pt_sl=pt_sl
     )
     
-    labels_df = get_labels(df["close"], events, be_trigger=be_trigger)
+    labels_df = get_labels(df["close"], events, be_trigger=be_trigger, open_prices=df["open"])
     if labels_df is None or labels_df.empty:
         logger.error("Nenhuma label gerada. Encerrando.")
         return None
@@ -325,7 +325,7 @@ def run_pipeline(df, interval="1d", use_volume_bars=False, params=None):
         "side": test_labels["side"],
         "meta_label": y_pred_all.astype(int),
         "bet_size": y_prob_all,
-        "cost": 0.0005 
+        "cost": 40.0 / df.loc[y_test_all.index, "close"]  # Teste A: Slippage Ganancioso (40 pontos no WIN)
     }, index=y_test_all.index)
     
     trade_attr = trade_level_attribution(trades)
