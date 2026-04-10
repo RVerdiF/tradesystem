@@ -10,6 +10,29 @@ Fluxo de Operação:
 3.  **Pipeline**: Constrói o fluxo assíncrono [Features -> Alpha -> Meta-Modelo -> Kelly].
 4.  **Engine**: Inicializa o motor de trading para monitoramento e envio de ordens.
 
+Argumentos
+----------
+--symbol : str
+    Ativo para execução (ex: WINJ26, PETR4.SA).
+--data-source : {'mt5', 'yfinance'}
+    Fonte para baixar dados de treinamento inicial. Default: 'mt5'.
+--interval : {'1m', '5m', '15m', '1h', '1d'}
+    Timeframe operacional. Default: '1h'.
+--trade-type : {'day_trade', 'swing_trade'}
+    Modalidade de execução (afeta fechamento de posições). Default: 'day_trade'.
+--max-position : float
+    Volume máximo em lotes/contratos. Default: 1.0.
+--load-model : str
+    Caminho para um arquivo .pkl de modelo pré-treinado.
+--force-optimize : bool
+    Se presente, ignora parâmetros salvos e executa nova otimização antes de iniciar.
+
+Exemplos de Uso
+---------------
+$ python -m src.main_execution --symbol WINJ26 --interval 5m
+$ python -m src.main_execution --symbol PETR4 --force-optimize --max-position 100
+$ python -m src.main_execution --symbol PETR4.SA --data-source yfinance --trade-type swing_trade
+
 Referências
 -----------
 López de Prado, M. (2018). Advances in Financial Machine Learning. John Wiley & Sons.

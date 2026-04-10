@@ -10,6 +10,17 @@ O fluxo inclui:
 3.  Persistência dos melhores parâmetros no banco de dados.
 4.  Geração de relatório de performance final (Out-of-Sample).
 
+Argumentos
+----------
+--symbol : str
+    Ativo para otimizar (ex: PETR4, WINJ26).
+--n-bars : int
+    Quantidade de candles para o histórico. Default: 10000.
+--interval : {'1m', '5m', '15m', '30m', '1h', '1d'}
+    Tempo gráfico das barras. Default: '1h'.
+--n-trials : int
+    Número de tentativas de otimização (Optuna trials). Default: config.
+
 Exemplos de Uso
 ---------------
 $ python -m src.optimization.run_opt --symbol PETR4 --interval 1h

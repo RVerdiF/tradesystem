@@ -9,6 +9,27 @@ Este módulo integra todas as fases da metodologia AFML (Advances in Financial M
 5.  **ML**: Treinamento de Meta-Classificador e validação via Combinatorial Purged CV.
 6.  **Backtest**: Simulação, atribuição de performance e métricas estatísticas.
 
+Argumentos
+----------
+--mode : {'synthetic', 'yfinance', 'mt5'}
+    Origem dos dados. Default: 'mt5'.
+--symbol : str
+    Ticker do ativo (ex: PETR4.SA, WINJ26).
+--years : float
+    Anos de histórico (para yfinance/mt5). Default: 2.
+--n-bars : int
+    Quantidade de barras (para mt5). Default: 5000.
+--interval : {'1d', '1h', '15m', '5m', '1m'}
+    Timeframe das barras. Default: '1h'.
+--volume-bars : bool
+    Se presente, utiliza amostragem por barras de volume (AFML Cap. 2).
+
+Exemplos de Uso
+---------------
+$ python -m src.main_backtest --mode yfinance --symbol PETR4.SA --interval 1d
+$ python -m src.main_backtest --mode mt5 --symbol WINJ26 --interval 5m --n-bars 10000
+$ python -m src.main_backtest --mode mt5 --symbol PETR4 --volume-bars
+
 Referências
 -----------
 López de Prado, M. (2018). Advances in Financial Machine Learning. John Wiley & Sons.
