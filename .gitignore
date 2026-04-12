@@ -228,3 +228,7 @@ plan.md
 # switchboard
 .switchboard/
 .claude/
+
+# agents framework
+.agent/
+AGENTS.md
