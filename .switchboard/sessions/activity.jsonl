@@ -1,0 +1,3 @@
+{"timestamp":"2026-04-12T13:59:09.949Z","type":"plan_management","payload":{"operation":"create_plan","sessionId":"sess_1776002349944","planFile":".switchboard/plans/feature_plan_20260412_105909_untitled_plan.md","topic":"Untitled Plan","contentLineCount":14}}
+{"timestamp":"2026-04-12T13:59:10.038Z","type":"plan_management","payload":{"operation":"watcher_suppressed"}}
+{"timestamp":"2026-04-12T13:59:10.270Z","type":"plan_management","payload":{"operation":"watcher_suppressed"}}
