@@ -90,6 +90,8 @@ class RiskConfig:
 
     max_daily_loss_pct: float = 0.02       # 2% do capital
     max_drawdown_pct: float = 0.05         # 5% drawdown máximo
+    max_daily_profit_pct: float = 0.02     # 2% lucro máximo diário (novo)
+    cool_down_minutes: float = 5.0         # Minutos de resfriamento pós-saída (novo)
     max_position_size: float = 200.0         # lote máximo por trade
     max_open_positions: int = 5
     kelly_fraction: float = 0.5            # Kelly fracionário (50%)

@@ -180,6 +180,8 @@ def mock_trading_context():
         # Configurações de risco padrão para os testes
         mock_risk.max_daily_loss_pct = 0.02
         mock_risk.max_drawdown_pct = 0.05
+        mock_risk.max_daily_profit_pct = 0.02
+        mock_risk.cool_down_minutes = 5.0
         mock_risk.trading_start_time = "09:00:00"
         mock_risk.trading_end_time = "17:55:00"
         mock_risk.trade_type = "day_trade"
@@ -211,6 +213,7 @@ class TestRiskManager:
         """Drawdown em relação à máxima histórica."""
         risk = RiskManager(start_balance=10000.0)
         risk.max_drawdown_pct = 0.10  # -10% MDD
+        risk.max_daily_profit_pct = 2.0  # 200% — desativa profit target para este teste
 
         # Sobe pra 20.000
         risk.update_equity(balance=15000.0, equity=20000.0)

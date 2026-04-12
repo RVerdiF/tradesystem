@@ -98,8 +98,116 @@ class TestTimeRestrictions:
         # Força o RiskManager a estar haltado por PERDA DIÁRIA (não horário)
         engine.risk.is_halted = True
         engine.risk.halt_reason = "MAX DAILY LOSS REACHED"
-        
+
         await engine._process_symbol("PETR4")
-        
+
         # DEVE ter chamado close_positions
         engine.om.close_positions.assert_called_once_with("PETR4")
+
+
+class TestCoolDown:
+
+    def test_cool_down_activated_after_notify(self):
+        """notify_trade_closed() deve activar o cool-down e bloquear novas ordens."""
+        rm = RiskManager(start_balance=100000.0)
+        # Garante que está ACTIVE dentro do horário
+        mock_now = MagicMock()
+        mock_now.time.return_value = datetime.time(10, 0, 0)
+        with patch('src.execution.risk.datetime.datetime') as mock_dt:
+            mock_dt.now.return_value = mock_now
+            mock_dt.date = datetime.date
+            mock_dt.timedelta = datetime.timedelta
+            rm.update_equity(100000.0, 100000.0)
+
+        assert rm.can_trade() is True
+
+        # Activa o cool-down (simula saída por circuit breaker)
+        with patch('src.execution.risk.datetime.datetime') as mock_dt:
+            mock_dt.now.return_value = mock_now
+            mock_dt.date = datetime.date
+            mock_dt.timedelta = datetime.timedelta
+            rm.notify_trade_closed()
+
+        assert rm.can_trade() is False
+        assert rm.system_state == "COOL_DOWN"
+        assert "COOL_DOWN" in rm.halt_reason
+
+    def test_cool_down_expires_after_time(self):
+        """Após o temporizador expirar, update_equity() deve reativar o sistema."""
+        import src.execution.risk as risk_module
+
+        rm = RiskManager(start_balance=100000.0)
+
+        # Activa cool-down às 10:00:00
+        mock_now_1 = datetime.datetime(2026, 4, 12, 10, 0, 0)
+        with patch.object(risk_module.datetime, 'datetime', wraps=datetime.datetime) as mock_dt_cls:
+            mock_dt_cls.now.return_value = mock_now_1
+            rm.notify_trade_closed()
+
+        assert rm.system_state == "COOL_DOWN"
+
+        # Simula tick às 10:06:00 (após 5 min de cool-down)
+        future = datetime.datetime(2026, 4, 12, 10, 6, 0)
+        with patch.object(risk_module.datetime, 'datetime', wraps=datetime.datetime) as mock_dt_cls:
+            mock_dt_cls.now.return_value = future
+            rm.update_equity(100000.0, 100000.0)
+
+        assert rm.can_trade() is True
+        assert rm.system_state == "ACTIVE"
+        assert rm.halt_reason == ""
+
+    def test_daily_profit_target_halts_trading(self):
+        """Se o PnL diário atingir max_daily_profit_pct, o sistema deve parar."""
+        rm = RiskManager(start_balance=100000.0)
+
+        mock_now = MagicMock()
+        mock_now.time.return_value = datetime.time(10, 0, 0)
+        with patch('src.execution.risk.datetime.datetime') as mock_dt:
+            mock_dt.now.return_value = mock_now
+            mock_dt.date = datetime.date
+            mock_dt.timedelta = datetime.timedelta
+            # Equity = 102001 sobre start_balance 100000 → +2.001% > limite de 2%
+            rm.update_equity(100000.0, 102001.0)
+
+        assert rm.can_trade() is False
+        assert rm.system_state == "HALTED_FOR_DAY"
+
+    def test_daily_profit_target_in_halt_reason(self):
+        """O motivo do halt deve identificar claramente a meta de lucro atingida."""
+        rm = RiskManager(start_balance=100000.0)
+
+        mock_now = MagicMock()
+        mock_now.time.return_value = datetime.time(10, 0, 0)
+        with patch('src.execution.risk.datetime.datetime') as mock_dt:
+            mock_dt.now.return_value = mock_now
+            mock_dt.date = datetime.date
+            mock_dt.timedelta = datetime.timedelta
+            rm.update_equity(100000.0, 102001.0)
+
+        assert "MAX DAILY PROFIT REACHED" in rm.halt_reason
+
+    def test_cool_down_does_not_override_halted_for_day(self):
+        """notify_trade_closed() não deve sobrescrever um HALTED_FOR_DAY permanente."""
+        rm = RiskManager(start_balance=100000.0)
+
+        # Força estado HALTED_FOR_DAY via perda diária
+        mock_now = MagicMock()
+        mock_now.time.return_value = datetime.time(10, 0, 0)
+        with patch('src.execution.risk.datetime.datetime') as mock_dt:
+            mock_dt.now.return_value = mock_now
+            mock_dt.date = datetime.date
+            mock_dt.timedelta = datetime.timedelta
+            rm.update_equity(100000.0, 97000.0)  # -3% > limite de 2%
+
+        assert rm.system_state == "HALTED_FOR_DAY"
+
+        # Tenta activar cool-down — deve ser ignorado
+        with patch('src.execution.risk.datetime.datetime') as mock_dt:
+            mock_dt.now.return_value = mock_now
+            mock_dt.date = datetime.date
+            mock_dt.timedelta = datetime.timedelta
+            rm.notify_trade_closed()
+
+        # Estado não deve ter mudado
+        assert rm.system_state == "HALTED_FOR_DAY"
+        assert "MAX DAILY LOSS REACHED" in rm.halt_reason

@@ -79,6 +79,10 @@ class AsyncTradingEngine:
                 if self.om.get_net_position(symbol) != 0:
                     logger.warning("Fechando posições para {} devido a: {}", symbol, self.risk.halt_reason)
                     self.om.close_positions(symbol)
+                    # Inicia cool-down apenas no fecho por circuit breaker (saída para flat).
+                    # NÃO chamar nos blocos de stop-and-reverse abaixo — esses fecham
+                    # para imediatamente reabrir na direção oposta.
+                    self.risk.notify_trade_closed()
             return
 
         try:
