@@ -72,6 +72,15 @@ class OrderManager:
         bool
             True se executada com sucesso.
         """
+        # Proteção: lote zero é comportamento legítimo do Bet Sizing (sem convicção suficiente).
+        # Não constitui erro — retorna True silenciosamente para não poluir logs/alertas.
+        if volume <= 0:
+            logger.debug(
+                "[BET SIZING] Lote zero calculado para {} {}. Nenhuma ordem enviada.",
+                action.upper(), symbol
+            )
+            return True
+
         # Proteção: só no modo live tenta enviar ordens reais
         if execution_config.mode != "live":
             logger.info("[PAPER] Simulação: {} {} lotes de {}", action.upper(), volume, symbol)

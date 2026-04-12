@@ -25,7 +25,7 @@ import MetaTrader5 as mt5
 import pandas as pd
 from loguru import logger
 
-from config.settings import execution_config
+from config.settings import execution_config, risk_config
 from src.execution.audit import audit
 from src.execution.order_manager import OrderManager
 from src.execution.risk import RiskManager
@@ -101,39 +101,47 @@ class AsyncTradingEngine:
             # 3. Predição Completa (Alpha -> MT5 Bar -> FeatureGen -> ML Meta)
             signal_data = self.model_pipeline(df_snapshot)
 
-            # Formato esperado: {"side": 1/-1/0, "kelly_fraction": 0.5, "price": 100.50}
+            # Formato esperado: {"side": 1/-1/0, "meta_prob": float, "kelly_fraction": float, "price": float}
             alpha_side = signal_data.get("side", 0)
-            meta_label = 1 if signal_data.get("meta_prob", 0.0) >= 0.5 else 0
+            meta_prob = signal_data.get("meta_prob", 0.0)
             kelly_f = signal_data.get("kelly_fraction", 0.0)
             price = signal_data.get("price", 0.0)
 
-            # Rastreia
+            # Aplica limiar de convicção: probabilidade abaixo do threshold → kelly zerado
+            # Isso substitui a conversão binária (meta_label == 1) por uma decisão contínua.
+            # meta_prob abaixo do threshold indica ausência de edge suficiente; kelly_f já
+            # deveria refletir isso se pipeline estiver correto, mas verificamos meta_prob
+            # diretamente aqui como segunda linha de defesa.
+            if meta_prob < risk_config.min_conviction_threshold:
+                kelly_f = 0.0
+
+            # Sizing proporcional: sem floor de 1 lote — zero é um resultado válido e esperado.
+            target_volume = int(round(kelly_f * self.max_position))
+
+            # Rastreia o sinal (incluindo lotes zero para análise de cobertura)
             if alpha_side != 0:
-                audit.log_signal(symbol, alpha_side, meta_label, kelly_f, price)
+                audit.log_signal(symbol, alpha_side, int(meta_prob >= risk_config.min_conviction_threshold), kelly_f, price)
 
             # 4. Avalia Ação Direcional
             net_position = self.om.get_net_position(symbol)
 
-            # Exemplo simples de Stop-and-Reverse contínuo:
-            if alpha_side == 1 and net_position <= 0 and meta_label == 1 and kelly_f > 0:
-                # Comprar! Fecha posicao vendida antes
+            # Stop-and-Reverse proporcional:
+            # IMPORTANTE: close_positions é chamado SOMENTE quando target_volume > 0.
+            # Um sinal de baixa convicção (lote zero) NÃO fecha posições existentes —
+            # isso evita churn e custos desnecessários em períodos de ruído.
+            if alpha_side == 1 and net_position <= 0 and target_volume > 0:
+                # Comprar! Fecha posição vendida antes, então abre long proporcional.
                 self.om.close_positions(symbol)
 
-                # Sizing final (arredondado para o inteiro mais prximo e garantindo lote mnimo 1)
-                target_volume = float(max(1, int(round(kelly_f * self.max_position))))
+                if self.risk.validate_order(abs(self.om.get_net_position(symbol)), float(target_volume), self.max_position):
+                    self.om.send_market_order(symbol, "buy", float(target_volume))
 
-                # Valida usando a posição atual (caso close_positions tenha falhado parcialmente)
-                if self.risk.validate_order(abs(self.om.get_net_position(symbol)), target_volume, self.max_position):
-                    self.om.send_market_order(symbol, "buy", target_volume)
-
-            elif alpha_side == -1 and net_position >= 0 and meta_label == 1 and kelly_f > 0:
-                # Vender!
+            elif alpha_side == -1 and net_position >= 0 and target_volume > 0:
+                # Vender! Fecha posição comprada antes, então abre short proporcional.
                 self.om.close_positions(symbol)
 
-                target_volume = float(max(1, int(round(kelly_f * self.max_position))))
-
-                if self.risk.validate_order(abs(self.om.get_net_position(symbol)), target_volume, self.max_position):
-                    self.om.send_market_order(symbol, "sell", target_volume)
+                if self.risk.validate_order(abs(self.om.get_net_position(symbol)), float(target_volume), self.max_position):
+                    self.om.send_market_order(symbol, "sell", float(target_volume))
 
         except Exception as e:
             audit.log_error("EngineLoop", f"Erro crítico processando {symbol}: {e}", critical=True)

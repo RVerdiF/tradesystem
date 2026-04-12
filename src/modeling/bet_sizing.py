@@ -11,6 +11,7 @@ mitigar erros de estimação.
 Funcionalidades:
 - **compute_kelly_fraction**: Cálculo da fração ótima de Kelly (Fractional Kelly).
 - **discretize_bet**: Conversão de frações contínuas em lotes operacionais (discretos).
+- **apply_conviction_threshold**: Zera probabilidades abaixo do limiar de convicção (pré-Kelly).
 
 Referências
 -----------
@@ -138,3 +139,43 @@ def discretize_bet(
         )
 
     return discrete_pos
+
+def apply_conviction_threshold(
+    prob_win: pd.Series | np.ndarray | float,
+    threshold: float | None = None,
+) -> pd.Series | np.ndarray | float:
+    """
+    Zera a probabilidade de entradas abaixo do limiar de convicção.
+
+    Opera ANTES do cálculo do Kelly. Uma probabilidade zerada produz um
+    Kelly negativo que é clipado para 0, resultando em posição zerada.
+
+    Isso separa dois conceitos distintos:
+    - Abaixo do threshold: "Não há edge suficiente" → prob = 0 → Kelly = 0 → lote = 0.
+    - Acima do threshold: "Edge existe, mas pode ser fraco" → Kelly fraccionário.
+
+    Parameters
+    ----------
+    prob_win : float, np.ndarray ou pd.Series
+        Probabilidade de sucesso prevista pelo Meta-Model.
+    threshold : float, optional
+        Limiar mínimo de probabilidade. Se não fornecido, busca em risk_config.
+
+    Returns
+    -------
+    prob_filtered : mesma estrutura de prob_win, com zeros onde abaixo do threshold.
+    """
+    if threshold is None:
+        threshold = risk_config.min_conviction_threshold
+
+    if isinstance(prob_win, pd.Series):
+        filtered = prob_win.copy()
+        filtered[filtered < threshold] = 0.0
+        return filtered
+    elif isinstance(prob_win, np.ndarray):
+        filtered = prob_win.copy()
+        filtered[filtered < threshold] = 0.0
+        return filtered
+    else:
+        # scalar float
+        return float(prob_win) if float(prob_win) >= threshold else 0.0

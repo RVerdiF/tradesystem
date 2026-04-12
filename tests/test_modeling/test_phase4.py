@@ -197,3 +197,55 @@ class TestBetSizing:
         p_max = pd.Series([1.0])
         lotes_cap = discretize_bet(p_max, max_position=3)
         assert lotes_cap.iloc[0] == 3
+
+
+# ---------------------------------------------------------------------------
+# Testes — Conviction Threshold
+# ---------------------------------------------------------------------------
+class TestConvictionThreshold:
+    """Testa o filtro de probabilidade pre-Kelly."""
+
+    def test_scalar_above_threshold_passes(self):
+        """Probabilidade acima do threshold não é modificada."""
+        from src.modeling.bet_sizing import apply_conviction_threshold
+        result = apply_conviction_threshold(0.65, threshold=0.5)
+        assert result == 0.65
+
+    def test_scalar_below_threshold_zeroed(self):
+        """Probabilidade abaixo do threshold é zerada."""
+        from src.modeling.bet_sizing import apply_conviction_threshold
+        result = apply_conviction_threshold(0.45, threshold=0.5)
+        assert result == 0.0
+
+    def test_scalar_exactly_at_threshold_passes(self):
+        """Probabilidade exatamente igual ao threshold NÃO é zerada (>= semantics)."""
+        from src.modeling.bet_sizing import apply_conviction_threshold
+        result = apply_conviction_threshold(0.5, threshold=0.5)
+        assert result == 0.5
+
+    def test_series_mixed_values(self):
+        """Series com valores acima e abaixo do threshold — apenas os baixos são zerados."""
+        from src.modeling.bet_sizing import apply_conviction_threshold
+        probs = pd.Series([0.3, 0.55, 0.70, 0.49, 0.60])
+        filtered = apply_conviction_threshold(probs, threshold=0.5)
+        assert filtered.iloc[0] == 0.0   # 0.3 < 0.5 → zerado
+        assert filtered.iloc[1] == 0.55  # passa
+        assert filtered.iloc[2] == 0.70  # passa
+        assert filtered.iloc[3] == 0.0   # 0.49 < 0.5 → zerado
+        assert filtered.iloc[4] == 0.60  # passa
+
+    def test_threshold_to_kelly_chain_produces_zero(self):
+        """Probabilidade abaixo do threshold → kelly final deve ser zero."""
+        from src.modeling.bet_sizing import apply_conviction_threshold, compute_kelly_fraction
+        prob_filtered = apply_conviction_threshold(0.40, threshold=0.5)
+        kelly = compute_kelly_fraction(prob_win=prob_filtered, odds=1.0, fraction=1.0)
+        # prob=0 → f* = 0 - 1/1 = -1 → clipped to 0
+        assert kelly == 0.0
+
+    def test_does_not_mutate_input_series(self):
+        """A função não deve alterar a Series original (imutabilidade)."""
+        from src.modeling.bet_sizing import apply_conviction_threshold
+        original = pd.Series([0.3, 0.7])
+        original_copy = original.copy()
+        apply_conviction_threshold(original, threshold=0.5)
+        pd.testing.assert_series_equal(original, original_copy)

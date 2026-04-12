@@ -78,3 +78,104 @@ class TestExecutionFlow:
                         mock_fetch.assert_called_once()
                         mock_run.assert_called_once()
                         mock_save.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# Testes — Bet Sizing Integration no Engine
+# ---------------------------------------------------------------------------
+class TestEngineBetSizing:
+    """
+    Testa que o engine NÃO fecha posições nem envia ordens quando kelly_fraction = 0
+    (sinal de baixa convicção / lote zero).
+    """
+
+    def _make_engine(self, pipeline_output: dict):
+        """Helper: cria AsyncTradingEngine com pipeline mockada."""
+        from src.execution.engine import AsyncTradingEngine
+        pipeline = MagicMock(return_value=pipeline_output)
+        engine = AsyncTradingEngine(
+            model_pipeline=pipeline,
+            symbols=["WIN$N"],
+            max_position=5,
+        )
+        return engine
+
+    @pytest.mark.asyncio
+    async def test_zero_kelly_does_not_close_or_send(self):
+        """
+        Quando kelly_fraction=0 e meta_prob=0.3 (abaixo do threshold),
+        close_positions e send_market_order NÃO devem ser chamados.
+        """
+        signal = {
+            "side": 1,          # Alpha quer comprar
+            "meta_prob": 0.30,  # Abaixo do threshold padrão de 0.50
+            "kelly_fraction": 0.0,
+            "price": 130000.0,
+        }
+
+        engine = self._make_engine(signal)
+
+        # Registros com campo 'time' como unix timestamp (esperado pelo engine no modo live)
+        base_ts = 1704067200  # 2024-01-01 00:00:00 UTC
+        fake_records = [
+            {"time": base_ts + i * 60, "open": 1.0, "high": 1.0, "low": 1.0,
+             "close": 1.0, "tick_volume": 1}
+            for i in range(60)
+        ]
+
+        with patch.object(engine.om, "get_net_position", return_value=-1.0):
+            with patch.object(engine.om, "close_positions") as mock_close:
+                with patch.object(engine.om, "send_market_order") as mock_send:
+                    with patch.object(engine.risk, "can_trade", return_value=True):
+                        with patch("src.execution.engine.mt5") as mock_mt5:
+                            mock_mt5.copy_rates_from_pos.return_value = fake_records
+                            with patch("src.execution.engine.execution_config") as mock_cfg:
+                                mock_cfg.mode = "live"
+                                with patch("src.execution.engine.audit"):
+                                    engine.model_pipeline = MagicMock(return_value=signal)
+                                    await engine._process_symbol("WIN$N")
+
+        mock_close.assert_not_called()
+        mock_send.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_nonzero_kelly_sends_proportional_volume(self):
+        """
+        Quando kelly_fraction=0.4 e max_position=5, deve enviar volume=2 lotes
+        (round(0.4 * 5) = 2), NÃO forçar mínimo de 1 nem máximo estático.
+        """
+        signal = {
+            "side": 1,
+            "meta_prob": 0.65,  # Acima do threshold
+            "kelly_fraction": 0.4,
+            "price": 130000.0,
+        }
+
+        engine = self._make_engine(signal)
+
+        # Registros com campo 'time' como unix timestamp (esperado pelo engine no modo live)
+        base_ts = 1704067200  # 2024-01-01 00:00:00 UTC
+        fake_records = [
+            {"time": base_ts + i * 60, "open": 1.0, "high": 1.0, "low": 1.0,
+             "close": 1.0, "tick_volume": 1}
+            for i in range(60)
+        ]
+
+        with patch.object(engine.om, "get_net_position", return_value=0.0):
+            with patch.object(engine.om, "close_positions"):
+                with patch.object(engine.om, "send_market_order") as mock_send:
+                    with patch.object(engine.risk, "can_trade", return_value=True):
+                        with patch.object(engine.risk, "validate_order", return_value=True):
+                            with patch("src.execution.engine.mt5") as mock_mt5:
+                                mock_mt5.copy_rates_from_pos.return_value = fake_records
+                                with patch("src.execution.engine.execution_config") as mock_cfg:
+                                    mock_cfg.mode = "live"
+                                    with patch("src.execution.engine.audit"):
+                                        engine.model_pipeline = MagicMock(return_value=signal)
+                                        await engine._process_symbol("WIN$N")
+
+        # 0.4 * 5 = 2.0 → round → 2 lotes — assertion is mandatory, not optional
+        mock_send.assert_called_once()
+        call_args = mock_send.call_args
+        assert call_args is not None
+        assert call_args[0][2] == 2.0  # volume argument
