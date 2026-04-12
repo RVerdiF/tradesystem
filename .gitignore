@@ -224,3 +224,7 @@ data/tradesystem.db
 # scratch
 scratch/
 plan.md
+
+# switchboard
+.switchboard/
+.claude/
