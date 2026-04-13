@@ -1,0 +1,36 @@
+{
+  "sessionId": "sess_1776004890233",
+  "planFile": ".switchboard/plans/feature_plan_20260412_114130_improvements_9.md",
+  "topic": "Improvements 9 — Bet Sizing: Abandon Binary Allocation",
+  "createdAt": "2026-04-12T14:41:30.231Z",
+  "events": [
+    {
+      "workflow": "initiate-plan",
+      "timestamp": "2026-04-12T14:41:30.231Z",
+      "action": "start"
+    },
+    {
+      "workflow": "Improved plan",
+      "timestamp": "2026-04-12T14:50:54.097Z",
+      "action": "start"
+    },
+    {
+      "workflow": "handoff-lead",
+      "timestamp": "2026-04-12T14:56:56.665Z",
+      "action": "start"
+    },
+    {
+      "workflow": "reviewer-pass",
+      "timestamp": "2026-04-12T15:11:34.454Z",
+      "action": "start"
+    },
+    {
+      "workflow": "reset-to-code-reviewed",
+      "timestamp": "2026-04-12T15:12:30.464Z",
+      "action": "stop",
+      "outcome": "User manually moved plan backwards"
+    }
+  ],
+  "completed": true,
+  "completedAt": "2026-04-12T15:18:22.814Z"
+}

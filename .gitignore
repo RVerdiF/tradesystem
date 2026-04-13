@@ -225,10 +225,10 @@ data/tradesystem.db
 scratch/
 plan.md
 
-# switchboard
-.switchboard/
-.claude/
+# # switchboard
+# .switchboard/
+# .claude/
 
-# agents framework
-.agent/
-AGENTS.md
+# # agents framework
+# .agent/
+# AGENTS.md
