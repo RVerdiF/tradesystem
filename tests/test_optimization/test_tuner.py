@@ -24,9 +24,9 @@ def mock_results():
 def test_objective_function(sample_df, mock_results):
     """Test the objective function with mocked pipeline results."""
     trial = MagicMock()
-    # Mock suggestions (4 floats, 6 ints for 10-parameter Truth Test)
-    trial.suggest_float.side_effect = [0.02, 1.5, 1.5, 0.65] # cusum, pt, sl, meta_threshold
-    trial.suggest_int.side_effect = [10, 30, 3, 9, 21, 40] # fast, slow, depth, ma_dist_fast, ma_dist_slow, moments
+    # Mock suggestions (9 floats, 7 ints)
+    trial.suggest_float.side_effect = [0.02, 1.5, 1.5, 0.65, 0.1, 0.5, 0.1, 1.0, 0.1]
+    trial.suggest_int.side_effect = [10, 30, 3, 9, 21, 40, 14]
 
     with patch("src.optimization.tuner.run_pipeline", return_value=mock_results):
         score = objective(trial, sample_df, "1h")
@@ -37,7 +37,7 @@ def test_objective_invalid_params(sample_df):
     trial = MagicMock()
     # fast=30, slow=10
     trial.suggest_float.return_value = 0.02
-    trial.suggest_int.side_effect = [30, 10, 3, 9, 21, 40] 
+    trial.suggest_int.side_effect = [30, 10, 3, 9, 21, 40, 14] 
     
     score = objective(trial, sample_df, "1h")
     assert score == -1.0
@@ -46,7 +46,7 @@ def test_objective_low_trades(sample_df, mock_results):
     """Test that objective penalizes Sharpe if trades < min_trades."""
     trial = MagicMock()
     trial.suggest_float.return_value = 0.02
-    trial.suggest_int.side_effect = [10, 30, 3, 9, 21, 40]
+    trial.suggest_int.side_effect = [10, 30, 3, 9, 21, 40, 14]
     
     mock_results["n_trades"] = 10 # below default 30
     
@@ -75,6 +75,12 @@ def test_run_optimization_integration(sample_df, mock_results):
             mock_config.ma_dist_fast_range = (7, 15)
             mock_config.ma_dist_slow_range = (20, 40)
             mock_config.moments_window_range = (20, 100)
+            mock_config.be_trigger_range = (0.0, 0.5)
+            mock_config.ffd_d_range = (0.1, 0.9)
+            mock_config.atr_period_range = (7, 21)
+            mock_config.xgb_gamma_range = (0.0, 2.0)
+            mock_config.xgb_lambda_range = (1.0, 5.0)
+            mock_config.xgb_alpha_range = (0.0, 2.0)
 
             results = run_optimization(sample_df, "1h")
             

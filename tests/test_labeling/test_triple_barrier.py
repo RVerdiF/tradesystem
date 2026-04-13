@@ -71,3 +71,37 @@ def test_get_labels_empty():
     labels = get_labels(close, events)
     assert labels.empty
 
+def test_entry_price_is_open_t1(sample_data):
+    """Entry price must be open[t+1], not close[t]. Regression guard for lookahead bias.
+
+    Uses synthetic OHLC (open=close, high=close+5, low=close-5) because sample_data
+    does not provide separate OHLCV columns. The regression property holds regardless:
+    if apply_triple_barrier uses open[t+1] as entry, inflating open[t+1] by 10% must
+    change the returned ret. If it used close[t], the result would be unchanged.
+    """
+    close, events_ts, target_vol, side = sample_data
+    open_prices = close.copy()  # synthetic: distinct open values introduced by shift below
+    high = close.copy() + 5
+    low = close.copy() - 5
+    
+    events = create_events(close, events_ts, target_vol, side, pt_sl=(2.0, 2.0), max_holding=10)
+    result = apply_triple_barrier(
+        close, events, pt_sl=(2.0, 2.0),
+        open_prices=open_prices, high_prices=high, low_prices=low
+    )
+    
+    open_shifted = open_prices.copy()
+    first_event_idx = events.index[0]
+    t1_loc = close.index.get_loc(first_event_idx) + 1
+    t1_idx = close.index[t1_loc]
+    open_shifted.loc[t1_idx] = open_shifted.loc[t1_idx] * 1.10
+    
+    result_shifted = apply_triple_barrier(
+        close, events, pt_sl=(2.0, 2.0),
+        open_prices=open_shifted, high_prices=high, low_prices=low
+    )
+    assert not result.empty
+    assert not result["ret"].equals(result_shifted["ret"]), (
+        "Entry price is not using open[t+1] — result is unchanged after modifying open[t+1]."
+    )
+

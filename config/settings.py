@@ -114,7 +114,9 @@ class CostConfig:
     emoluments_pct: float = 0.00005        # emolumentos B3
     settlement_pct: float = 0.0000275      # liquidação
     iss_pct: float = 0.05                  # ISS sobre corretagem
-    slippage_bps: float = 5.0              # ~1 tick WIN$; punitivo para expor micro-alpha
+    slippage_bps: float = 2.0              # ~1 tick WIN$ (5 pts); recalibrado de 5.0 (era ~13 ticks/lado)
+    # Calibração: WIN$ ~130k pts, tick=5pts. 2bps = ~2.6pts/lado ≈ 0.5 tick.
+    # Round-trip total (2bps slip × 2 + emolumentos + liquidação) ≈ 5.6bps ≈ 7pts ≈ 1.4 ticks.
 
 
 # ---------------------------------------------------------------------------
@@ -218,8 +220,8 @@ class OptimizationConfig:
     # Ranges de busca fundamentais (Top 10 - "Faxina Real")
     cusum_range: tuple[float, float] = (0.002, 0.015)
     pt_sl_range: tuple[float, float] = (0.5, 4.5)
-    meta_threshold_range: tuple[float, float] = (0.60, 0.75)
-    max_depth_range: tuple[int, int] = (2, 4)
+    meta_threshold_range: tuple[float, float] = (0.55, 0.70)
+    max_depth_range: tuple[int, int] = (1, 2)
     
     # Primary Model (Alpha)
     fast_span_range: tuple[int, int] = (9, 50)

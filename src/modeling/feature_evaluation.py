@@ -109,7 +109,6 @@ def evaluate_features_mda(
     logger.info("Iniciando auditoria matemática (MDA) via Permutação...")
 
     try:
-        import numpy as np
         if len(np.unique(y)) < 2:
             logger.warning("Não é possível calcular MDA (ROC-AUC): y possui apenas uma classe. Ignorando validação por MDA.")
             return pd.Series(dtype=float)

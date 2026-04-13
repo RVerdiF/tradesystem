@@ -150,7 +150,6 @@ class MetaClassifier(BaseEstimator, ClassifierMixin):
         # Métricas de treino só pra debug rápido
         train_proba = self.model.predict_proba(X)[:, 1]
         try:
-            import numpy as np
             if len(np.unique(y)) > 1:
                 import warnings
                 with warnings.catch_warnings():
@@ -201,7 +200,6 @@ class MetaClassifier(BaseEstimator, ClassifierMixin):
 
         report = classification_report(y_test, y_pred, output_dict=True)
         try:
-            import numpy as np
             if len(np.unique(y_test)) > 1:
                 import warnings
                 with warnings.catch_warnings():
