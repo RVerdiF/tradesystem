@@ -141,6 +141,53 @@ class TestNormalizeFeatures:
         result = normalize_features(feature_df, window=None)
         assert isinstance(result, pd.DataFrame)
 
+    def test_raw_ohlcv_not_normalized(self):
+        """Colunas brutas OHLCV devem permanecer inalteradas."""
+        np.random.seed(42)
+        n = 200
+        dates = pd.date_range("2024-01-01", periods=n, freq="5min", tz="UTC")
+        df = pd.DataFrame({
+            "open": np.cumsum(np.random.randn(n)) + 100,
+            "high": np.cumsum(np.random.randn(n)) + 101,
+            "low": np.cumsum(np.random.randn(n)) + 99,
+            "close": np.cumsum(np.random.randn(n)) + 100,
+            "volume": np.abs(np.random.randn(n)) * 1000,
+            "atr": np.abs(np.random.randn(n)) + 0.5,  # feature derivada
+        }, index=dates)
+
+        result = normalize_features(df, method="zscore")
+
+        # OHLCV raw devem estar idênticas
+        for col in ["open", "high", "low", "close", "volume"]:
+            try:
+                pd.testing.assert_series_equal(df[col], result[col], check_names=True)
+            except AssertionError:
+                raise AssertionError(f"Coluna raw '{col}' foi alterada pela normalização!")
+
+        # Feature derivada deve ter sido normalizada (valores diferentes)
+        assert not result["atr"].equals(df["atr"]), "Feature derivada deveria ter sido normalizada"
+
+    def test_no_close_zscore_in_output(self):
+        """Garante que close_zscore e open_zscore NUNCA aparecem no output."""
+        np.random.seed(42)
+        n = 200
+        dates = pd.date_range("2024-01-01", periods=n, freq="5min", tz="UTC")
+        df = pd.DataFrame({
+            "open": np.cumsum(np.random.randn(n)) + 100,
+            "high": np.cumsum(np.random.randn(n)) + 101,
+            "low": np.cumsum(np.random.randn(n)) + 99,
+            "close": np.cumsum(np.random.randn(n)) + 100,
+            "volume": np.abs(np.random.randn(n)) * 1000,
+            "atr": np.abs(np.random.randn(n)) + 0.5,
+            "rsi": np.random.uniform(20, 80, n),
+        }, index=dates)
+
+        result = normalize_features(df, method="zscore")
+
+        for col in result.columns:
+            assert "close_zscore" not in col, f"Coluna '{col}' é zscore de close — não deve existir"
+            assert "open_zscore" not in col, f"Coluna '{col}' é zscore de open — não deve existir"
+
 
 # ---------------------------------------------------------------------------
 # Testes — Validação Anti Look-Ahead

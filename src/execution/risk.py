@@ -15,7 +15,6 @@ Regras de Proteção:
 Estados do Sistema
 ------------------
 - ACTIVE          : Sistema livre para operar.
-- COOL_DOWN       : Pausa pós-saída de posição. Expira após `cool_down_minutes`.
 - HALTED_FOR_DAY  : Halt permanente para o dia (loss, profit ou drawdown).
 - OUTSIDE_WINDOW  : Fora do horário de operação. Limpa automaticamente.
 
@@ -35,7 +34,6 @@ from src.execution.audit import audit
 
 # Constantes de estado (evita typos em comparações de string)
 STATE_ACTIVE = "ACTIVE"
-STATE_COOL_DOWN = "COOL_DOWN"
 STATE_HALTED_FOR_DAY = "HALTED_FOR_DAY"
 STATE_OUTSIDE_WINDOW = "OUTSIDE_WINDOW"
 
@@ -87,8 +85,8 @@ class RiskManager:
         self.is_halted: bool = False
         self.halt_reason: str = ""
 
-        # Temporizador do cool-down
-        self._cool_down_until: datetime.datetime | None = None
+        # Temporizador do cool-down por ativo
+        self._cool_down_until: dict[str, datetime.datetime] = {}
 
         # Reset diário
         self.last_trading_day = datetime.date.today()
@@ -109,7 +107,7 @@ class RiskManager:
         if today > self.last_trading_day:
             self.start_balance = balance
             self.last_trading_day = today
-            self._cool_down_until = None  # Descarta cool-down do dia anterior
+            self._cool_down_until.clear()  # Descarta cool-down do dia anterior
             self._set_state(STATE_ACTIVE, "")
             logger.info("Novo dia de trading. Saldo inicial resetado para: {:.2f}", self.start_balance)
 
@@ -124,14 +122,14 @@ class RiskManager:
 
         self._check_circuit_breakers()
 
-    def notify_trade_closed(self) -> None:
+    def notify_trade_closed(self, symbol: str = "GLOBAL") -> None:
         """
         Inicia o período de cool-down após uma saída de posição para flat.
 
-        Deve ser chamado APENAS na saída por circuit breaker (não em stop-and-reverse),
+        Deve ser chamado APENAS na saída por circuit breaker ou TP/SL (não em stop-and-reverse),
         para evitar bloquear a gestão de posições recém-abertas.
         Não-operacional se cool_down_minutes <= 0 ou se o sistema já estiver
-        em HALTED_FOR_DAY (que sobrepõe o cool-down).
+        em HALTED_FOR_DAY.
         """
         if self.cool_down_minutes <= 0:
             return
@@ -141,19 +139,27 @@ class RiskManager:
             return  # Window-based closes don't warrant a cool-down; daily reset handles cleanup
 
         cool_down_until = datetime.datetime.now() + datetime.timedelta(minutes=self.cool_down_minutes)
-        self._cool_down_until = cool_down_until
-        reason = f"COOL_DOWN (until {cool_down_until.strftime('%H:%M:%S')})"
-        self._set_state(STATE_COOL_DOWN, reason)
+        self._cool_down_until[symbol] = cool_down_until
+        
+        reason = f"COOL_DOWN (until {cool_down_until.strftime('%H:%M:%S')} for {symbol})"
         audit.log_error("RiskManager", reason, critical=False)  # Persiste no SQLite para análise pós-trade
-        logger.info("Cool-down ativado até: {}", cool_down_until.strftime('%H:%M:%S'))
+        logger.info("Cool-down ativado para {} até: {}", symbol, cool_down_until.strftime('%H:%M:%S'))
 
-    def can_trade(self) -> bool:
+    def can_trade(self, symbol: str = "GLOBAL") -> bool:
         """
-        Retorna True se o sistema estiver livre para enviar ordens.
+        Retorna True se o sistema e o ativo estiverem livres para enviar ordens.
         """
         if self.is_halted:
             logger.warning("TRADING HALTED: {}", self.halt_reason)
             return False
+
+        if symbol in self._cool_down_until:
+            if datetime.datetime.now() >= self._cool_down_until[symbol]:
+                del self._cool_down_until[symbol]
+                logger.info("Cool-down expirado para {}. Sistema reativado para este ativo.", symbol)
+            else:
+                logger.warning("TRADING BLOCKED FOR {}: COOL_DOWN until {}", symbol, self._cool_down_until[symbol].strftime('%H:%M:%S'))
+                return False
 
         return True
 
@@ -189,29 +195,17 @@ class RiskManager:
         """
         Avalia todas as regras de risco macro. Ordem de prioridade:
 
-        1. Cool-down (avaliado a cada tick para detetar expiração)
-        2. Halt permanente do dia (só o reset diário pode limpar)
-        3. Janela de horário
-        4. Daily Loss
-        5. Daily Profit
-        6. Max Drawdown
+        1. Halt permanente do dia (só o reset diário pode limpar)
+        2. Janela de horário
+        3. Daily Loss
+        4. Daily Profit
+        5. Max Drawdown
         """
-        # --- 1. Cool-down (deve correr antes do guard de HALTED_FOR_DAY) ---
-        if self.system_state == STATE_COOL_DOWN:
-            if self._cool_down_until and datetime.datetime.now() >= self._cool_down_until:
-                # Expirado: retorna a ACTIVE e prossegue para os restantes checks
-                self._cool_down_until = None
-                self._set_state(STATE_ACTIVE, "")
-                logger.info("Cool-down expirado. Sistema reativado.")
-            else:
-                # Ainda em cool-down — sem mais verificações necessárias
-                return
-
-        # --- 2. Halt permanente do dia (PnL ou Drawdown) ---
+        # --- 1. Halt permanente do dia (PnL ou Drawdown) ---
         if self.system_state == STATE_HALTED_FOR_DAY:
             return
 
-        # --- 3. Janela de horário ---
+        # --- 2. Janela de horário ---
         now = datetime.datetime.now().time()
         if now < self.start_time or now > self.end_time:
             self._set_state(
@@ -223,7 +217,7 @@ class RiskManager:
             # Estava fora do horário, agora está dentro — reativa
             self._set_state(STATE_ACTIVE, "")
 
-        # --- 4. Perda Diária (Daily Loss) ---
+        # --- 3. Perda Diária (Daily Loss) ---
         daily_pnl_pct = (self.current_equity / self.start_balance) - 1.0
         if daily_pnl_pct <= -self.max_daily_loss_pct:
             reason = f"MAX DAILY LOSS REACHED ({daily_pnl_pct:.2%})"
@@ -231,14 +225,14 @@ class RiskManager:
             audit.log_error("RiskManager", reason, critical=True)
             return
 
-        # --- 5. Meta de Lucro Diário (Daily Profit Target) ---
+        # --- 4. Meta de Lucro Diário (Daily Profit Target) ---
         if daily_pnl_pct >= self.max_daily_profit_pct:
             reason = f"MAX DAILY PROFIT REACHED ({daily_pnl_pct:.2%})"
             self._set_state(STATE_HALTED_FOR_DAY, reason)
             audit.log_error("RiskManager", reason, critical=True)
             return
 
-        # --- 6. Maximum Drawdown (Conta Global) ---
+        # --- 5. Maximum Drawdown (Conta Global) ---
         drawdown_pct = (self.current_equity / self.highest_equity) - 1.0
         if drawdown_pct <= -self.max_drawdown_pct:
             reason = f"MAX DRAWDOWN REACHED ({drawdown_pct:.2%})"

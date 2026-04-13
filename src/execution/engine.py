@@ -66,29 +66,37 @@ class AsyncTradingEngine:
 
         self.is_running = False
 
+        # Rastreia a posição enviada mais recente por ativo (em lotes, com sinal).
+        # Usado para detectar fechamentos por TP/SL no broker (posição some sem o engine ter enviado close).
+        self._last_position: dict[str, float] = {}
+
         logger.info("Engine inicializado. Modo: {} | Modalidade: {}", execution_config.mode.upper(), self.trade_type.upper())
 
     async def _process_symbol(self, symbol: str) -> None:
         """Lógica executada a cada iteração do polling para um ativo."""
 
         # 1. Checa circuit breakers (Se estourou PnL ou fora do horário)
-        if not self.risk.can_trade():
+        if not self.risk.can_trade(symbol):
             # Se a modalidade for Day Trade, fecha tudo ao bater o horário (ou circuit breaker)
             # Se for Swing Trade, só fecha se NÃO for motivo de horário (ou seja, foi circuit breaker de PnL)
             if self.trade_type == "day_trade" or "WINDOW" not in self.risk.halt_reason:
                 if self.om.get_net_position(symbol) != 0:
                     logger.warning("Fechando posições para {} devido a: {}", symbol, self.risk.halt_reason)
                     self.om.close_positions(symbol)
-                    # Inicia cool-down apenas no fecho por circuit breaker (saída para flat).
-                    # NÃO chamar nos blocos de stop-and-reverse abaixo — esses fecham
-                    # para imediatamente reabrir na direção oposta.
-                    self.risk.notify_trade_closed()
+                    self._last_position[symbol] = 0.0
+                    # notify_trade_closed é um no-op se system_state == HALTED_FOR_DAY;
+                    # só tem efeito real em fechamentos por cool-down/window dentro do dia.
+                    self.risk.notify_trade_closed(symbol)
             return
 
         try:
-            # Requisita dados históricos para o cálculo de indicadores (ex: RSI, FracDiff precisam de janela)
+            # Requisita dados históricos para o cálculo de indicadores
+            # (ex: RSI, FracDiff precisam de janela)
+            # start_pos=1: pula o candle em formação (índice 0), garantindo que
+            # apenas candles matematicamente fechados sejam usados — evita
+            # repainting e sinais fantasmas.
             if execution_config.mode == "live":
-                rates = mt5.copy_rates_from_pos(symbol, mt5.TIMEFRAME_M5, 0, 500)
+                rates = mt5.copy_rates_from_pos(symbol, mt5.TIMEFRAME_M5, 1, 500)
                 if rates is None or len(rates) == 0:
                     return
                 df_snapshot = pd.DataFrame(rates)
@@ -101,6 +109,13 @@ class AsyncTradingEngine:
             if df_snapshot.empty or len(df_snapshot) < 50:
                 logger.warning("Dados incompletos para {}. Aguardando mais barras.", symbol)
                 return
+
+            # Log de auditoria: timestamp do último candle fechado
+            last_closed_ts = df_snapshot.index[-1]
+            logger.info(
+                "Audit [{}]: Predição usando último candle fechado em {}",
+                symbol, last_closed_ts,
+            )
 
             # 3. Predição Completa (Alpha -> MT5 Bar -> FeatureGen -> ML Meta)
             signal_data = self.model_pipeline(df_snapshot)
@@ -129,6 +144,19 @@ class AsyncTradingEngine:
             # 4. Avalia Ação Direcional
             net_position = self.om.get_net_position(symbol)
 
+            # Reconciliação TP/SL: detecta fechamento pelo broker (posição some sem o engine ter enviado close).
+            # Se o engine registrou uma posição aberta (_last_position != 0) mas a posição real é 0,
+            # significa que o broker fechou via TP ou SL. Inicia cool-down e pula a entrada neste tick.
+            last_pos = self._last_position.get(symbol, 0.0)
+            if last_pos != 0.0 and net_position == 0:
+                logger.info(
+                    "TP/SL detectado para {} (posição anterior: {:.1f} lotes). Iniciando cool-down.",
+                    symbol, last_pos,
+                )
+                self._last_position[symbol] = 0.0
+                self.risk.notify_trade_closed(symbol)
+                return  # Aguarda o cool-down expirar antes de abrir nova posição
+
             # Stop-and-Reverse proporcional:
             # IMPORTANTE: close_positions é chamado SOMENTE quando target_volume > 0.
             # Um sinal de baixa convicção (lote zero) NÃO fecha posições existentes —
@@ -139,6 +167,7 @@ class AsyncTradingEngine:
 
                 if self.risk.validate_order(abs(self.om.get_net_position(symbol)), float(target_volume), self.max_position):
                     self.om.send_market_order(symbol, "buy", float(target_volume))
+                    self._last_position[symbol] = float(target_volume)
 
             elif alpha_side == -1 and net_position >= 0 and target_volume > 0:
                 # Vender! Fecha posição comprada antes, então abre short proporcional.
@@ -146,6 +175,7 @@ class AsyncTradingEngine:
 
                 if self.risk.validate_order(abs(self.om.get_net_position(symbol)), float(target_volume), self.max_position):
                     self.om.send_market_order(symbol, "sell", float(target_volume))
+                    self._last_position[symbol] = -float(target_volume)
 
         except Exception as e:
             audit.log_error("EngineLoop", f"Erro crítico processando {symbol}: {e}", critical=True)

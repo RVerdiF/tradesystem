@@ -96,6 +96,7 @@ class TestCostModel:
             emoluments_pct=0.00005,
             settlement_pct=0.0000275,
             iss_pct=0.05,
+            symbol="PETR4"
         )
         cost = model.trade_cost(price=100.0, quantity=10, n_operations=2)
 
@@ -108,13 +109,13 @@ class TestCostModel:
 
     def test_zero_brokerage(self):
         """Corretagem zero (corretoras modernas) deve funcionar."""
-        model = BrazilianCostModel(brokerage=0.0)
+        model = BrazilianCostModel(brokerage=0.0, symbol="PETR4")
         cost = model.trade_cost(price=50.0, quantity=100)
         assert cost >= 0  # Ainda tem emolumentos e liquidação
 
     def test_slippage_increases_with_participation(self):
         """Slippage deve aumentar com participação no volume."""
-        slip = SlippageModel(base_slippage_bps=1.0)
+        slip = SlippageModel(base_slippage_bps=1.0, symbol="PETR4")
         small = slip.estimate(100.0, 10, avg_volume=1_000_000)
         large = slip.estimate(100.0, 10_000, avg_volume=1_000_000)
         assert large > small

@@ -45,6 +45,13 @@ ROLLING_NORMALIZED_COLS = [
     "vsa_wick_ratio_zscore",
 ]
 
+# Colunas brutas que NUNCA devem ser normalizadas.
+# Inclui OHLCV raw e campos auxiliares de tempo.
+_BLOCKLIST_RAW_COLS = frozenset([
+    "open", "high", "low", "close", "volume",
+    "time", "tick_volume", "real_volume",
+])
+
 
 # ---------------------------------------------------------------------------
 # Z-Score Móvel
@@ -117,12 +124,17 @@ def normalize_features(
     window: int | None = None,
 ) -> pd.DataFrame:
     """
-    Normaliza todas as colunas numéricas de um DataFrame.
+    Normaliza colunas de features de um DataFrame, excluindo colunas brutas OHLCV.
+
+    Colunas em ``_BLOCKLIST_RAW_COLS`` (open, high, low, close, volume e
+    auxiliares de tempo) são preservadas sem transformação. Todas as demais
+    colunas numéricas recebem a normalização point-in-time especificada.
 
     Parameters
     ----------
     df : pd.DataFrame
-        DataFrame com features.
+        DataFrame com features. Colunas OHLCV devem estar em lowercase
+        (padrão da API MT5 Python).
     method : str
         Método: ``zscore`` (rolling Z-score) ou ``rank`` (expanding rank).
     window : int, optional
@@ -131,17 +143,23 @@ def normalize_features(
     Returns
     -------
     pd.DataFrame
-        DataFrame normalizado com mesmas colunas e índice.
+        DataFrame com features normalizadas e colunas OHLCV inalteradas.
     """
     if window is None:
         window = feature_config.zscore_window
 
     numeric_cols = df.select_dtypes(include=[np.number]).columns
-    logger.info("Normalizando {} colunas (método={})", len(numeric_cols), method)
+    # Exclui colunas brutas OHLCV e auxiliares — normalizar preço gera
+    # ruído e features inúteis para o modelo (data leakage / redundância).
+    target_cols = [c for c in numeric_cols if c not in _BLOCKLIST_RAW_COLS]
+    skipped = set(numeric_cols) - set(target_cols)
+    if skipped:
+        logger.info("Normalização: colunas ignoradas (raw OHLCV): {}", sorted(skipped))
+    logger.info("Normalizando {} colunas (método={})", len(target_cols), method)
 
     result = df.copy()
 
-    for col in numeric_cols:
+    for col in target_cols:
         if method == "zscore":
             result[col] = rolling_zscore(df[col], window=window)
         elif method == "rank":
@@ -150,7 +168,7 @@ def normalize_features(
             logger.warning("Método desconhecido: '{}'. Usando zscore.", method)
             result[col] = rolling_zscore(df[col], window=window)
 
-    logger.success("Normalização concluída ({} colunas)", len(numeric_cols))
+    logger.success("Normalização concluída ({} colunas)", len(target_cols))
     return result
 
 
@@ -186,12 +204,14 @@ def validate_no_lookahead(
         window = feature_config.zscore_window
 
     numeric_cols = original.select_dtypes(include=[np.number]).columns
+    # Consistente com normalize_features: ignora colunas raw OHLCV
+    check_cols = [c for c in numeric_cols if c not in _BLOCKLIST_RAW_COLS]
 
     # Testa um subconjunto de pontos para performance
     n_tests = min(50, len(original))
     test_indices = np.linspace(window, len(original) - 1, n_tests, dtype=int)
 
-    for col in numeric_cols:
+    for col in check_cols:
         if col not in normalized.columns:
             continue
 

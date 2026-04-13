@@ -112,28 +112,24 @@ class TestCoolDown:
 
     def test_cool_down_activated_after_notify(self):
         """notify_trade_closed() deve activar o cool-down e bloquear novas ordens."""
+        import src.execution.risk as risk_module
         rm = RiskManager(start_balance=100000.0)
+        
         # Garante que está ACTIVE dentro do horário
-        mock_now = MagicMock()
-        mock_now.time.return_value = datetime.time(10, 0, 0)
-        with patch('src.execution.risk.datetime.datetime') as mock_dt:
-            mock_dt.now.return_value = mock_now
-            mock_dt.date = datetime.date
-            mock_dt.timedelta = datetime.timedelta
+        mock_now = datetime.datetime(2026, 4, 12, 10, 0, 0)
+        with patch.object(risk_module.datetime, 'datetime', wraps=datetime.datetime) as mock_dt_cls:
+            mock_dt_cls.now.return_value = mock_now
             rm.update_equity(100000.0, 100000.0)
 
-        assert rm.can_trade() is True
+        assert rm.can_trade("PETR4") is True
 
         # Activa o cool-down (simula saída por circuit breaker)
-        with patch('src.execution.risk.datetime.datetime') as mock_dt:
-            mock_dt.now.return_value = mock_now
-            mock_dt.date = datetime.date
-            mock_dt.timedelta = datetime.timedelta
-            rm.notify_trade_closed()
-
-        assert rm.can_trade() is False
-        assert rm.system_state == "COOL_DOWN"
-        assert "COOL_DOWN" in rm.halt_reason
+        with patch.object(risk_module.datetime, 'datetime', wraps=datetime.datetime) as mock_dt_cls:
+            mock_dt_cls.now.return_value = mock_now
+            rm.notify_trade_closed("PETR4")
+            assert rm.can_trade("PETR4") is False
+            
+        assert "PETR4" in rm._cool_down_until
 
     def test_cool_down_expires_after_time(self):
         """Após o temporizador expirar, update_equity() deve reativar o sistema."""
@@ -145,17 +141,18 @@ class TestCoolDown:
         mock_now_1 = datetime.datetime(2026, 4, 12, 10, 0, 0)
         with patch.object(risk_module.datetime, 'datetime', wraps=datetime.datetime) as mock_dt_cls:
             mock_dt_cls.now.return_value = mock_now_1
-            rm.notify_trade_closed()
+            rm.notify_trade_closed("PETR4")
 
-        assert rm.system_state == "COOL_DOWN"
+        assert "PETR4" in rm._cool_down_until
 
         # Simula tick às 10:06:00 (após 5 min de cool-down)
         future = datetime.datetime(2026, 4, 12, 10, 6, 0)
         with patch.object(risk_module.datetime, 'datetime', wraps=datetime.datetime) as mock_dt_cls:
             mock_dt_cls.now.return_value = future
             rm.update_equity(100000.0, 100000.0)
+            assert rm.can_trade("PETR4") is True
 
-        assert rm.can_trade() is True
+        assert "PETR4" not in rm._cool_down_until
         assert rm.system_state == "ACTIVE"
         assert rm.halt_reason == ""
 
@@ -209,11 +206,12 @@ class TestCoolDown:
             mock_dt.now.return_value = mock_now
             mock_dt.date = datetime.date
             mock_dt.timedelta = datetime.timedelta
-            rm.notify_trade_closed()
+            rm.notify_trade_closed("PETR4")
 
-        # Estado não deve ter mudado
+        # Estado não deve ter mudado e cool-down dictionary deve continuar vazio
         assert rm.system_state == "HALTED_FOR_DAY"
         assert "MAX DAILY LOSS REACHED" in rm.halt_reason
+        assert "PETR4" not in rm._cool_down_until
 
     def test_update_equity_missing_trade_day(self):
         """Testa reativar sistema no dia seguinte."""
@@ -263,13 +261,14 @@ class TestCoolDown:
         """Testa notify trade closed ignores outside window."""
         rm = RiskManager(start_balance=100000.0)
         rm.system_state = "OUTSIDE_WINDOW"
-        rm.notify_trade_closed()
+        rm.notify_trade_closed("PETR4")
         assert rm.system_state == "OUTSIDE_WINDOW"
+        assert "PETR4" not in rm._cool_down_until
 
     def test_notify_trade_closed_no_cooldown(self):
         """Testa notify trade closed ignores if no cooldown setup."""
         rm = RiskManager(start_balance=100000.0)
         rm.cool_down_minutes = 0
-        rm.notify_trade_closed()
+        rm.notify_trade_closed("PETR4")
         assert rm.system_state == "ACTIVE"
-
+        assert "PETR4" not in rm._cool_down_until

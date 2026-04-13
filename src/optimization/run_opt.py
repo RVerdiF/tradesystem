@@ -44,7 +44,9 @@ def main():
     parser.add_argument("--symbol", type=str, required=True, help="Ativo para otimizar (ex: PETR4)")
     parser.add_argument("--n-bars", type=int, default=10000, help="Número de barras para extrair (padrão: 10000)")
     parser.add_argument("--interval", type=str, default="1h", choices=["1m", "5m", "15m", "30m", "1h", "1d"], help="Intervalo (padrão: 1h)")
-    parser.add_argument("--n-trials", type=int, default=None, help="Número de tentativas de otimização (opcional)")
+    parser.add_argument("--n-trials", type=int, default=None, help="Número de tentativas de otimização globais (opcional)")
+    parser.add_argument("--n-trials-phase1", type=int, default=None, help="Número específico de tentativas da Fase 1")
+    parser.add_argument("--n-trials-phase2", type=int, default=None, help="Número específico de tentativas da Fase 2")
 
     args = parser.parse_args()
 
@@ -57,8 +59,14 @@ def main():
         # Busca os dados no MT5
         df = fetch_mt5_data(symbol=symbol, n_bars=args.n_bars, interval=args.interval)
 
-        # Executa a otimização (run_optimization já retorna os metadados necessários)
-        opt_results = run_optimization(df, interval=args.interval, n_trials=args.n_trials)
+        # Executa a otimização em duas fases
+        opt_results = run_optimization(
+            df, 
+            interval=args.interval, 
+            n_trials=args.n_trials,
+            n_trials_phase1=getattr(args, "n_trials_phase1", None),
+            n_trials_phase2=getattr(args, "n_trials_phase2", None)
+        )
         best_params = opt_results["params"]
         metadata = opt_results["metadata"]
 
@@ -94,7 +102,6 @@ def main():
             print("="*50 + "\n")
         else:
             logger.error("Não foi possível gerar métricas de desempenho final.")
-
 
     except Exception as e:
         logger.error(f"Erro durante a execução da otimização: {e}")

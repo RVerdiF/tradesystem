@@ -110,13 +110,17 @@ class RiskConfig:
 class CostConfig:
     """Taxas operacionais para modelagem de custos."""
 
-    brokerage_per_contract: float = 0   # corretagem realista por contrato WIN$ (full-service)
-    emoluments_pct: float = 0.00005        # emolumentos B3
-    settlement_pct: float = 0.0000275      # liquidação
+    brokerage_per_contract: float = 0.0    # corretagem por contrato/ação
+    emoluments_fixed: float = 0.25         # emolumentos fixos B3 (por minicontrato WIN)
+    emoluments_pct: float = 0.00005        # emolumentos B3 (ações)
+    settlement_pct: float = 0.0000275      # liquidação (ações)
     iss_pct: float = 0.05                  # ISS sobre corretagem
-    slippage_bps: float = 2.0              # ~1 tick WIN$ (5 pts); recalibrado de 5.0 (era ~13 ticks/lado)
-    # Calibração: WIN$ ~130k pts, tick=5pts. 2bps = ~2.6pts/lado ≈ 0.5 tick.
-    # Round-trip total (2bps slip × 2 + emolumentos + liquidação) ≈ 5.6bps ≈ 7pts ≈ 1.4 ticks.
+    slippage_ticks: float = 1.0            # ticks de slippage por ordem para futuros
+    slippage_bps: float = 2.0              # base slippage para ações
+    
+    # Configurações de ativos
+    tick_sizes: dict[str, float] = field(default_factory=lambda: {"WIN": 5.0, "WDO": 0.5})
+    asset_multipliers: dict[str, float] = field(default_factory=lambda: {"WIN": 0.2, "WDO": 10.0})
 
 
 # ---------------------------------------------------------------------------
@@ -241,7 +245,8 @@ class OptimizationConfig:
     atr_period_range: tuple[int, int] = (7, 21)
 
     # Parâmetros de execução
-    n_trials: int = 80
+    n_trials_phase1: int = 150   # Trials para otimização de Alpha/Features
+    n_trials_phase2: int = 50    # Trials para otimização do Meta-Model
     min_trades: int = 30
     timeout: int = 5400  # 1.5 horas
 

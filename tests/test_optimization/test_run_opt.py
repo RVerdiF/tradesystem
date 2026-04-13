@@ -17,6 +17,8 @@ class TestRunOpt(unittest.TestCase):
         mock_args.n_bars = 1000
         mock_args.interval = "1h"
         mock_args.n_trials = 50
+        mock_args.n_trials_phase1 = 30
+        mock_args.n_trials_phase2 = 20
         mock_parse_args.return_value = mock_args
 
         mock_df = MagicMock(spec=pd.DataFrame)
@@ -45,7 +47,13 @@ class TestRunOpt(unittest.TestCase):
         mock_fetch_mt5.assert_called_once_with(symbol="PETR4", n_bars=1000, interval="1h")
 
         # Verify run_optimization call
-        mock_run_opt.assert_called_once_with(mock_df, interval="1h", n_trials=50)
+        mock_run_opt.assert_called_once_with(
+            mock_df, 
+            interval="1h", 
+            n_trials=50,
+            n_trials_phase1=30,
+            n_trials_phase2=20
+        )
 
         # Verify save_optimized_params call
         mock_save_params.assert_called_once_with(
@@ -69,6 +77,8 @@ class TestRunOpt(unittest.TestCase):
         mock_args.n_bars = 1000
         mock_args.interval = "1h"
         mock_args.n_trials = 50
+        mock_args.n_trials_phase1 = 30
+        mock_args.n_trials_phase2 = 20
         mock_parse_args.return_value = mock_args
 
         mock_fetch_mt5.side_effect = Exception("MT5 Error")
@@ -93,6 +103,8 @@ class TestRunOpt(unittest.TestCase):
         mock_args.n_bars = 1000
         mock_args.interval = "1h"
         mock_args.n_trials = 50
+        mock_args.n_trials_phase1 = 30
+        mock_args.n_trials_phase2 = 20
         mock_parse_args.return_value = mock_args
 
         mock_df = MagicMock(spec=pd.DataFrame)

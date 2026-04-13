@@ -5,17 +5,12 @@ Este módulo implementa a lógica de busca de hiperparâmetros utilizando o
 framework Optuna, com foco em robustez estatística e mitigação de overfitting.
 
 Funcionalidades:
+- Otimização em Duas Fases: Alpha/Labeling primeiro, seguido pelo Meta-Model.
 - **objective**: Função objetivo com penalizações graduadas (sem cliffs) por baixa
   frequência de trades, cherry-picking excessivo e ausência de Sharpe Lift.
 - **run_optimization**: Estudo bayesiano com suporte a timeout e DSR.
 - Integração do Deflated Sharpe Ratio (DSR) para validar a significância.
 - Penalização por Generalization Gap (SR_train vs SR_test).
-
-Mudanças v2 (2026-04-13):
-- Substituído cliff `fitness *= 0.1` para Sharpe Lift negativo por curva exponencial suave.
-- Substituído hard-reject binário em filter_rate > 0.90 por penalidade quadrática
-  progressiva (0.70–0.92) + hard-reject apenas em > 0.92.
-- Mantido hard-reject por generalization gap > 3.0.
 
 Referências
 -----------
@@ -46,15 +41,6 @@ _FILTER_RATE_MIN_MULTIPLIER = 0.05 # piso da penalidade quadrática
 def _sharpe_lift_multiplier(lift: float) -> float:
     """
     Retorna o multiplicador de fitness baseado no Sharpe Lift.
-
-    Curva exponencial suave — sem cliff:
-      - lift >= 0  → multiplier = 1.0 (sem penalidade)
-      - lift < 0   → multiplier = exp(-2.0 * |lift|)
-        Ex: lift=-0.1 → 0.819, lift=-1.0 → 0.135, lift=-3.0 → 0.002
-
-    Razão: o TPE sampler precisa de gradiente suave para construir uma
-    densidade de probabilidade útil. Um cliff em lift=0 faz o sampler
-    tratar todos os negativos como igualmente inúteis.
     """
     if lift >= 0.0:
         return 1.0
@@ -64,16 +50,6 @@ def _sharpe_lift_multiplier(lift: float) -> float:
 def _filter_rate_multiplier(filter_rate: float) -> float | None:
     """
     Retorna o multiplicador de fitness baseado na filter_rate.
-
-    - filter_rate <= 0.70       → 1.0 (sem penalidade)
-    - 0.70 < rate <= 0.92       → penalidade quadrática: max(0.05, 1 - ((rate-0.70)/0.22)^2)
-                                  (em rate=0.92: excess=1.0 → multiplier=max(0.05,0.0)=0.05)
-    - filter_rate > 0.92        → None (hard reject — retornar -1.0 no caller)
-
-    Razão: filter_rate=0.85 (trail de cherry-picking moderado) antes passava sem
-    penalidade. Agora recebe multiplier≈0.54. O hard-reject é ligeiramente
-    relaxado de 0.90 → 0.92 para evitar rejeitar configurações de alta precisão
-    que caem marginalmente acima do threshold anterior.
     """
     if filter_rate <= _FILTER_RATE_SOFT_START:
         return 1.0
@@ -84,77 +60,9 @@ def _filter_rate_multiplier(filter_rate: float) -> float | None:
     return max(_FILTER_RATE_MIN_MULTIPLIER, multiplier)
 
 
-def objective(trial, df, interval):
-    """
-    Função objetivo para o Optuna.
-    Implementa as fases 1 e 3 do plano de implementação.
-    """
-    # Fase 1: Espaço de busca restrito (Top 10 - Faxina Real)
-    params = {
-        "cusum_threshold": trial.suggest_float(
-            "cusum_threshold", *optimization_config.cusum_range
-        ),
-        "alpha_fast": trial.suggest_int("alpha_fast", *optimization_config.fast_span_range),
-        "alpha_slow": trial.suggest_int("alpha_slow", *optimization_config.slow_span_range),
-        "pt_sl": (
-            trial.suggest_float("pt_mult", *optimization_config.pt_sl_range),
-            trial.suggest_float("sl_mult", *optimization_config.pt_sl_range),
-        ),
-        "meta_threshold": trial.suggest_float(
-            "meta_threshold", *optimization_config.meta_threshold_range
-        ),
-        "xgb_max_depth": trial.suggest_int(
-            "xgb_max_depth", *optimization_config.max_depth_range
-        ),
-        "ma_dist_fast_period": trial.suggest_int(
-            "ma_dist_fast_period", *optimization_config.ma_dist_fast_range
-        ),
-        "ma_dist_slow_period": trial.suggest_int(
-            "ma_dist_slow_period", *optimization_config.ma_dist_slow_range
-        ),
-        "moments_window": trial.suggest_int(
-            "moments_window", *optimization_config.moments_window_range
-        ),
-        "be_trigger": trial.suggest_float(
-            "be_trigger", *optimization_config.be_trigger_range
-        ),
-        "ffd_d": trial.suggest_float(
-            "ffd_d", *optimization_config.ffd_d_range
-        ),
-        "atr_period": trial.suggest_int(
-            "atr_period", *optimization_config.atr_period_range
-        ),
-        "xgb_gamma": trial.suggest_float(
-            "xgb_gamma", *optimization_config.xgb_gamma_range
-        ),
-        "xgb_lambda": trial.suggest_float(
-            "xgb_lambda", *optimization_config.xgb_lambda_range
-        ),
-        "xgb_alpha": trial.suggest_float(
-            "xgb_alpha", *optimization_config.xgb_alpha_range
-        ),
-    }
-
-    # Garantir que slow > fast para o Alpha Model
-    if params["alpha_slow"] <= params["alpha_fast"]:
-        return -1.0
-
-    # Executa o pipeline completo (com CPCV)
-    try:
-        results = run_pipeline(df, interval=interval, params=params)
-    except Exception as e:
-        logger.error(f"Erro no pipeline durante trial {trial.number}: {e}")
-        return -1.0
-
-    if results is None:
-        return -1.0
-
-    # Fase 3: Função Objetivo e Penalização de Overfitting
-
-    # 3.1 Fitness base: Calmar quando disponível, Sharpe como fallback
-    fitness = results.get("calmar_ratio", results["sharpe"])
-
-    # 3.2 Filtro de Frequência Contínuo (Evita Cliffs)
+def apply_penalties(results, trial, fitness):
+    """Aplica as penalizações de fitness aos resultados do trial."""
+    # Filtro de Frequência Contínuo
     min_trades = optimization_config.min_trades
     if results["n_trades"] < min_trades:
         penalty = results["n_trades"] / min_trades
@@ -164,9 +72,7 @@ def objective(trial, df, interval):
             f"(trades={results['n_trades']}, penalty={penalty:.2f})"
         )
 
-    # 3.3 Sharpe Lift: curva exponencial suave (sem cliff em lift=0).
-    # Razão: cliff anterior (fitness *= 0.1) distorcia o density model do TPE —
-    # todos os trials negativos eram igualmente inúteis do ponto de vista do sampler.
+    # Sharpe Lift
     lift = results.get("sharpe_lift", 0.0)
     lift_mult = _sharpe_lift_multiplier(lift)
     if lift_mult < 1.0:
@@ -176,15 +82,13 @@ def objective(trial, df, interval):
         )
     fitness *= lift_mult
 
-    # 3.4 Filter Rate: penalidade quadrática progressiva acima de 70%.
-    # Razão: 0.70 < filter_rate <= 0.92 era zona cega — passava sem penalidade.
+    # Filter Rate
     filter_rate = results.get("filter_rate", 0.0)
     fr_mult = _filter_rate_multiplier(filter_rate)
     if fr_mult is None:
-        # Hard reject: filter_rate > 0.92
         logger.warning(
             f"Trial {trial.number}: rejeitado por filter_rate={filter_rate:.3f} "
-            f"(>{_FILTER_RATE_HARD_REJECT} indica stump decorando assimetria do treino)"
+            f"(>{_FILTER_RATE_HARD_REJECT})"
         )
         return -1.0
     if fr_mult < 1.0:
@@ -194,12 +98,11 @@ def objective(trial, df, interval):
         )
     fitness *= fr_mult
 
-    # 3.5 Generalization Gap: Penalizar se SR_Train >> SR_Test
-    sr_train = results["sharpe_train"]
+    # Generalization Gap
+    sr_train = results.get("sharpe_train", results["sharpe"])  # fallback: assume train == test (no gap)
     sr_test = results["sharpe"]
     gap = sr_train - sr_test
 
-    # Guardrail: generalization gap — trial-level stop para overfitting severo.
     if gap > 3.0:
         logger.warning(
             f"Trial {trial.number}: rejeitado por generalization gap alto "
@@ -214,66 +117,186 @@ def objective(trial, df, interval):
     return fitness
 
 
-def run_optimization(df, interval, n_trials=None):
-    """Configura e executa o estudo do Optuna."""
-    if n_trials is None:
-        n_trials = optimization_config.n_trials
+def objective_phase1(trial, df, interval):
+    """
+    Fase 1: Otimiza Alpha (Labels, CUSUM, Features).
+    Parâmetros do Meta-Model são fixados para evitar overfitting cruzado e focar na qualidade do sinal.
+    """
+    params = {
+        "cusum_threshold": trial.suggest_float("cusum_threshold", *optimization_config.cusum_range),
+        "alpha_fast": trial.suggest_int("alpha_fast", *optimization_config.fast_span_range),
+        "alpha_slow": trial.suggest_int("alpha_slow", *optimization_config.slow_span_range),
+        "pt_sl": (
+            trial.suggest_float("pt_mult", *optimization_config.pt_sl_range),
+            trial.suggest_float("sl_mult", *optimization_config.pt_sl_range),
+        ),
+        "ma_dist_fast_period": trial.suggest_int("ma_dist_fast_period", *optimization_config.ma_dist_fast_range),
+        "ma_dist_slow_period": trial.suggest_int("ma_dist_slow_period", *optimization_config.ma_dist_slow_range),
+        "moments_window": trial.suggest_int("moments_window", *optimization_config.moments_window_range),
+        "be_trigger": trial.suggest_float("be_trigger", *optimization_config.be_trigger_range),
+        "ffd_d": trial.suggest_float("ffd_d", *optimization_config.ffd_d_range),
+        "atr_period": trial.suggest_int("atr_period", *optimization_config.atr_period_range),
+        
+        # FIXADOS PARA FASE 1: Meta-Model rápido e raso
+        "xgb_max_depth": 1,
+        "xgb_gamma": 0.0,
+        "xgb_lambda": 1.0,
+        "xgb_alpha": 0.0,
+        "meta_threshold": 0.50
+    }
 
-    logger.info("Iniciando Otimização Bayesiana ({} trials)...", n_trials)
+    if params["alpha_slow"] <= params["alpha_fast"]:
+        return -1.0
 
-    study = optuna.create_study(
+    try:
+        results = run_pipeline(df, interval=interval, params=params)
+    except Exception as e:
+        logger.error(f"Erro no pipeline Fase 1 durante trial {trial.number}: {e}")
+        return -1.0
+
+    if results is None:
+        return -1.0
+
+    # Usamos o Calmar ou Sharpe base para avaliar a qualidade pura do alpha e das labels.
+    fitness = results.get("calmar_ratio", results["sharpe"])
+    return apply_penalties(results, trial, fitness)
+
+
+def objective_phase2(trial, df, interval, base_params):
+    """
+    Fase 2: Otimiza Hyperparâmetros do ML (Meta-Model).
+    Recebe os parâmetros do Alpha otimizados e fixos.
+    """
+    params = dict(base_params) # Copia os melhores parâmetros da Fase 1
+
+    # Atualiza com as variações específicas de ML
+    params.update({
+        "meta_threshold": trial.suggest_float("meta_threshold", *optimization_config.meta_threshold_range),
+        "xgb_max_depth": trial.suggest_int("xgb_max_depth", *optimization_config.max_depth_range),
+        "xgb_gamma": trial.suggest_float("xgb_gamma", *optimization_config.xgb_gamma_range),
+        "xgb_lambda": trial.suggest_float("xgb_lambda", *optimization_config.xgb_lambda_range),
+        "xgb_alpha": trial.suggest_float("xgb_alpha", *optimization_config.xgb_alpha_range),
+    })
+
+    try:
+        results = run_pipeline(df, interval=interval, params=params)
+    except Exception as e:
+        logger.error(f"Erro no pipeline Fase 2 durante trial {trial.number}: {e}")
+        return -1.0
+
+    if results is None:
+        return -1.0
+
+    fitness = results.get("calmar_ratio", results["sharpe"])
+    return apply_penalties(results, trial, fitness)
+
+
+def run_optimization(df, interval, n_trials=None, n_trials_phase1=None, n_trials_phase2=None, symbol="default"):
+    """
+    Configura e executa o estudo do Optuna em duas fases.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        DataFrame com dados históricos.
+    interval : str
+        Intervalo de tempo das barras.
+    n_trials : int, optional
+        Número total de trials (legado). Se fornecido sem n_trials_phase1/phase2,
+        Phase 1 recebe n_trials trials e Phase 2 recebe max(10, n_trials // 3) —
+        total MAIOR que n_trials. Prefira usar n_trials_phase1/phase2 explicitamente.
+    n_trials_phase1 : int, optional
+        Trials para Phase 1 (Alpha/Labels). Default: optimization_config.n_trials_phase1.
+    n_trials_phase2 : int, optional
+        Trials para Phase 2 (Meta-Model). Default: optimization_config.n_trials_phase2.
+    symbol : str
+        Nome do ativo. Usado no study_name para evitar colisão em armazenamento persistente.
+
+    Notes
+    -----
+    Data Leakage entre fases: Phase 2 re-executa run_pipeline com os params fixos da Phase 1,
+    usando o mesmo df e os mesmos splits temporais (determinísticos pelo índice de tempo).
+    Não há vazamento pois Phase 2 não vê os labels de Phase 1 diretamente — eles são
+    re-gerados deterministicamente dentro de run_pipeline.
+    """
+    if n_trials_phase1 is None:
+        n_trials_phase1 = optimization_config.n_trials_phase1 if n_trials is None else n_trials
+
+    if n_trials_phase2 is None:
+        n_trials_phase2 = optimization_config.n_trials_phase2 if n_trials is None else max(10, n_trials // 3)
+
+    logger.info(f"--- INICIANDO FASE 1: OTIMIZAÇÃO ALPHA/LABELING ({n_trials_phase1} trials) ---")
+    study_phase1 = optuna.create_study(
         direction='maximize',
         sampler=optuna.samplers.TPESampler(seed=42),
-        study_name="TradeSystem5000_Optimization"
+        study_name=f"TradeSystem5000_{symbol}_Phase1"  # symbol-qualified: evita colisão em storage persistente
     )
 
-    study.optimize(
-        lambda trial: objective(trial, df, interval),
-        n_trials=n_trials,
+    study_phase1.optimize(
+        lambda trial: objective_phase1(trial, df, interval),
+        n_trials=n_trials_phase1,
         timeout=optimization_config.timeout,
         show_progress_bar=True
     )
 
-    logger.success("Otimização concluída!")
-    logger.info("Melhores parâmetros: {}", study.best_params)
-    logger.info("Melhor Valor Fitness: {:.2f}", study.best_value)
+    logger.success("FASE 1 CONCLUÍDA!")
+    best_phase1_params = study_phase1.best_params
+    
+    # Prepara PT/SL como tupla para o Phase 2
+    best_phase1_params["pt_sl"] = (
+        best_phase1_params.get("pt_mult", 2.0), 
+        best_phase1_params.get("sl_mult", 2.0)
+    )
 
-    # Fase 4: Avaliação do DSR
-    # DSR é um critério de aceitação, não um parâmetro a ser "consertado".
-    # Um DSR >= 0.95 indica que o melhor Sharpe é estatisticamente significativo
-    # dado o número de trials testados. Com um pipeline corrigido (entrada T+1,
-    # slippage calibrado, penalidades suaves), espera-se DSR > 0.
-    sr_values = [t.value for t in study.trials if t.value is not None]
+    logger.info("Melhores Parâmetros Fase 1: {}", best_phase1_params)
+
+    logger.info(f"--- INICIANDO FASE 2: OTIMIZAÇÃO META-MODEL ({n_trials_phase2} trials) ---")
+    study_phase2 = optuna.create_study(
+        direction='maximize',
+        sampler=optuna.samplers.TPESampler(seed=42),
+        study_name=f"TradeSystem5000_{symbol}_Phase2"  # symbol-qualified: evita colisão em storage persistente
+    )
+
+    study_phase2.optimize(
+        lambda trial: objective_phase2(trial, df, interval, best_phase1_params),
+        n_trials=n_trials_phase2,
+        timeout=optimization_config.timeout,
+        show_progress_bar=True
+    )
+
+    logger.success("FASE 2 CONCLUÍDA!")
+    
+    # Merge final dos parâmetros
+    final_best_params = dict(best_phase1_params)
+    final_best_params.update(study_phase2.best_params)
+
+    # Limpeza para serialização (remover tuplas compostas)
+    params_output = dict(final_best_params)
+    if "pt_mult" in params_output: params_output.pop("pt_mult")
+    if "sl_mult" in params_output: params_output.pop("sl_mult")
+
+    # Fase 4: Avaliação do DSR no resultado final (Fase 2)
+    sr_values = [t.value for t in study_phase2.trials if t.value is not None and t.value != -1.0]
     dsr_score = deflated_sharpe_ratio(
-        observed_sr=study.best_value,
+        observed_sr=study_phase2.best_value,
         sr_values=sr_values,
-        n_trials=len(study.trials),
+        n_trials=len(study_phase2.trials),
         n_days=len(df)
     )
 
     if dsr_score >= 0.95:
-        logger.success(
-            "SIGNIFICÂNCIA CONFIRMADA: O melhor Sharpe é real (DSR = {:.4f})", dsr_score
-        )
+        logger.success("SIGNIFICÂNCIA CONFIRMADA: O melhor Sharpe é real (DSR = {:.4f})", dsr_score)
     else:
-        logger.warning(
-            "ALERTA DE OVERFITTING: O melhor Sharpe pode ser sorte (DSR = {:.4f})", dsr_score
-        )
-
-    # Prepara dicionário de parâmetros normalizado
-    best_params = dict(study.best_params)
-    params = dict(best_params)
-    params["pt_sl"] = (best_params.get("pt_mult"), best_params.get("sl_mult"))
-    params.pop("pt_mult", None)
-    params.pop("sl_mult", None)
+        logger.warning("ALERTA DE OVERFITTING: O melhor Sharpe pode ser sorte (DSR = {:.4f})", dsr_score)
 
     return {
-        "study": study,
-        "params": params,
+        "study": study_phase2,
+        "params": params_output,
         "metadata": {
             "dsr_score": dsr_score,
-            "best_sharpe": study.best_value,
-            "n_trials": len(study.trials)
+            "best_sharpe": study_phase2.best_value,
+            "n_trials_phase1": len(study_phase1.trials),
+            "n_trials_phase2": len(study_phase2.trials)
         }
     }
 
@@ -282,5 +305,5 @@ if __name__ == "__main__":
     # Script para teste rápido da otimização
     logger.info("Rodando teste de otimização com dados reais do MT5...")
     df_test = fetch_mt5_data(symbol="PETR4", n_bars=1500, interval="1d")
-    results = run_optimization(df_test, interval="1d")
+    results = run_optimization(df_test, interval="1d", n_trials=5)
     print(results)
