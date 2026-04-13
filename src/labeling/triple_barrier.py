@@ -275,51 +275,6 @@ def apply_triple_barrier(
 # Kernel otimizado (semântica v2 — intrabar High/Low)
 # ---------------------------------------------------------------------------
 @njit
-def _find_first_touch(
-    close_values: np.ndarray,
-    high_values: np.ndarray,
-    low_values: np.ndarray,
-    start: int,
-    end: int,
-    entry_price: float,
-    side: int,
-    upper: float,
-    lower: float,
-) -> tuple[int, float, int]:
-    """
-    Versão sem breakeven — preservada para compatibilidade / benchmarking.
-
-    Semântica v2: avalia PT/SL contra os extremos intrabar; na ambiguidade
-    (mesma barra cruza ambas), retorna SL (conservador).
-
-    Returns
-    -------
-    (index_do_toque, retorno_side_adjusted, tipo_barreira)
-    tipo_barreira: 0=pt, 1=sl, 2=vertical
-    """
-    for i in range(start + 1, end + 1):
-        ret_hi = (high_values[i] / entry_price - 1.0) * side
-        ret_lo = (low_values[i] / entry_price - 1.0) * side
-
-        # Extremos side-adjusted (válidos para Long e Short)
-        sa_max = ret_hi if ret_hi > ret_lo else ret_lo
-        sa_min = ret_hi if ret_hi < ret_lo else ret_lo
-
-        sl_hit = sa_min <= lower
-        pt_hit = sa_max >= upper
-
-        # Ambiguidade: SL vence (convenção LdP, fill conservador)
-        if sl_hit:
-            return i, lower, 1  # sl — retorna valor cravado da barreira
-        if pt_hit:
-            return i, upper, 0  # pt — retorna valor cravado da barreira
-
-    # Barreira vertical: retorno do fechamento na última barra
-    final_ret = (close_values[end] / entry_price - 1.0) * side
-    return end, final_ret, 2  # vertical
-
-
-@njit
 def _find_dynamic_touch(
     close_values: np.ndarray,
     high_values: np.ndarray,

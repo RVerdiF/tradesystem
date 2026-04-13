@@ -1007,3 +1007,41 @@ def test_short_side_pt_hit_by_low():
 
 ## Recommended Agent
 **Send to Lead Coder** — the Numba kernel rewrite, the side-adjusted symmetry derivation, and the silent-behaviour-change risk across cached models all qualify this as Complex/Risky per the pair-programming optimisation rules.
+
+---
+
+## Review Results (2026-04-13)
+
+### Status: READY
+
+### Files Changed
+- `src/labeling/triple_barrier.py` — full v2 rewrite (intrabar High/Low); removed `_find_first_touch` (dead Numba code, never called).
+- `src/main_backtest.py` — `get_labels` call updated with `high_prices=df["high"]`, `low_prices=df["low"]`.
+- `src/main_execution.py` — `get_labels` call updated with `high_prices=df_aligned["high"]`, `low_prices=df_aligned["low"]`.
+- `tests/test_labeling/test_triple_barrier.py` — all calls updated with synthetic OHLC; unused `_find_dynamic_touch` import removed; explanatory comment added to `test_get_labels_empty`.
+- `tests/test_labeling/test_phase3.py` — all `get_labels`/`apply_triple_barrier` calls updated with `high_prices=close, low_prices=close`.
+- `tests/test_labeling/test_dynamic_barrier.py` — all `get_labels` calls updated with synthetic OHLC.
+- `tests/test_labeling/test_triple_barrier_ohlc.py` — **new file**: 5 tests exercising genuine intrabar OHLC behaviour.
+
+### Reviewer Findings
+
+| Severity | Finding | Resolution |
+|----------|---------|------------|
+| MAJOR | `_find_first_touch` was orphaned dead code compiled by Numba — zero callers in production or tests | **Fixed**: removed the function. Recoverable from git history if benchmarking is ever needed. |
+| MAJOR | `test_get_labels_empty` called `get_labels` without OHLC args — relied silently on short-circuit ordering with no documentation | **Fixed**: added an explicit comment explaining the short-circuit dependency and the expected failure mode if it changes. |
+| NIT | BE trigger with `upper=inf` (PT disabled): `sa_max >= inf` always False — BE never activates. Correct behaviour, undocumented. | Deferred — low operational risk, no new callers affected. |
+| NIT | `be_trigger: float = 0.0` default in `@njit` — always passed explicitly, default is unused cargo-cult | Deferred — no functional impact. |
+
+### Validation Results
+```
+300 passed in 8.16s
+  - tests/test_labeling/test_triple_barrier_ohlc.py: 5/5 new OHLC tests PASSED
+  - tests/test_labeling/: 41/41 PASSED (all existing + new)
+  - tests/ (full suite): 300/300 PASSED
+```
+
+### Remaining Risks (Manual — Not Addressable by Tests)
+- **Numba cache**: delete `__pycache__/*.nbi` / `*.nbc` on first deploy to avoid stale-signature `TypingError`.
+- **Cached meta-labeler artefacts**: joblib/pkl models trained on pre-fix labels are now untrustworthy. Retrain before relying on new Sharpe figures.
+- **Optuna study**: prior trials penalised the Alpha on buggy labels; delete/archive the old study database and restart.
+- **Sharpe expectation**: the fix corrects correctness, not profitability. Sharpe may move in either direction after retraining.

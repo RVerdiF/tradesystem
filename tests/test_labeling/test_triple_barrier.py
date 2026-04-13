@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 import pytest
-from src.labeling.triple_barrier import create_events, apply_triple_barrier, get_labels, _find_dynamic_touch
+from src.labeling.triple_barrier import create_events, apply_triple_barrier, get_labels
 
 @pytest.fixture
 def sample_data():
@@ -62,6 +62,10 @@ def test_get_labels(sample_data):
     assert "label" in labels.columns
     
 def test_get_labels_empty():
+    # No OHLC args needed: the len(close)==0 short-circuit in get_labels fires
+    # before the high_prices/low_prices validation assertions are reached.
+    # If the short-circuit is ever removed, this test will raise AssertionError
+    # (not TypeError) — that is the intended failure signal.
     close = pd.Series(dtype=float)
     events = pd.DataFrame(columns=["t1", "trgt", "side"])
     labels = get_labels(close, events)
