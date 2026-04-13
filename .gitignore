@@ -225,10 +225,14 @@ data/tradesystem.db
 scratch/
 plan.md
 
-# switchboard state and airlock
-.switchboard/state.json
+# switchboard state and airflow
+.switchboard/
 airlock/
 .airlock
+
+# AI agent frameworks
+.agent/
+.qwen/
 
 # # agents framework
 # .agent/
