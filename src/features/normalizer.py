@@ -25,6 +25,26 @@ from loguru import logger
 
 from config.settings import feature_config
 
+# Colunas produzidas pelo normalizer (rolling z-score / expanding rank).
+# Usado por validate_no_lookahead para escopo de validação anti-lookahead.
+# Nomes devem bater com as features de compute_all_features + sufixo _zscore/_rank.
+ROLLING_NORMALIZED_COLS = [
+    "ma_dist_fast_zscore",
+    "ma_dist_slow_zscore",
+    "roc_zscore",
+    "atr_zscore",
+    "rolling_vol_zscore",
+    "garman_klass_zscore",
+    "skew_zscore",
+    "kurt_zscore",
+    "ofi_zscore",
+    "vpin_zscore",
+    "vsa_rel_spread_zscore",
+    "vsa_bar_pos_zscore",
+    "vsa_rel_vol_zscore",
+    "vsa_wick_ratio_zscore",
+]
+
 
 # ---------------------------------------------------------------------------
 # Z-Score Móvel

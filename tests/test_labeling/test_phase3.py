@@ -213,7 +213,7 @@ class TestTripleBarrier:
             close, events_ts, targets,
             pt_sl=(0.5, 0.5), max_holding=8,
         )
-        labels = get_labels(close, events, pt_sl=(0.5, 0.5))
+        labels = get_labels(close, events, pt_sl=(0.5, 0.5), open_prices=close)
 
         # Deve ter pelo menos algum resultado
         assert len(labels) > 0
@@ -231,7 +231,7 @@ class TestTripleBarrier:
             close, events_ts, targets,
             pt_sl=(1.0, 1.0), max_holding=10,
         )
-        labels = get_labels(close, events)
+        labels = get_labels(close, events, open_prices=close)
 
         if len(labels) > 0:
             assert set(labels["label"].unique()).issubset({-1, 0, 1})
@@ -247,7 +247,7 @@ class TestTripleBarrier:
             close, events_ts, targets,
             pt_sl=(1.0, 1.0), max_holding=10,
         )
-        result = apply_triple_barrier(close, events)
+        result = apply_triple_barrier(close, events, open_prices=close)
 
         if len(result) > 0:
             assert (result["t1"] >= result.index).all()
@@ -270,7 +270,7 @@ class TestMetaLabeling:
             close, events_ts, targets,
             pt_sl=(1.0, 1.0), max_holding=10,
         )
-        labels = get_labels(close, events)
+        labels = get_labels(close, events, open_prices=close)
 
         if len(labels) > 0:
             meta = get_meta_labels(labels)
@@ -288,7 +288,7 @@ class TestMetaLabeling:
             close, events_ts, targets,
             pt_sl=(1.0, 1.0), max_holding=10,
         )
-        labels = get_labels(close, events)
+        labels = get_labels(close, events, open_prices=close)
 
         if len(labels) == 0:
             pytest.skip("Nenhum label gerado")
@@ -315,7 +315,7 @@ class TestMetaLabeling:
             close, events_ts, targets,
             pt_sl=(1.0, 1.0), max_holding=10,
         )
-        labels = get_labels(close, events)
+        labels = get_labels(close, events, open_prices=close)
 
         if len(labels) == 0:
             pytest.skip("Nenhum label gerado")

@@ -92,7 +92,7 @@ class RiskConfig:
     max_drawdown_pct: float = 0.05         # 5% drawdown máximo
     max_daily_profit_pct: float = 0.02     # 2% lucro máximo diário (novo)
     cool_down_minutes: float = 5.0         # Minutos de resfriamento pós-saída (novo)
-    max_position_size: float = 200.0         # lote máximo por trade
+    max_position_size: float = 200.0       # lote máximo por trade
     max_open_positions: int = 5
     kelly_fraction: float = 0.5            # Kelly fracionário (50%)
     min_conviction_threshold: float = 0.5  # Limiar mínimo de probabilidade do Meta-Model para operar
@@ -110,11 +110,11 @@ class RiskConfig:
 class CostConfig:
     """Taxas operacionais para modelagem de custos."""
 
-    brokerage_per_contract: float = 0.0    # corretagem (muitas corretoras = zero)
+    brokerage_per_contract: float = 0   # corretagem realista por contrato WIN$ (full-service)
     emoluments_pct: float = 0.00005        # emolumentos B3
     settlement_pct: float = 0.0000275      # liquidação
     iss_pct: float = 0.05                  # ISS sobre corretagem
-    slippage_bps: float = 1.0              # slippage estimado em basis points
+    slippage_bps: float = 5.0              # ~1 tick WIN$; punitivo para expor micro-alpha
 
 
 # ---------------------------------------------------------------------------
@@ -197,7 +197,7 @@ class MLConfig:
 
     # Validação Cruzada
     cv_splits: int = 5
-    embargo_pct: float = 0.01        # 1% das barras da base como embargo pós-teste
+    embargo_pct: float = 0.03        # 5% — excede max_holding_periods e rompe autocorrelação
     xgb_max_depth: int = 4           # Produção (reduzido de 8)
     xgb_gamma: float = 0.0           # Desativado (evita árvores vazias em amostras pequenas)
     xgb_min_child_weight: float = 2.0  # Peso mínimo reduzido (permitir splits em amostras menores)
@@ -205,7 +205,7 @@ class MLConfig:
     xgb_alpha: float = 0.0           # L1 Regularization
 
     # Bet Sizing
-    max_leverage: int = 200            # Alavancagem máxima (lotes)
+    max_leverage: int = 100          # Alavancagem máxima (lotes)
 
 
 # ---------------------------------------------------------------------------
@@ -217,13 +217,13 @@ class OptimizationConfig:
 
     # Ranges de busca fundamentais (Top 10 - "Faxina Real")
     cusum_range: tuple[float, float] = (0.002, 0.015)
-    pt_sl_range: tuple[float, float] = (1.5, 4.5)
+    pt_sl_range: tuple[float, float] = (0.5, 2.5)
     meta_threshold_range: tuple[float, float] = (0.60, 0.75)
-    max_depth_range: tuple[int, int] = (3, 6)
+    max_depth_range: tuple[int, int] = (2, 4)
     
     # Primary Model (Alpha)
-    fast_span_range: tuple[int, int] = (5, 20)
-    slow_span_range: tuple[int, int] = (20, 60)
+    fast_span_range: tuple[int, int] = (9, 50)
+    slow_span_range: tuple[int, int] = (50, 200)
 
     # Novas Features (Busca restrita)
     ma_dist_fast_range: tuple[int, int] = (7, 15)

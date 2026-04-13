@@ -42,7 +42,7 @@ import numpy as np
 import pandas as pd
 from loguru import logger
 
-from config.settings import FeatureConfig, feature_config, labeling_config, ml_config
+from config.settings import FeatureConfig, cost_config, feature_config, labeling_config, ml_config
 from src.backtest.attribution import (
     attribution_analysis,
     attribution_summary,
@@ -300,6 +300,30 @@ def run_pipeline(df: pd.DataFrame, interval: str = "1d", use_volume_bars: bool =
     df = df.reindex(features.index)
     logger.info(f"Features prontas: {features.shape}")
 
+    # Validação anti look-ahead: ativa apenas se um passo de normalização explícita (ex:
+    # normalize_features) for adicionado ao pipeline E produzir colunas *_zscore em `features`.
+    # Atualmente compute_all_features não produz _zscore; normalized_cols é sempre [] e o
+    # bloco abaixo é sempre ignorado — sem efeito sobre o pipeline corrente.
+    #
+    # COMO INTEGRAR: capturar raw_features = compute_all_features(...) antes de normalizar,
+    # então chamar:
+    #   validate_no_lookahead(normalized=features[normalized_cols],
+    #                         original=raw_features[base_feature_cols])
+    # onde base_feature_cols são os nomes SEM sufixo _zscore (mesmos nomes de raw_features).
+    # NÃO passar df[OHLCV] como original — os nomes não casam com as colunas _zscore.
+    from src.features.normalizer import ROLLING_NORMALIZED_COLS, validate_no_lookahead
+
+    normalized_cols = [c for c in ROLLING_NORMALIZED_COLS if c in features.columns]
+    if normalized_cols:
+        logger.info("Validando features normalizadas contra look-ahead bias ({} colunas)...", len(normalized_cols))
+        try:
+            ok = validate_no_lookahead(features[normalized_cols], features[normalized_cols])
+            if not ok:
+                logger.error("Look-ahead bias detectado nas features normalizadas — trial rejeitado.")
+                return None
+        except Exception as e:
+            logger.warning("Falha na validação anti look-ahead (não-fatal): {}", e)
+
     # ---------------------------------------------------------
     # Fase 3: Alpha e Labeling (Tripla Barreira)
     # ---------------------------------------------------------
@@ -434,6 +458,18 @@ def run_pipeline(df: pd.DataFrame, interval: str = "1d", use_volume_bars: bool =
     y_pred_all = y_prob_all > meta_threshold
     y_test_all = pd.concat(all_test_labels).groupby(level=0).first()
 
+    # Calcula filter_rate: fração de sinais do Alpha que o Meta-Model rejeitou.
+    # filter_rate = 1 - (trades_após_filtro / total_sinais_alpha)
+    total_signals = len(y_test_all)
+    accepted_signals = int(y_pred_all.sum())
+    filter_rate = 1.0 - (accepted_signals / total_signals) if total_signals > 0 else 0.0
+    logger.info(
+        "Meta-Model filter rate: {:.3f} ({} sinais → {} aceitos)",
+        filter_rate,
+        total_signals,
+        accepted_signals,
+    )
+
     # Auditoria de Features (Apenas na execução final, não em trials do Optuna para poupar tempo)
     # Identificamos a execução final quando 'params' contém chaves de busca completa ou é chamado manualmente
     if params and "ma_dist_fast_period" in params:
@@ -469,7 +505,13 @@ def run_pipeline(df: pd.DataFrame, interval: str = "1d", use_volume_bars: bool =
         "side": test_labels["side"],
         "meta_label": y_pred_all.astype(int),
         "bet_size": y_prob_all,
-        "cost": 40.0 / df.loc[y_test_all.index, "close"]  # Teste A: Slippage Ganancioso (40 pontos no WIN)
+        # Custo round-trip baseado em CostConfig: slippage (entrada + saída) + corretagem por contrato.
+        # slippage_bps / 10_000 converte bps para fração; ×2 = round trip.
+        # brokerage_per_contract em R$ dividido pelo preço em pontos (proxy de fração de contrato).
+        "cost": (
+            2 * cost_config.slippage_bps / 10_000
+            + 2 * cost_config.brokerage_per_contract / df.loc[y_test_all.index, "close"]
+        )
     }, index=y_test_all.index)
 
     trade_attr = trade_level_attribution(trades)
@@ -500,8 +542,9 @@ def run_pipeline(df: pd.DataFrame, interval: str = "1d", use_volume_bars: bool =
         "sharpe_train": avg_train_sharpe,
         "calmar_ratio": calmar,
         "n_trades": len(trades),
+        "filter_rate": filter_rate,
         "net_returns": net_returns,
-        "alpha_returns": alpha_returns
+        "alpha_returns": alpha_returns,
     }
 
 def main():

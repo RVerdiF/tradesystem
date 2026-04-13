@@ -113,9 +113,14 @@ def trade_level_attribution(
     """
     result = trades.copy()
 
-    # Retorno bruto do Alpha (sem sizing)
+    # Retorno bruto do Alpha (sem sizing) - DEVE subtrair custos para comparação justa
     if "side" in result.columns and "ret" in result.columns:
-        result["alpha_contribution"] = result["ret"] * result["side"]
+        base_return = result["ret"] * result["side"]
+        # Subtrair custos do alpha para nivelar comparação com o sistema completo
+        if "cost" in result.columns:
+            result["alpha_contribution"] = base_return - result["cost"]
+        else:
+            result["alpha_contribution"] = base_return
 
     # Contribuição do sizing
     if "bet_size" in result.columns:
@@ -128,7 +133,7 @@ def trade_level_attribution(
         result["filtered"] = result["meta_label"] == 0
         result["filter_impact"] = np.where(
             result["filtered"],
-            -result.get("alpha_contribution", result["ret"]),  # trade evitado
+            -result["alpha_contribution"],  # trade evitado
             0,
         )
 
@@ -150,9 +155,9 @@ def trade_level_attribution(
         result["net_return"] = result["sized_return"]
 
     logger.info(
-        "Trade attribution: {} trades | Média bruta={:.4f} | Média líquida={:.4f}",
+        "Trade attribution: {} trades | Média alpha (com custos)={:.4f} | Média líquida={:.4f}",
         len(result),
-        result.get("alpha_contribution", result["ret"]).mean(),
+        result["alpha_contribution"].mean() if "alpha_contribution" in result.columns else result["ret"].mean(),
         result["net_return"].mean(),
     )
 

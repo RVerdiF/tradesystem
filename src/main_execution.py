@@ -170,7 +170,7 @@ def train_model(df: pd.DataFrame, interval: str = "1h", params: dict | None = No
         pt_sl=pt_sl,
     )
 
-    labels_df = get_labels(df_aligned["close"], events)
+    labels_df = get_labels(df_aligned["close"], events, open_prices=df_aligned["open"])
     if labels_df is None or labels_df.empty:
         logger.error("Nenhuma label gerada. Abortando.")
         sys.exit(1)

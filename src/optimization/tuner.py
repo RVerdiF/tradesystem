@@ -92,6 +92,26 @@ def objective(trial, df, interval):
     sr_test = results["sharpe"]
 
     gap = sr_train - sr_test
+
+    # Guardrail 1: Generalization gap — trial-level stop for overfitting.
+    # Razão: gap > 3 Sharpe é sintoma de decorar autocorrelação do treino.
+    if gap > 3.0:
+        logger.warning(
+            f"Trial {trial.number}: rejeitado por generalization gap alto "
+            f"(sr_train={sr_train:.2f}, sr_test={sr_test:.2f}, gap={gap:.2f})"
+        )
+        return -1.0
+
+    # Guardrail 2: Meta-model filter rate — rejeita cherry-picking extremo.
+    # 0.928 foi observado no run suspeito; 0.90 é o teto defensável.
+    filter_rate = results.get("filter_rate", 0.0)
+    if filter_rate > 0.90:
+        logger.warning(
+            f"Trial {trial.number}: rejeitado por filter_rate={filter_rate:.3f} "
+            f"(>0.90 indica stump decorando assimetria do treino)"
+        )
+        return -1.0
+
     if gap > 1.0: # Exemplo de limite: gap de 1.0 no Sharpe é alto
         logger.debug(f"Trial {trial.number}: Alto Generalization Gap (Gap={gap:.2f})")
         fitness /= (1.0 + gap)

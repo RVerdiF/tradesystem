@@ -185,11 +185,14 @@ def apply_triple_barrier(
         if start_loc + 1 >= len(close_values) or end_loc <= start_loc:
             continue
 
-        # Preço de entrada: Abertura da barra T+1 (se disponível) ou Fechamento da T+1.
-        if open_prices is not None:
-            entry_price = open_prices.values[start_loc + 1]
-        else:
-            entry_price = close_values[start_loc] # Fallback apenas se open não for fornecido
+        # Preço de entrada: Abertura da barra T+1 (obrigatório — fallback para close introduz lookahead).
+        if open_prices is None:
+            raise AssertionError(
+                "triple_barrier: open_prices é obrigatório. O fallback para "
+                "close_values[start_loc] introduz lookahead (entrada no fechamento "
+                "da mesma barra que gerou o sinal). Passe a série de aberturas."
+            )
+        entry_price = open_prices.values[start_loc + 1]
 
         # Calcula barreiras absolutas
         upper = trgt * pt_mult if pt_mult > 0 else np.inf
