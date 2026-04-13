@@ -150,8 +150,13 @@ class MetaClassifier(BaseEstimator, ClassifierMixin):
         # Métricas de treino só pra debug rápido
         train_proba = self.model.predict_proba(X)[:, 1]
         try:
-            auc = roc_auc_score(y, train_proba)
-            logger.debug("AUC no treino: {:.4f} (Overfit?)", auc)
+            import numpy as np
+            if len(np.unique(y)) > 1:
+                import warnings
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore", category=UserWarning)
+                    auc = roc_auc_score(y, train_proba)
+                    logger.debug("AUC no treino: {:.4f} (Overfit?)", auc)
         except ValueError:
             pass  # Somente 1 classe no y
 
@@ -196,8 +201,15 @@ class MetaClassifier(BaseEstimator, ClassifierMixin):
 
         report = classification_report(y_test, y_pred, output_dict=True)
         try:
-            auc = roc_auc_score(y_test, y_prob)
-            report["auc"] = auc
+            import numpy as np
+            if len(np.unique(y_test)) > 1:
+                import warnings
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore", category=UserWarning)
+                    auc = roc_auc_score(y_test, y_prob)
+                    report["auc"] = auc
+            else:
+                report["auc"] = np.nan
         except ValueError:
             report["auc"] = np.nan
 

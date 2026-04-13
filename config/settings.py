@@ -217,7 +217,7 @@ class OptimizationConfig:
 
     # Ranges de busca fundamentais (Top 10 - "Faxina Real")
     cusum_range: tuple[float, float] = (0.002, 0.015)
-    pt_sl_range: tuple[float, float] = (0.5, 2.5)
+    pt_sl_range: tuple[float, float] = (0.5, 4.5)
     meta_threshold_range: tuple[float, float] = (0.60, 0.75)
     max_depth_range: tuple[int, int] = (2, 4)
     
@@ -230,9 +230,13 @@ class OptimizationConfig:
     ma_dist_slow_range: tuple[int, int] = (20, 40)
     moments_window_range: tuple[int, int] = (20, 100)
 
-    # Parâmetros Travados em Default de Produção (MLConfig)
-    # be_trigger_range, regularizações XGB, FFD e ATR-window
-    # serão usados diretamente dos seus Configs, sem otimização.
+    # Parâmetros anteriormente travados (agora otimizados)
+    be_trigger_range: tuple[float, float] = (0.0, 0.5)
+    xgb_gamma_range: tuple[float, float] = (0.0, 2.0)
+    xgb_lambda_range: tuple[float, float] = (1.0, 5.0)
+    xgb_alpha_range: tuple[float, float] = (0.0, 2.0)
+    ffd_d_range: tuple[float, float] = (0.1, 0.9)
+    atr_period_range: tuple[int, int] = (7, 21)
 
     # Parâmetros de execução
     n_trials: int = 80

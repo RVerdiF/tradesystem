@@ -55,6 +55,24 @@ def objective(trial, df, interval):
         "moments_window": trial.suggest_int(
             "moments_window", *optimization_config.moments_window_range
         ),
+        "be_trigger": trial.suggest_float(
+            "be_trigger", *optimization_config.be_trigger_range
+        ),
+        "ffd_d": trial.suggest_float(
+            "ffd_d", *optimization_config.ffd_d_range
+        ),
+        "atr_period": trial.suggest_int(
+            "atr_period", *optimization_config.atr_period_range
+        ),
+        "xgb_gamma": trial.suggest_float(
+            "xgb_gamma", *optimization_config.xgb_gamma_range
+        ),
+        "xgb_lambda": trial.suggest_float(
+            "xgb_lambda", *optimization_config.xgb_lambda_range
+        ),
+        "xgb_alpha": trial.suggest_float(
+            "xgb_alpha", *optimization_config.xgb_alpha_range
+        ),
     }
 
     # Garantir que slow > fast para o Alpha Model

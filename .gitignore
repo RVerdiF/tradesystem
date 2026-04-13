@@ -225,10 +225,13 @@ data/tradesystem.db
 scratch/
 plan.md
 
-# # switchboard
-# .switchboard/
-# .claude/
+# switchboard state and airlock
+.switchboard/state.json
+airlock/
+.airlock
 
 # # agents framework
 # .agent/
 # AGENTS.md
+
+*.docx
