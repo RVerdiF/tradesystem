@@ -34,7 +34,7 @@ def test_apply_triple_barrier(sample_data):
     events = create_events(close, events_ts, target_vol, side, pt_sl=(1.0, 1.0), max_holding=5)
 
     # open_prices é obrigatório — usa close como synthetic open (explícito, auditável)
-    result = apply_triple_barrier(close, events, open_prices=close)
+    result = apply_triple_barrier(close, events, open_prices=close, high_prices=close, low_prices=close)
     assert not result.empty
     assert "barrier_type" in result.columns
 
@@ -50,14 +50,14 @@ def test_apply_triple_barrier_breakeven(sample_data):
     prices[15:20] -= 20
     close = pd.Series(prices, index=close.index)
     
-    result = apply_triple_barrier(close, events, be_trigger=0.5, open_prices=close)
+    result = apply_triple_barrier(close, events, be_trigger=0.5, open_prices=close, high_prices=close, low_prices=close)
     assert not result.empty
 
 def test_get_labels(sample_data):
     close, events_ts, target_vol, side = sample_data
     events = create_events(close, events_ts, target_vol, side, pt_sl=(1.0, 1.0), max_holding=5)
 
-    labels = get_labels(close, events, open_prices=close)
+    labels = get_labels(close, events, open_prices=close, high_prices=close, low_prices=close)
     assert not labels.empty
     assert "label" in labels.columns
     

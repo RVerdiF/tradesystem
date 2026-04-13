@@ -40,12 +40,12 @@ def test_breakeven_activation():
     events = create_events(close, events_ts, targets, pt_sl=(1.0, 1.0), max_holding=20)
 
     # 1. Sem breakeven: SL em 98.0, close atinge 98.0 na barra 11 → 'sl'
-    labels_no_be = get_labels(close, events, pt_sl=(1.0, 1.0), be_trigger=0.0, open_prices=open_prices)
+    labels_no_be = get_labels(close, events, pt_sl=(1.0, 1.0), be_trigger=0.0, open_prices=open_prices, high_prices=close, low_prices=close)
     assert labels_no_be.iloc[0]["barrier_type"] == "sl"
 
     # 2. Com breakeven: close atinge 101.0 (ret=1%) na barra 2 → trigger ativado
     # Breakeven move SL para 0.0001, close volta a ~100.0 na barra 7 → SL hit com ret≈0
-    labels_be = get_labels(close, events, pt_sl=(1.0, 1.0), be_trigger=0.5, open_prices=open_prices)
+    labels_be = get_labels(close, events, pt_sl=(1.0, 1.0), be_trigger=0.5, open_prices=open_prices, high_prices=close, low_prices=close)
     assert labels_be.iloc[0]["barrier_type"] == "sl"
     # Breakeven ativado: SL movido para ~0, retorno próximo de zero (não o SL original de -2%)
     assert abs(labels_be.iloc[0]["ret"]) < 0.03
@@ -66,7 +66,7 @@ def test_breakeven_not_activated():
     
     events = create_events(close, events_ts, targets, pt_sl=(1.0, 1.0), max_holding=20)
     
-    labels_be = get_labels(close, events, pt_sl=(1.0, 1.0), be_trigger=0.5, open_prices=close)
+    labels_be = get_labels(close, events, pt_sl=(1.0, 1.0), be_trigger=0.5, open_prices=close, high_prices=close, low_prices=close)
 
     # Deve bater no SL original (aprox 98.0) pois não atingiu 101.0
     assert labels_be.iloc[0]["barrier_type"] == "sl"
@@ -87,7 +87,7 @@ def test_breakeven_then_tp():
     
     events = create_events(close, events_ts, targets, pt_sl=(1.0, 1.0), max_holding=20)
     
-    labels_be = get_labels(close, events, pt_sl=(1.0, 1.0), be_trigger=0.5, open_prices=close)
+    labels_be = get_labels(close, events, pt_sl=(1.0, 1.0), be_trigger=0.5, open_prices=close, high_prices=close, low_prices=close)
 
     # Deve bater no TP (pt)
     assert labels_be.iloc[0]["barrier_type"] == "pt"

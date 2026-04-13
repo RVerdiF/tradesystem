@@ -7,6 +7,21 @@ o resultado de um sinal através de três limites simultâneos:
 2.  **Barreira Inferior (Stop Loss)**: Limite de perda com suporte a breakeven.
 3.  **Barreira Vertical (Time Stop)**: Tempo máximo de permanência na posição.
 
+Semântica v2 (2026-04-13): as barreiras de PT e SL são avaliadas contra a
+**Máxima e Mínima intrabar** (não contra o fechamento). Quando há cruzamento,
+retornamos o **valor cravado da barreira** (`upper`/`lower`), simulando uma
+ordem limit/stop preenchida no nível. Apenas a barreira vertical (time stop)
+continua a usar o fechamento da barra terminal (`final_ret`).
+
+Convenção de sinal: todos os retornos são armazenados em forma *side-adjusted*
+(`ret * side`). Para Long (`side=+1`) coincide com o retorno bruto de preço;
+para Short (`side=-1`) é o negado. Todas as comparações com `upper`/`lower`
+operam em valores side-adjusted.
+
+Ambiguidade intrabar: se uma única barra cruzar simultaneamente `upper` e
+`lower` (Max >= PT e Min <= SL), retornamos **SL** — convenção conservadora
+de López de Prado.
+
 Funcionalidades:
 - **apply_triple_barrier**: Aplicação dos limites e detecção do primeiro toque.
 - **create_events**: Preparação estruturada dos eventos de entrada.
@@ -70,7 +85,6 @@ def create_events(
     if max_holding is None:
         max_holding = labeling_config.max_holding_periods
 
-    # Filtra eventos que existem tanto no close quanto no target_vol
     common = event_timestamps.intersection(close.index).intersection(target_vol.index)
     if len(common) < len(event_timestamps):
         logger.debug(
@@ -81,7 +95,6 @@ def create_events(
 
     events = pd.DataFrame(index=common)
 
-    # Barreira vertical: timestamp máximo de permanência
     close_index = close.index
     t1_values = []
     for ts in events.index:
@@ -90,19 +103,15 @@ def create_events(
         t1_values.append(close_index[end_loc])
     events["t1"] = pd.DatetimeIndex(t1_values)
 
-    # Target de volatilidade
     events["trgt"] = target_vol.reindex(events.index)
 
-    # Direção do sinal
     if side is not None:
         events["side"] = side.reindex(events.index)
     else:
-        events["side"] = 1  # assume long por padrão
+        events["side"] = 1
 
-    # Remove eventos sem target
     events = events.dropna(subset=["trgt"])
 
-    # Armazena pt_sl para uso posterior
     events.attrs["pt_sl"] = pt_sl
 
     logger.info(
@@ -123,14 +132,21 @@ def apply_triple_barrier(
     pt_sl: tuple[float, float] | None = None,
     be_trigger: float = 0.0,
     open_prices: pd.Series | None = None,
+    high_prices: pd.Series | None = None,
+    low_prices: pd.Series | None = None,
 ) -> pd.DataFrame:
     """
-    Aplica o método da Tripla Barreira e retorna a primeira barreira tocada.
+    Aplica o método da Tripla Barreira (semântica v2 — intrabar High/Low).
 
     Para cada evento, verifica qual barreira é atingida primeiro:
-    - Superior: retorno ≥ ``pt * trgt``
-    - Inferior: retorno ≤ ``-sl * trgt`` (ou breakeven se ativado)
-    - Vertical: tempo atingiu ``t1``
+    - Superior (PT): side-adjusted max(ret_hi, ret_lo) >= pt * trgt
+      → retorno retornado = `upper` (valor cravado da barreira)
+    - Inferior (SL): side-adjusted min(ret_hi, ret_lo) <= -sl * trgt
+      → retorno retornado = `lower` (valor cravado da barreira)
+    - Vertical: tempo atingiu t1
+      → retorno retornado = (close[end] / entry - 1) * side
+
+    Ambiguidade (Max e Min cruzam no mesmo candle): retorna SL.
 
     Parameters
     ----------
@@ -143,24 +159,43 @@ def apply_triple_barrier(
         Default: usa o valor armazenado em ``events.attrs``.
     be_trigger : float, optional
         Gatilho para breakeven (fração do Take Profit). Ex: 0.5.
+    open_prices : pd.Series
+        **Obrigatório.** Preços de abertura (para entry_price em T+1).
+    high_prices : pd.Series
+        **Obrigatório.** Máximas intrabar (avaliação de PT/SL).
+    low_prices : pd.Series
+        **Obrigatório.** Mínimas intrabar (avaliação de PT/SL).
 
     Returns
     -------
     pd.DataFrame
-        Colunas:
-        - ``t1``: timestamp da primeira barreira tocada
-        - ``ret``: retorno no momento do toque
-        - ``trgt``: volatilidade alvo usada
-        - ``side``: direção do sinal original
-        - ``barrier_type``: qual barreira foi tocada ('pt', 'sl', 'vertical')
+        Colunas: ``t1`` (timestamp da barreira), ``ret`` (side-adjusted),
+        ``trgt``, ``side``, ``barrier_type``.
     """
     if pt_sl is None:
         pt_sl = events.attrs.get("pt_sl", labeling_config.pt_sl_ratio)
 
     pt_mult, sl_mult = pt_sl
 
+    if open_prices is None:
+        raise AssertionError(
+            "triple_barrier: open_prices é obrigatório. O fallback para "
+            "close_values[start_loc] introduz lookahead (entrada no fechamento "
+            "da mesma barra que gerou o sinal). Passe a série de aberturas."
+        )
+    if high_prices is None or low_prices is None:
+        raise AssertionError(
+            "triple_barrier: high_prices e low_prices são obrigatórios (semântica v2). "
+            "Para preservar o comportamento antigo em testes sintéticos, passe "
+            "high_prices=close e low_prices=close explicitamente."
+        )
+
+    logger.info("Triple Barrier: intrabar High/Low evaluation active (v2 semantics)")
+
     results = []
     close_values = close.values.astype(np.float64)
+    high_values = high_prices.values.astype(np.float64)
+    low_values = low_prices.values.astype(np.float64)
     close_idx = close.index
 
     for event_ts, row in events.iterrows():
@@ -168,7 +203,6 @@ def apply_triple_barrier(
         trgt = row["trgt"]
         side = row["side"]
 
-        # Localiza índices no array
         try:
             start_loc = close_idx.get_loc(event_ts)
         except KeyError:
@@ -185,22 +219,15 @@ def apply_triple_barrier(
         if start_loc + 1 >= len(close_values) or end_loc <= start_loc:
             continue
 
-        # Preço de entrada: Abertura da barra T+1 (obrigatório — fallback para close introduz lookahead).
-        if open_prices is None:
-            raise AssertionError(
-                "triple_barrier: open_prices é obrigatório. O fallback para "
-                "close_values[start_loc] introduz lookahead (entrada no fechamento "
-                "da mesma barra que gerou o sinal). Passe a série de aberturas."
-            )
         entry_price = open_prices.values[start_loc + 1]
 
-        # Calcula barreiras absolutas
         upper = trgt * pt_mult if pt_mult > 0 else np.inf
         lower = -trgt * sl_mult if sl_mult > 0 else -np.inf
 
-        # Encontra primeira barreira tocada (com suporte a breakeven)
         touch_ts, touch_ret, barrier_type = _find_dynamic_touch(
             close_values=close_values,
+            high_values=high_values,
+            low_values=low_values,
             start=start_loc,
             end=end_loc,
             entry_price=entry_price,
@@ -210,7 +237,6 @@ def apply_triple_barrier(
             be_trigger=be_trigger,
         )
 
-        # Converte índice de volta para timestamp
         if touch_ts < len(close_idx):
             result_ts = close_idx[touch_ts]
         else:
@@ -230,15 +256,14 @@ def apply_triple_barrier(
         result_df.set_index("event_ts", inplace=True)
         result_df.index.name = None
 
-    # Estatísticas
     if len(result_df) > 0:
         counts = result_df["barrier_type"].value_counts()
         logger.info(
             "Tripla Barreira: {} eventos | pt={}, sl={}, vertical={}",
             len(result_df),
-            counts.get("pt", 0),
-            counts.get("sl", 0),
-            counts.get("vertical", 0),
+            counts.get(0, 0),  # pt
+            counts.get(1, 0),  # sl
+            counts.get(2, 0),  # vertical
         )
     else:
         logger.warning("Tripla Barreira: nenhum evento processado")
@@ -247,11 +272,13 @@ def apply_triple_barrier(
 
 
 # ---------------------------------------------------------------------------
-# Kernel otimizado
+# Kernel otimizado (semântica v2 — intrabar High/Low)
 # ---------------------------------------------------------------------------
 @njit
 def _find_first_touch(
     close_values: np.ndarray,
+    high_values: np.ndarray,
+    low_values: np.ndarray,
     start: int,
     end: int,
     entry_price: float,
@@ -260,27 +287,34 @@ def _find_first_touch(
     lower: float,
 ) -> tuple[int, float, int]:
     """
-    Encontra a primeira barreira tocada via iteração rápida.
+    Versão sem breakeven — preservada para compatibilidade / benchmarking.
+
+    Semântica v2: avalia PT/SL contra os extremos intrabar; na ambiguidade
+    (mesma barra cruza ambas), retorna SL (conservador).
 
     Returns
     -------
-    tuple[int, float, int]
-        (index_do_toque, retorno, tipo_barreira)
-        tipo_barreira: 0=pt, 1=sl, 2=vertical
+    (index_do_toque, retorno_side_adjusted, tipo_barreira)
+    tipo_barreira: 0=pt, 1=sl, 2=vertical
     """
     for i in range(start + 1, end + 1):
-        # Retorno relativo à entrada, ajustado pela direção
-        ret = (close_values[i] / entry_price - 1.0) * side
+        ret_hi = (high_values[i] / entry_price - 1.0) * side
+        ret_lo = (low_values[i] / entry_price - 1.0) * side
 
-        # Barreira superior (Take Profit)
-        if ret >= upper:
-            return i, ret, 0  # pt
+        # Extremos side-adjusted (válidos para Long e Short)
+        sa_max = ret_hi if ret_hi > ret_lo else ret_lo
+        sa_min = ret_hi if ret_hi < ret_lo else ret_lo
 
-        # Barreira inferior (Stop Loss)
-        if ret <= lower:
-            return i, ret, 1  # sl
+        sl_hit = sa_min <= lower
+        pt_hit = sa_max >= upper
 
-    # Barreira vertical (tempo esgotado)
+        # Ambiguidade: SL vence (convenção LdP, fill conservador)
+        if sl_hit:
+            return i, lower, 1  # sl — retorna valor cravado da barreira
+        if pt_hit:
+            return i, upper, 0  # pt — retorna valor cravado da barreira
+
+    # Barreira vertical: retorno do fechamento na última barra
     final_ret = (close_values[end] / entry_price - 1.0) * side
     return end, final_ret, 2  # vertical
 
@@ -288,6 +322,8 @@ def _find_first_touch(
 @njit
 def _find_dynamic_touch(
     close_values: np.ndarray,
+    high_values: np.ndarray,
+    low_values: np.ndarray,
     start: int,
     end: int,
     entry_price: float,
@@ -297,37 +333,44 @@ def _find_dynamic_touch(
     be_trigger: float = 0.0,
 ) -> tuple[int, float, int]:
     """
-    Encontra a primeira barreira tocada com suporte a Breakeven.
+    Versão com Breakeven — semântica v2.
 
-    Se be_trigger > 0 e o retorno atingir (upper * be_trigger),
-    o Stop Loss (lower) é movido para o breakeven (0.0001).
+    Ordem de avaliação dentro de cada barra (crítico):
+      1. Ativação de BE (se `be_trigger > 0` e sa_max atingiu upper*be_trigger).
+      2. Checagem de PT (sa_max >= upper).
+      3. Checagem de SL (sa_min <= lower — contra o lower eventualmente movido).
+
+    Ambiguidade (Max e Min cruzam no mesmo candle): SL vence.
 
     Returns
     -------
-    tuple[int, float, int]
-        (index_do_toque, retorno, tipo_barreira)
-        tipo_barreira: 0=pt, 1=sl, 2=vertical
+    (index_do_toque, retorno_side_adjusted, tipo_barreira)
+    tipo_barreira: 0=pt, 1=sl, 2=vertical
     """
     breakeven_active = False
 
     for i in range(start + 1, end + 1):
-        # Retorno relativo à entrada, ajustado pela direção
-        ret = (close_values[i] / entry_price - 1.0) * side
+        ret_hi = (high_values[i] / entry_price - 1.0) * side
+        ret_lo = (low_values[i] / entry_price - 1.0) * side
 
-        # 1. Checa ativação de Breakeven
-        if not breakeven_active and be_trigger > 0 and ret >= (upper * be_trigger):
-            lower = 0.0001  # Move o Stop para a entrada (leve margem para custos)
+        sa_max = ret_hi if ret_hi > ret_lo else ret_lo
+        sa_min = ret_hi if ret_hi < ret_lo else ret_lo
+
+        # 1. Ativação de BE ANTES dos checks de barreira, para capturar
+        #    o caso "BE ativou e SL foi atingido na mesma barra".
+        if not breakeven_active and be_trigger > 0 and sa_max >= (upper * be_trigger):
+            lower = 0.0001
             breakeven_active = True
 
-        # 2. Barreira superior (Take Profit)
-        if ret >= upper:
-            return i, ret, 0  # pt
+        sl_hit = sa_min <= lower
+        pt_hit = sa_max >= upper
 
-        # 3. Barreira inferior (Stop Loss ou Breakeven)
-        if ret <= lower:
-            return i, ret, 1  # sl
+        # 2/3. Ambiguidade intrabar: SL vence (fill conservador).
+        if sl_hit:
+            return i, lower, 1  # sl — valor cravado
+        if pt_hit:
+            return i, upper, 0  # pt — valor cravado
 
-    # Barreira vertical (tempo esgotado)
     final_ret = (close_values[end] / entry_price - 1.0) * side
     return end, final_ret, 2  # vertical
 
@@ -345,6 +388,8 @@ def get_labels(
     be_trigger: float = 0.0,
     min_return: float | None = None,
     open_prices: pd.Series | None = None,
+    high_prices: pd.Series | None = None,
+    low_prices: pd.Series | None = None,
 ) -> pd.DataFrame:
     """
     Pipeline completo: aplica tripla barreira e gera labels.
@@ -353,6 +398,8 @@ def get_labels(
     - +1: Take Profit atingido (trade lucrativo)
     - -1: Stop Loss atingido (trade perdedor)
     - 0: Barreira vertical (tempo esgotado, retorno insuficiente)
+
+    Ver `apply_triple_barrier` para a semântica v2 (intrabar High/Low).
 
     Parameters
     ----------
@@ -366,32 +413,42 @@ def get_labels(
         Gatilho para breakeven.
     min_return : float, optional
         Retorno mínimo para considerar label != 0.
+    open_prices : pd.Series
+        **Obrigatório.**
+    high_prices : pd.Series
+        **Obrigatório (semântica v2).**
+    low_prices : pd.Series
+        **Obrigatório (semântica v2).**
 
     Returns
     -------
     pd.DataFrame
-        DataFrame com colunas: ``t1``, ``ret``, ``label``, ``side``,
-        ``barrier_type``.
+        Colunas: ``t1``, ``ret``, ``label``, ``side``, ``barrier_type``.
     """
     if min_return is None:
         min_return = labeling_config.min_return
 
+    # Curto-circuito para inputs vazios (preservado do comportamento anterior)
+    if len(close) == 0 or len(events) == 0:
+        return pd.DataFrame()
+
     result = apply_triple_barrier(
-        close, events, pt_sl, be_trigger=be_trigger, open_prices=open_prices
+        close, events, pt_sl,
+        be_trigger=be_trigger,
+        open_prices=open_prices,
+        high_prices=high_prices,
+        low_prices=low_prices,
     )
 
     if len(result) == 0:
         return result
 
-    # Converte barrier_type numérico para string
     result["barrier_type"] = result["barrier_type"].map(_BARRIER_NAMES)
 
-    # Gera labels
     result["label"] = 0
     result.loc[result["barrier_type"] == "pt", "label"] = 1
     result.loc[result["barrier_type"] == "sl", "label"] = -1
 
-    # Barreira vertical: label = sinal do retorno (se > min_return)
     vertical_mask = result["barrier_type"] == "vertical"
     result.loc[vertical_mask & (result["ret"] > min_return), "label"] = 1
     result.loc[vertical_mask & (result["ret"] < -min_return), "label"] = -1

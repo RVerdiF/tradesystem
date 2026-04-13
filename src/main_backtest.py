@@ -363,7 +363,14 @@ def run_pipeline(df: pd.DataFrame, interval: str = "1d", use_volume_bars: bool =
         pt_sl=pt_sl
     )
 
-    labels_df = get_labels(df["close"], events, be_trigger=be_trigger, open_prices=df["open"])
+    labels_df = get_labels(
+        df["close"],
+        events,
+        be_trigger=be_trigger,
+        open_prices=df["open"],
+        high_prices=df["high"],
+        low_prices=df["low"],
+    )
     if labels_df is None or labels_df.empty:
         logger.error("Nenhuma label gerada. Encerrando.")
         return None
