@@ -20,6 +20,7 @@ class TestTimeRestrictions:
         # 1. Antes do horário (08:59)
         with patch('src.execution.risk.datetime.datetime') as mock_dt:
             mock_dt.now.return_value.time.return_value = datetime.time(8, 59, 0)
+            mock_dt.date = datetime.date
             
             rm.update_equity(100000.0, 100000.0)
             assert rm.can_trade() is False
@@ -28,6 +29,7 @@ class TestTimeRestrictions:
         # 2. Dentro do horário (09:01)
         with patch('src.execution.risk.datetime.datetime') as mock_dt:
             mock_dt.now.return_value.time.return_value = datetime.time(9, 1, 0)
+            mock_dt.date = datetime.date
             
             rm.update_equity(100000.0, 100000.0)
             assert rm.can_trade() is True
@@ -36,6 +38,7 @@ class TestTimeRestrictions:
         # 3. Depois do horário (17:56)
         with patch('src.execution.risk.datetime.datetime') as mock_dt:
             mock_dt.now.return_value.time.return_value = datetime.time(17, 56, 0)
+            mock_dt.date = datetime.date
             
             rm.update_equity(100000.0, 100000.0)
             assert rm.can_trade() is False
@@ -211,3 +214,62 @@ class TestCoolDown:
         # Estado não deve ter mudado
         assert rm.system_state == "HALTED_FOR_DAY"
         assert "MAX DAILY LOSS REACHED" in rm.halt_reason
+
+    def test_update_equity_missing_trade_day(self):
+        """Testa reativar sistema no dia seguinte."""
+        import src.execution.risk as risk_module
+    
+        rm = RiskManager(start_balance=100000.0)
+        rm.system_state = "HALTED_FOR_DAY"
+        rm.last_trading_day = datetime.date(2023, 1, 1)
+    
+        with patch.object(risk_module.datetime, 'date', wraps=datetime.date) as mock_date:
+            with patch.object(risk_module.datetime, 'datetime', wraps=datetime.datetime) as mock_dt:
+                mock_date.today.return_value = datetime.date(2023, 1, 2)
+                mock_dt.now.return_value = datetime.datetime(2023, 1, 2, 10, 0, 0)
+                rm.update_equity(100000.0, 100000.0)
+                assert rm.system_state == "ACTIVE"
+
+    def test_update_equity_missing_start_balance(self):
+        """Testa se balance eh inicializado quando for None."""
+        import src.execution.risk as risk_module
+        rm = RiskManager(start_balance=None)
+        
+        with patch.object(risk_module.datetime, 'date', wraps=datetime.date) as mock_date:
+            mock_date.today.return_value = datetime.date(2023, 1, 1)
+            rm.last_trading_day = datetime.date(2023, 1, 1)
+            
+            rm.update_equity(100000.0, 100000.0)
+            assert rm.start_balance == 100000.0
+            assert rm.highest_equity == 100000.0
+
+    def test_validate_order_halted(self):
+        """testa validate_order quando não pode operar"""
+        rm = RiskManager(start_balance=100000.0)
+        rm.is_halted = True
+        assert rm.validate_order(1.0, 1.0, 5.0) is False
+
+    def test_validate_order_max_position(self):
+        """testa validate_order acima do máximo"""
+        rm = RiskManager(start_balance=100000.0)
+        assert rm.validate_order(1.0, 5.0, 5.0) is False
+
+    def test_validate_order_valid(self):
+        """testa validate_order valido"""
+        rm = RiskManager(start_balance=100000.0)
+        assert rm.validate_order(1.0, 1.0, 5.0) is True
+
+    def test_notify_trade_closed_outside_window(self):
+        """Testa notify trade closed ignores outside window."""
+        rm = RiskManager(start_balance=100000.0)
+        rm.system_state = "OUTSIDE_WINDOW"
+        rm.notify_trade_closed()
+        assert rm.system_state == "OUTSIDE_WINDOW"
+
+    def test_notify_trade_closed_no_cooldown(self):
+        """Testa notify trade closed ignores if no cooldown setup."""
+        rm = RiskManager(start_balance=100000.0)
+        rm.cool_down_minutes = 0
+        rm.notify_trade_closed()
+        assert rm.system_state == "ACTIVE"
+

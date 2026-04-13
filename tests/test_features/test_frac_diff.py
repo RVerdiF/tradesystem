@@ -113,6 +113,19 @@ class TestFracDiffFFD:
         result = frac_diff_ffd(random_walk, d=0.5)
         assert result.index.equals(random_walk.index)
 
+    def test_ffd_none_params(self, random_walk):
+        """Testa params None falling back para defaults."""
+        result = frac_diff_ffd(random_walk, d=None, threshold=None)
+        assert isinstance(result, pd.Series)
+
+    def test_ffd_window_too_large(self, random_walk):
+        """Testa fallback quando janela de pesos > len(série)."""
+        # Uma série minúscula garantirá que len(weights) seja maior
+        small_series = random_walk.iloc[:5]
+        # Pede d baixo e threshold alto, para nao gerar ooom e sim nan
+        result = frac_diff_ffd(small_series, d=0.5, threshold=1e-5)
+        # Deve retornar só NaNs
+        assert result.isna().all()
 
 # ---------------------------------------------------------------------------
 # Testes — Busca do d mínimo
@@ -134,3 +147,32 @@ class TestFindMinD:
         """Deve respeitar d_range customizado."""
         d = find_min_d(random_walk, d_range=np.arange(0.3, 1.0, 0.1))
         assert d >= 0.3
+
+    def test_find_min_d_none_params(self, random_walk):
+        """Testa params None falling back para defaults."""
+        d = find_min_d(random_walk, d_range=None, threshold=None, adf_pvalue=None)
+        assert isinstance(d, float)
+
+    def test_find_min_d_not_found(self, random_walk):
+        """Quando nenhum d é suficiente, deve retornar 1.0."""
+        # Se passarmos pval exigido absurdo, ele não encontrará
+        d = find_min_d(random_walk, adf_pvalue=-1.0)
+        assert d == 1.0
+
+    def test_find_min_d_insufficient_samples(self):
+        """Quando len(diff) < 20 para todos os d, deve retornar 1.0"""
+        n = 10
+        dates = pd.date_range("2024-01-01", periods=n, freq="5min", tz="UTC")
+        prices = pd.Series(np.arange(n), index=dates, name="close")
+        d = find_min_d(prices)
+        assert d == 1.0
+
+    def test_find_min_d_adf_exception(self):
+        """Testa fallback quando adf levanta exceção."""
+        n = 50
+        dates = pd.date_range("2024-01-01", periods=n, freq="5min", tz="UTC")
+        prices = pd.Series(np.full(n, 100.0), index=dates, name="close")
+        # Serie constante causa erro no adfuller. Ele deve ignorar as falhas e retornar 1.0
+        d = find_min_d(prices)
+        assert d == 1.0
+

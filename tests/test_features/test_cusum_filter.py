@@ -89,6 +89,11 @@ class TestCusumEvents:
         diff_index = series_with_jumps.diff().dropna().index
         for ts in events:
             assert ts in diff_index
+            
+    def test_cusum_none_threshold(self, series_with_jumps):
+        """Testa threshold fallback para config value."""
+        events = cusum_events(series_with_jumps, threshold=None)
+        assert isinstance(events, pd.DatetimeIndex)
 
 
 # ---------------------------------------------------------------------------
@@ -116,3 +121,19 @@ class TestAdaptiveCusumEvents:
             trending_series, ewm_span=30, threshold_multiplier=3.0
         )
         assert len(events_high) <= len(events_low)
+        
+    def test_adaptive_cusum_none_params(self, trending_series):
+        """Testa params None falling back para defaults da config."""
+        events = adaptive_cusum_events(trending_series, ewm_span=None, threshold_multiplier=None)
+        assert isinstance(events, pd.DatetimeIndex)
+
+    def test_adaptive_cusum_kernel_nan_h(self):
+        """Testa que NaN ou <=0 em threshold é ignorado no kernel."""
+        from src.features.cusum_filter import _adaptive_cusum_kernel
+        values = np.array([1.0, 1.0, 1.0])
+        # Primeiro é NaN, segundo <=0, terceiro ok
+        thresholds = np.array([np.nan, 0.0, 0.5])
+        events = _adaptive_cusum_kernel(values, thresholds)
+        # s_pos vai acumular 1+1+1=3. Quando h=0.5 no indice 2, 3 > 0.5 e deve dar trigger.
+        assert events == [2]
+

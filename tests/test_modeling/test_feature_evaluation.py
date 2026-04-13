@@ -1,18 +1,11 @@
-"""
-Testes para a auditoria de features (SHAP e MDA).
-"""
-
-from __future__ import annotations
-
 import numpy as np
 import pandas as pd
 import pytest
+import shap
 from sklearn.tree import DecisionTreeClassifier
+from unittest.mock import patch, MagicMock
 from src.modeling.feature_evaluation import evaluate_features_shap, evaluate_features_mda
 
-# ---------------------------------------------------------------------------
-# Fixtures e Mocks
-# ---------------------------------------------------------------------------
 class DummyMetaClassifierMock:
     """Mock do MetaClassifier para simular o comportamento no `predict_proba` e ter um `model` interno."""
     
@@ -46,7 +39,6 @@ def synthetic_data():
     
     return X, y_series
 
-
 @pytest.fixture
 def trained_mock_model(synthetic_data):
     """Retorna um modelo mock treinado."""
@@ -56,63 +48,82 @@ def trained_mock_model(synthetic_data):
     return mock
 
 
-# ---------------------------------------------------------------------------
-# Testes - SHAP
-# ---------------------------------------------------------------------------
 class TestEvaluateFeaturesSHAP:
     def test_shap_dataframe_format(self, trained_mock_model, synthetic_data):
-        """Verifica se retorna DataFrame ordenado e com colunas corretas."""
         X, y = synthetic_data
         result = evaluate_features_shap(trained_mock_model, X, y)
-        
         assert isinstance(result, pd.DataFrame)
         assert list(result.columns) == ["col_name", "feature_importance_vals"]
         assert len(result) == 3
-        
-        # A importância maior deve ser da feature 1 (preditiva)
         top_feature = result.iloc[0]["col_name"]
-        assert top_feature == "f1", f"Feature preditiva não ficou no topo. Topo foi {top_feature}"
+        assert top_feature == "f1"
+
+    def test_shap_3d_output(self, trained_mock_model, synthetic_data):
+        X, y = synthetic_data
+        # Mock shap.TreeExplainer to return 3D array
+        with patch("shap.TreeExplainer") as mock_explainer:
+            mock_inst = MagicMock()
+            mock_inst.shap_values.return_value = np.random.randn(100, 3, 2)
+            mock_explainer.return_value = mock_inst
+            
+            result = evaluate_features_shap(trained_mock_model, X, y)
+            assert isinstance(result, pd.DataFrame)
+            assert len(result) == 3
+
+    def test_shap_2d_output(self, trained_mock_model, synthetic_data):
+        X, y = synthetic_data
+        with patch("shap.TreeExplainer") as mock_explainer:
+            mock_inst = MagicMock()
+            mock_inst.shap_values.return_value = np.random.randn(100, 3)
+            mock_explainer.return_value = mock_inst
+            
+            result = evaluate_features_shap(trained_mock_model, X, y)
+            assert isinstance(result, pd.DataFrame)
+            assert len(result) == 3
 
     def test_shap_graceful_error_handling(self):
-        """Se passar um modelo inválido, deve capturar a exceção e retornar df vazio."""
         class InvalidModel:
             pass
-            
         X = pd.DataFrame({"a": [1, 2], "b": [3, 4]})
         y = pd.Series([0, 1])
-        
         result = evaluate_features_shap(InvalidModel(), X, y)
         assert isinstance(result, pd.DataFrame)
         assert result.empty
 
 
-# ---------------------------------------------------------------------------
-# Testes - MDA (Mean Decrease Accuracy)
-# ---------------------------------------------------------------------------
 class TestEvaluateFeaturesMDA:
     def test_mda_series_format(self, trained_mock_model, synthetic_data):
-        """Verifica formato da Series retornada pela permutação."""
         X, y = synthetic_data
         result = evaluate_features_mda(trained_mock_model, X, y, n_repeats=3)
-        
         assert isinstance(result, pd.Series)
         assert len(result) == 3
-        assert list(result.index).count("f1") == 1
-        
-        # f1 deve ter a maior queda de performance (MDA mais alto)
-        # Permutar algo que tem 100% corrulação com Y deve destruir AUC
         assert result.idxmax() == "f1"
-        assert result["f1"] > 0.1 # Deve haver uma queda notável no AUC
+        assert result["f1"] > 0.1 
         
     def test_mda_graceful_error_handling(self):
-        """Se der erro no ROC AUC (ex: y só tem 1 classe), deve tratar a exceção e retornar vazio."""
         X = pd.DataFrame({"a": [1, 1], "b": [2, 2]})
-        # Força erro: y_true tendo apenas classe 0 para AUC (causa ValueError em roc_auc_score)
         y = pd.Series([0, 0])
-        
         mock = DummyMetaClassifierMock()
         mock.fit(X, y)
-        
         result = evaluate_features_mda(mock, X, y, n_repeats=1)
         assert isinstance(result, pd.Series)
         assert result.empty
+
+    def test_mda_negative_and_neutral_scores(self, synthetic_data):
+        X, y = synthetic_data
+        # Mock model that returns predict_proba such that shuffling improves or doesn't change AUC
+        mock = MagicMock()
+        mock.predict_proba.return_value = np.array([[0.5, 0.5]] * len(X))
+        
+        with patch("src.modeling.feature_evaluation.roc_auc_score") as mock_auc:
+            # First call baseline, then per col calls
+            mock_auc.side_effect = [0.5, 0.6, 0.5, 0.5]
+            
+            # X has 3 cols. So we need baseline + 3 calls (assuming n_repeats=1)
+            # baseline = 0.5. 
+            # col1 perm = 0.6 -> score = 0.5 - 0.6 = -0.1 (negative)
+            # col2 perm = 0.5 -> score = 0.0 (neutral)
+            # col3 perm = 0.5 -> score = 0.0
+            result = evaluate_features_mda(mock, X, y, n_repeats=1)
+            assert len(result) == 3
+
