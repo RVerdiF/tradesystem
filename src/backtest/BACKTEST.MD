@@ -1,70 +1,75 @@
-# Módulo de Backtest - TradeSystem5000
+# Módulo de Backtest (src/backtest)
 
-Este módulo é responsável pela validação rigorosa de estratégias de trading, utilizando técnicas avançadas de Machine Learning Financeiro (AFML) para evitar overfitting e garantir estimativas realistas de performance.
+## Objetivo Detalhado
+O backtesting em ambientes algorítmicos profissionais requer abstrações estritas para refletir as fricções mecânicas da execução real, eliminando heurísticas triviais de precificação exata do mercado. O TradeSystem5000 implementa neste módulo a base metodológica para avaliação probabilística através da métrica do **Combinatorial Purged Cross-Validation (CPCV)**, produzindo distribuições representativas de caminhos evolutivos para os retornos e, de maneira complementar, estressando os resíduos transacionais e as comissões por intermédio de modelos empíricos da Bolsa (B3).
 
-## 1. Arquitetura do Sistema
+Através da abstração e precificação do *Slippage* (derrapagem ao agredir a liquidez do livro) acoplado a métodos quantitativos de simulação estatística (Simulação de Monte Carlo), o sistema objetiva a obtenção de indicativos analíticos da performance e a validação do Sharpe Ratio Deflacionado (DSR) sem subestimações.
 
-O backtesting no TradeSystem5000 não é apenas uma simulação de preços, mas um pipeline integrado que percorre desde a amostragem de dados até a atribuição de performance.
+## Integração com Outros Módulos
+- **Modeling (`src/modeling`)**: Estrutura a interoperabilidade para extração de predições. Submete as previsões de teste temporal de instâncias *PurgedKFold* originárias de XGBoost, avaliando caminhos alternativos independentes do classificador e calculando a métrica total do conjunto das permutações históricas.
+- **Optimization (`src/optimization`)**: Módulo de avaliação recursiva das hipóteses durante o processo bayesiano. Transmite os retornos de múltiplos trials para a função penalizadora (DSR), avaliando o grau de viés estatístico de exploração na nuvem de simulação de resultados.
+- **Execution (`src/execution`)**: A base modelada de custos diretos (taxas baseadas em lotes de índice e dólar B3) e restrições estimadas do drawdown retroativo estabelecem os limiares transpostos ativamente sobre os Circuit Breakers diários no ambiente produtivo (Live).
 
-### Componentes Principais (`src/backtest/`)
+## Mapa de Funções e Componentes Chave
 
-- **`metrics.py`**: Implementa métricas estatísticas de performance.
-  - **Sharpe Ratio Anualizado**: Ajustado pela frequência dos dados.
-  - **Deflated Sharpe Ratio (DSR)**: Corrige o viés de seleção (data snooping) quando múltiplos testes são realizados.
-  - **Drawdown & Calmar**: Medidas de risco e retorno sobre o risco máximo.
-  - **Probabilidade de Ruína**: Estimativa via Monte Carlo do risco de quebra.
+### 1. Modelo Empírico de Custos B3 (`cost_model.py`)
+Estima as despesas proporcionais incidentes, atreladas a transações institucionais, que representam perdas permanentes sobre a cotação aferida no log de simulação.
+- `BrazilianCostModel`: Classe parametrizada contendo tabelas exatas para a Bolsa de Valores Brasileira. Determina as taxas flutuantes de corretagem (zero para certas operadoras institucionais), Emolumentos e Taxa de Liquidação da B3 e os impostos percentuais incidentes por tipo de contrato (WDO, WIN, DOL, IND).
+- `SlippageModel`: Função modeladora de *Impacto de Mercado* (Market Impact). Calcula a assimetria percentual da ordem perante a execução integral estática, derivando estocasticamente a degradação do spread na absorção dependente da proporção lançada (Quantity) frente ao Volume Médio Diário (ADV) transacionado para o subjacente.
+- `total_cost`: Estrutura de fachada (Facade) operando o mapeamento seqüencial de ambos os fluxos de penalização atritiva para abater de imediato do vetor original dos resultados do backtest.
 
-- **`cost_model.py`**: Modelagem realista de custos para o mercado brasileiro (B3).
-  - **Custos Fixos/Variáveis**: Corretagem, emolumentos B3, taxa de liquidação e ISS.
-  - **Slippage**: Modelo de impacto de mercado baseado na participação do volume médio diário.
+**Exemplo do Escalonamento Transacional B3:**
+```python
+from src.backtest.cost_model import total_cost
+import pandas as pd
 
-- **`cpcv.py`**: *Combinatorial Purged Cross-Validation*.
-  - Técnica fundamental para gerar múltiplos caminhos *Out-of-Sample* (OOS) sem vazamento de dados (*leakage*), essencial para meta-labeling.
+precos_ordem = pd.Series([120000.0, 120500.0, 119800.0])
+vols_ordem = pd.Series([10.0, 50.0, 100.0])
 
-- **`attribution.py`**: Análise de atribuição de performance.
-  - Decompõe o retorno entre o modelo Alpha (sinal base) e o Meta-Model (filtro de confiança), permitindo medir o "Sharpe Lift" agregado pelo Machine Learning.
-
-- **`dsr.py`**: Implementação específica do Sharpe Deflacionado baseado em López de Prado (Cap. 14).
-
-## 2. Fluxo de Execução (Pipeline)
-
-O orquestrador central é o `src/main_backtest.py`. O fluxo segue estas etapas:
-
-1.  **Ingestão de Dados**: Carregamento via MT5, Yahoo Finance ou geração sintética.
-2.  **Amostragem**: Opcionalmente converte barras de tempo para barras de volume ou dólar.
-3.  **Features & Labeling**: Cálculo de indicadores, diferenciação fracionária (FFD) e aplicação da Tripla Barreira.
-4.  **Treinamento & CV**: O Meta-Model é treinado usando CPCV para garantir que cada teste seja verdadeiramente OOS.
-5.  **Simulação de Trades**: Aplicação dos tamanhos de aposta (*bet sizing*) e cálculo de retornos líquidos (pós-custos).
-6.  **Relatório**: Geração de métricas de performance e análise de atribuição.
-
-## 3. Como Executar
-
-O backtest pode ser iniciado via CLI com diferentes fontes de dados e configurações.
-
-### Exemplos de Comandos:
-
-**1. Backtest com dados do MetaTrader 5 (Padrão):**
-```bash
-python src/main_backtest.py --mode mt5 --symbol PETR4 --interval 1h --n-bars 5000
+df_custos = total_cost(
+    prices=precos_ordem,
+    quantities=vols_ordem,
+    avg_volume=500000.0,
+    symbol="WIN"
+)
 ```
 
-**2. Backtest com dados do Yahoo Finance (Diário):**
-```bash
-python src/main_backtest.py --mode yfinance --symbol VALE3.SA --years 5 --interval 1d
+### 2. Análise Estatística e Desempenho Contínuo (`metrics.py` e `dsr.py`)
+Fornece métricas padronizadas institucionais de risco de cauda e estabilidade de evolução patrimonial.
+- Matriz unificada e extensiva para derivação de Sharpe Anualizado em predições sub-diárias de alta-frequência, Rácio de Calmar (sensibilidade da recuperação temporal), Sortino (isolando os retornos de variações à esquerda) e a respectiva inferência de Ruína via distribuição Gaussiana iterativa baseada em Matrizes de Monte Carlo (MCMC).
+- `deflated_sharpe_ratio`: Rotina quantificadora encarregada do Deflated Sharpe Ratio. Reflete a avaliação das otimizações atestando as probabilidades globais do resultado ser isento do viés otimizado multivariado.
+
+### 3. Simulação Multidirecional e Validação de Trajetória (`cpcv.py`)
+Inovação fundamental da metodologia de validação de modelos sequenciais de Marcos López de Prado.
+- `CombinatorialPurgedCV`: Gera partições combinatórias sobrepostas e as reordena, produzindo inúmeras trajetórias únicas da evolução do capital (Backtest Paths) sem violar as regras da cronologia cruzada ou prever os resultados com sobreposições no modelo.
+
+**Exemplo da Disposição do Combinatorial CV:**
+```python
+from src.backtest.cpcv import CombinatorialPurgedCV
+
+cpcv = CombinatorialPurgedCV(
+    n_groups=6,
+    n_test_groups=2,
+    samples_info=df_trade_timeline,
+    pct_embargo=0.01
+)
+
+splits_de_cruzamento = cpcv.split(X_features, y_labels)
 ```
 
-**3. Teste com Barras de Volume (Volume Bars):**
-```bash
-python src/main_backtest.py --mode yfinance --symbol WINJ24 --volume-bars --interval 5m
-```
+## Fundamentação Matemática do Simulador Evolutivo
 
-**4. Simulação Sintética (Sanity Check):**
-```bash
-python src/main_backtest.py --mode synthetic
-```
+### Distribuição Subjacente da Avaliação Combinatória (CPCV)
+O conceito K-Fold CV sequencial falha na estruturação temporal de fenômenos financeiros porque agrupa subconjuntos invariáveis do passado. A proposição do *Combinatorial Purged CV* consiste em segmentar formalmente os registros históricos em $N$ blocos de tamanho simétrico e contíguo. Com o particionamento imposto de forma rígida em conjuntos operacionais simultâneos de teste $k$ grupos, as combinações e a ordenação purificada propiciam as múltiplas ramificações independentes de simulação sem duplicatas do capital $P_{aths}$:
+$$ P_{aths} = \binom{N}{N-k} = \frac{N!}{k! \cdot (N-k)!} $$
 
-## 4. Referências Técnicas
+### Penalização Condicional e Risco Sistêmico (Slippage)
+O impacto gerado nas cotações quando a agressão transacional avança níveis da estrutura primária do Livro de Ofertas reflete decaimento em escala de dependência à liquidez e atrito operacional da infraestrutura da bolsa B3. Modelamos matematicamente as despesas contínuas derivando a *Derrapagem* através da volatilidade marginal base e da quantidade estipulada do vetor:
+Assumindo a sensibilidade elástica ($\lambda$) e o sub-fator condicional de mercado do Volume:
+$$ \text{Spread\_Derrapado}_t = P_t \times \left( \lambda \times \sqrt{\frac{V_{ordem}}{V_{avg\_daily}}} \right) $$
 
-A metodologia deste módulo é baseada em:
-- López de Prado, M. (2018). *Advances in Financial Machine Learning*. Wiley.
-- López de Prado, M. (2020). *Machine Learning for Asset Managers*. Cambridge University Press.
+### Mensuração Marginal das Predições do Alpha
+A avaliação fracionada das decomposições das metas operacionais evidencia isoladamente o benefício condicional de agregar restrições de filtragem via Meta-Labeling perante execuções irrestritas nativas baseadas no Sinal Base. Expressamos analiticamente esse Lift sobre o Sharpe:
+Dado que o Sharpe corresponde ao retorno logarítmico ajustado perante a volatilidade $\text{Sharpe} = \frac{E[R_p]}{\sigma_p}$:
+$$ \text{Sharpe\_Lift\_Percentual} = \frac{\text{Sharpe}(ret_{ML}) - \text{Sharpe}(ret_{Base})}{ \max(\text{Sharpe}(ret_{Base}), 0.001) } $$
+Estabelecendo a verificação paramétrica rigorosa que atesta se a implementação sistêmica global das métricas purificadoras da modelagem do classificador binário, sob os pesados embargos transacionais do XGBoost em *CPCV*, excede suficientemente a base da inércia primária ($ret_{Base}$).

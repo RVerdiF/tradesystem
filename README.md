@@ -1,110 +1,120 @@
-# TradeSystem5000 🚀
+# TradeSystem5000
 
-Sistema de trading algorítmico de alta performance baseado em **Financial Machine Learning (AFML)**, seguindo rigorosamente as metodologias de **Marcos López de Prado**.
+O **TradeSystem5000** é uma plataforma de pesquisa quantitativa, validação estatística e sistema de execução algorítmica focado em estratégias de média frequência (Mid-Frequency Trading). O projeto foi desenvolvido com base nos preceitos delineados na literatura de Financial Machine Learning, com ênfase particular nas metodologias estabelecidas por Marcos López de Prado (AFML).
 
-O TradeSystem5000 não é apenas um bot de execução, mas uma plataforma de pesquisa quantitativa que utiliza **Meta-Labeling** para filtrar sinais e gerenciar o risco de forma estatística, mitigando o sobreajuste (overfitting) e a não-estacionaridade dos dados financeiros.
+O núcleo metodológico do sistema visa o endereçamento estrutural de três problemas comuns na aplicação de aprendizado de máquina em séries financeiras:
+1.  **Mitigação de Overfitting**: Utilização de validação cruzada purgada (Combinatorial Purged Cross-Validation) e ajustes por viés de seleção (Deflated Sharpe Ratio).
+2.  **Modelagem e Rotulagem Secundária (Meta-Labeling)**: Desacoplamento da sinalização direcional tática em relação ao dimensionamento e filtragem de falsos positivos.
+3.  **Dimensionamento Dinâmico de Exposição**: Uso de inferências probabilísticas contínuas para alocação via frações do Critério de Kelly.
 
 ---
 
-## 🗺️ Mapa do Projeto (File Tree)
+## Arquitetura e Engenharia do Software
+
+O repositório está particionado de forma a refletir as etapas sequenciais do pipeline de processamento e execução:
+
+```mermaid
+graph TD
+    A[src/data] -->|Volume/Dollar Bars| B(src/features)
+    B -->|FFD & CUSUM & VPIN| C{src/labeling}
+    C -->|Ground Truth & Meta-Labels| D[src/modeling]
+    D -->|Purged CV & XGBoost Classifier| E(src/optimization)
+    D --> F((src/execution))
+    E -->|Optuna & DSR Penalty| F
+    F -->|SQLite Audit & MT5 Orders| G[LIVE B3 / MT5]
+    H[src/backtest] -.-> E
+    H -.-> D
+```
+
+### Organização de Diretórios
 
 ```text
 tradesystem5000/
-├── 📂 .agent/                  # Configurações do Framework Superpowers
-│   ├── 📂 rules/               # Regras de operação (Plan gate, TDD, Review)
-│   ├── 📂 skills/              # Habilidades especializadas (TDD, Python Automation)
-│   └── 📂 workflows/           # Fluxos de trabalho padronizados
-├── 📂 src/                     # Core Business Logic (Pipeline AFML)
-│   ├── 📂 data/                # Ingestão (MT5), Limpeza e Amostragem (Informative Bars)
-│   ├── 📂 features/            # FracDiff, Filtro CUSUM, Microestrutura (OFI, VPIN)
-│   ├── 📂 labeling/            # Triple Barrier Method, Meta-Labeling, Volatilidade EWMA
-│   ├── 📂 modeling/            # Meta-Model (XGBoost), Purged CV, Kelly Bet Sizing
-│   ├── 📂 backtest/            # Validação CPCV, Deflated Sharpe Ratio (DSR), Custos B3
-│   ├── 📂 optimization/        # Otimização Bayesiana (Optuna), DSR Validation
-│   └── 📂 execution/           # Async Engine, Order Manager, Risk Manager
-├── 📂 data/                    # Persistência e Amostras
-│   ├── 📄 tradesystem.db       # SQLite (Fonte de Verdade: Parâmetros, Sinais, Auditoria)
-│   ├── 📂 raw/                 # Dados brutos em Parquet (Ticks/Bars)
-│   └── 📂 processed/           # Dados processados para treinamento
-├── 📂 config/                  # Configurações Globais
-│   └── 📄 settings.py          # Limites de risco, credenciais e parâmetros
-├── 📂 tests/                   # Camada de Verificação e QA
-│   ├── 📂 test_data/           # Testes de integridade de dados e conectores
-│   ├── 📂 test_execution/      # Testes de fluxo de ordens e travas de risco
-│   └── ...                     # Testes específicos por módulo
-└── 📂 artifacts/               # Rastro de Auditoria e Planejamento
-    └── 📂 superpowers/         # Planos, reviews e resultados persistidos
+├── src/                        # Core Business Logic
+│   ├── data/                   # Ingestão, Saneamento, Persistência Parquet e Amostragem (Volume/Dollar Bars).
+│   ├── features/               # Transformação de dados: Diferenciação Fracionária FFD, VPIN, OFI, Filtro CUSUM.
+│   ├── labeling/               # Processamento de Alvos: Tripla Barreira (Target dinâmico) e Meta-Labeling.
+│   ├── modeling/               # Construção e Validação de Modelos: XGBoost, Purga/Embargo, Kelly Bet-Sizing.
+│   ├── optimization/           # Otimização de Hiperparâmetros: Busca Bayesiana TPE (Optuna) e DSR Penalty.
+│   ├── backtest/               # Simulação Institucional: Combinatorial Purged CV, Slippage Models e Custos B3.
+│   └── execution/              # Engine: Event-loop assíncrono para Live/Paper Trading com roteamento via MT5.
+├── data/                       # Armazenamento e Estado Local
+│   ├── tradesystem.db          # Repositório SQLite para auditoria de sinais, rastreabilidade de risco e armazenamento de hiperparâmetros.
+│   └── raw/ & processed/       # Arquivos de dados empacotados em Apache Parquet para otimização de I/O em análises locais.
+├── config/                     # Definições globais (limiares de risco estático, topologia de ativos e credenciais).
+└── tests/                      # Cobertura de verificação do sistema utilizando pytest, pytest-asyncio e mocks estruturais.
 ```
 
 ---
 
-## 🧠 Funcionamento Detalhado (O Pipeline AFML)
+## Resumo dos Componentes do Sistema
 
-O sistema opera em um fluxo cíclico que transforma ticks brutos em decisões de execução com alta confiança estatística.
+### 1. Ingestão e Processamento (`src/data`)
+O módulo de dados trata das anomalias inerentes ao roteamento da bolsa, removendo variações de cotação atípicas ("bad-ticks") via filtros Z-Score adaptativos. Em sequência, ao invés da sumarização convencional em barras temporais cronológicas (Time Bars), implementa amostragem por volume transacionado (Volume Bars) ou financeiro (Dollar Bars) para contornar a não-estacionariedade da variação inter-diária.
 
-### 1. Ingestão e Amostragem de Informação (`src/data`)
-Diferente do trading tradicional baseado em barras de tempo (que são heterocedásticas), o TradeSystem5000 utiliza **Bars de Informação**:
-*   **Dollar Bars**: Amostradas quando um valor financeiro fixo é trocado. Isso recupera a normalidade estatística dos retornos.
-*   **Volume Bars**: Amostradas por quantidade de ativos.
-*   **Tick Bars**: Amostradas por número de transações.
+### 2. Engenharia de Variáveis (`src/features`)
+Foca na extração estatística de informação da microestrutura do mercado, preservando a memória quantitativa das séries temporais.
+- **Diferenciação Fracionária (FFD)**: Retira as tendências mantendo dependência de longo alcance temporal (preservando o histórico de níveis de suporte).
+- **Microestrutura (VPIN e OFI)**: Modela aproximações do nível de assimetria do fluxo de ordem dentro da formação da barra.
+- **Normalização Extensiva**: Padronização dos *inputs* orientada estritamente no tempo presente ($t$) via janela expansiva, com o objetivo primário de prevenção de vazamento do futuro (*Look-ahead Bias*).
 
-### 2. Estacionaridade e Microestrutura (`src/features`)
-Modelos de ML falham em dados não-estacionários (preços). Resolvemos isso com:
-*   **FracDiff (Fixed-Width Window)**: Remove a tendência mas mantém a "memória" histórica, essencial para modelos preditivos.
-*   **Microestrutura**: Cálculo de **VPIN** (Volume-Synchronized Probability of Informed Trading) e **OFI** (Order Flow Imbalance) para detectar desequilíbrios no fluxo de ordens.
-*   **Filtro CUSUM**: Detecta mudanças estruturais nos preços para disparar a amostragem de eventos.
+### 3. Rotulagem (`src/labeling`)
+Aplica o método do Meta-Labeling para formular a classificação a ser enviada ao algoritmo de aprendizagem secundário.
+- **Tripla Barreira**: Um simulador determinístico de trajetória com limiares atrelados à volatilidade EWM e um limite de tempo pré-determinado, categorizando as saídas em ganhos, perdas ou inércia temporal.
+- **Meta-Labeling**: Desloca o modelo secundário de decidir a *direção* das cotações, solicitando que a árvore de decisão atue unicamente filtrando e mensurando a confiabilidade das projeções direcionais enviadas por uma lógica Alpha primária.
 
-### 3. Rotulagem Avançada (`src/labeling`)
-Utilizamos o **Triple Barrier Method (TBM)**:
-1.  **Take Profit (Horizontal)**: Alvo de lucro dinâmico baseado na volatilidade.
-2.  **Stop Loss (Horizontal)**: Limite de perda dinâmico.
-3.  **Time Barrier (Vertical)**: Saída compulsória após N barras para evitar capital preso.
-*   **Meta-Labeling**: O modelo não prevê a direção (Alpha), mas sim se o sinal Alpha atingirá o TP antes do SL (Binary 0/1).
+### 4. Validação Cruzada e Posicionamento (`src/modeling` & `src/backtest`)
+Arquitetura construída inteiramente para anulação do sobreajuste estatístico inerente ao retreinamento do ML financeiro.
+- **Purged K-Fold CV**: Avaliação das métricas utilizando métodos de eliminação combinada de amostras que sofram overlap na borda do split de treino/teste e adição de um intervalo temporal inativo (Embargo) em que o serial-momentum impede o isolamento das informações do teste.
+- **Critério de Kelly Fracionário**: Função conversora contínua de escalonamento paramétrico, atribuindo pesos de risco em Lotes que sobem ou descem de forma assintótica baseada exclusivamente no limite preestabelecido da certeza matemática (predict_proba).
+- **Combinatorial Purged CV e DSR**: Reconstrução de combinações de matrizes de retornos independentes em simulações para obter, via validação de Testes de Hipótese (Deflated Sharpe Ratio), a constatação p-valor de probabilidade indicando que o prêmio da estratégia supera o fator de aleatoriedade dos testes estressados exaustivamente.
 
-### 4. Validação Cruzada Purged & Embargoed (`src/modeling`)
-Para evitar o *Data Leakage* (vazamento de dados), o sistema implementa:
-*   **Purging**: Remoção de observações de treino que se sobrepõem temporalmente ao teste.
-*   **Embargo**: Intervalo de segurança após o teste para garantir que a autocorrelação serial não contamine o modelo.
-*   **Bet Sizing**: Dimensionamento via **Kelly Criterion**, onde a exposição é proporcional à probabilidade de acerto do meta-modelo.
+### 5. Sintonia Autônoma de Hiperparâmetros (`src/optimization`)
+Emprega o algoritmo Bayesiano TPE em duas fases (Phase 1 e Phase 2). O pipeline divide logicamente o teste paramétrico das razões estáticas dos canais da estratégia e, em seguida, parametriza e re-avalia internamente os vetores da floresta aleatória e da taxa de gradiente, armazenando e delegando resultados sob validação DSR.
 
-### 5. Backtesting Rigoroso (`src/backtest`)
-*   **Combinatorial Purged CV (CPCV)**: Gera múltiplos caminhos *Out-of-Sample* para testar a estratégia em diversos regimes.
-*   **Deflated Sharpe Ratio (DSR)**: Corrige o Sharpe Ratio pelo viés de seleção, informando se o resultado é real ou apenas "sorte" de testar muitas variações.
+### 6. Execução Assíncrona e Risco (`src/execution`)
+Abordagem em arquitetura *Non-Blocking*, orquestrando requisições paralelas à API nativa do MetaTrader 5 sem sobreposição bloqueante na esteira do interpretador. Executa checagens periódicas nos sub-buffers do Broker de forma a conciliar limites computados contra encerramentos locais de Take-Profit de mercado e engatilha restrições rigorosas e centralizadas (Max Drawdown Corrente e Limite Estático Diário).
 
 ---
 
-## 📊 Banco de Dados (SQLite)
+## Guia Básico de Operação
 
-O sistema utiliza o `data/tradesystem.db` como o oráculo central para persistência e auditoria.
+O ecossistema é preparado via linha de comando para suportar processamentos independentes de etapa a etapa.
 
-| Tabela | Função |
-|---|---|
-| `optimized_params` | Melhores hiperparâmetros (Optuna) validados por DSR. |
-| `audit_signals` | Todos os sinais gerados, probabilidades e frações de Kelly. |
-| `audit_orders` | Logs detalhados de execução (Paper e Live) com Tickets MT5. |
-| `audit_errors` | Registro de exceções críticas e interrupções de risco. |
-
-### Consultas de Auditoria Rápidas
-
+### 1. Ingestão de Dados Históricos
+Para extrair um delta de cotações pendentes da corretora sem sobrescrever bases locais.
 ```bash
-# Sinais com maior probabilidade de acerto recente
-sqlite3 data/tradesystem.db "SELECT symbol, prob, timestamp FROM audit_signals WHERE meta_label=1 ORDER BY prob DESC LIMIT 5;"
-
-# Verificar se houve interrupção por Risk Manager (Circuit Breaker)
-sqlite3 data/tradesystem.db "SELECT * FROM audit_errors WHERE critical=1 ORDER BY timestamp DESC;"
+python src/data/extractor.py --mode incremental --symbol WDO$ --interval 5m
 ```
 
+### 2. Backtest e Simulação Institucional
+Realiza simulações computando atrito (Slippage) utilizando amostragens indexadas por volume financeiro.
+```bash
+python src/main_backtest.py --mode mt5 --symbol WIN$ --n-bars 10000 --bars-type dollar
+```
+
+### 3. Ajuste de Parâmetros
+Executa a sintonia Bayesiana salvando no banco de dados instâncias estatisticamente válidas.
+```bash
+python src/optimization/run_opt.py --symbol WDO$ --trials 250
+```
+
+### 4. Execução Contínua em Tempo Real
+Inicia a coleta, inferência e roteamento integrado via loop assíncrono.
+```bash
+python src/main_execution.py --mode live
+```
+*(Para uso sem envio oficial à rede, aplicar `--mode paper` visando log-audit em SQLite).*
+
 ---
 
-## 🚀 Como Operar
+## Requisitos e Restrições Sistêmicas
 
-1.  **Configuração**: Edite `config/settings.py` para definir seus limites de risco (Max Daily Loss, Max Drawdown).
-2.  **Ingestão**: `python src/main_backtest.py --mode mt5 --symbol WINZ25 --n-bars 10000`
-3.  **Otimização**: `python src/optimization/run_opt.py --symbol WINZ25`
-4.  **Execução**: `python src/main_execution.py --mode paper` (Simulado) ou `--mode live` (Real).
+- **Dependência Nativa C++**: O pacote oficial `MetaTrader5` possui compilação restrita aos ambientes da API Windows (`win_amd64`). A execução Live via corretora, consequentemente, é atrelada nativamente ao S.O. Microsoft (Local ou instâncias virtuais), impossibilitando implantações *headless* sobre arquiteturas Linux a menos que via camada de emulação (Wine) ou utilizando o sistema exclusivamente para Paper e Modeling (via Mocks e cache parquet).
+- **Interpretador e Pacotes**: Dependência estrita para `Python >= 3.11`. As resoluções estruturais transitivas encontram-se fixadas via utilitário de ambiente virtual `uv` pelo arquivo principal `pyproject.toml`.
+- **Cobertura e Verificação**: A presença de código compilado via instrução `numba.njit` pode interferir em sondagens e mapeamentos durante avaliação de cobertura. Recomenda-se para refatorações: `NUMBA_DISABLE_JIT=1 pytest --cov=src`.
 
----
-
-## 📚 Referências Técnicas
-*   *Advances in Financial Machine Learning*, Marcos López de Prado (2018).
-*   *Machine Learning for Asset Managers*, Marcos López de Prado (2020).
+### Base Bibliográfica Referencial
+*   López de Prado, M. (2018). *Advances in Financial Machine Learning*. John Wiley & Sons.
+*   López de Prado, M. (2020). *Machine Learning for Asset Managers*. Cambridge University Press.
+*   Easley, D., López de Prado, M., & O'Hara, M. (2012). *The Volume Clock: Insights into the High Frequency Paradigm*.
