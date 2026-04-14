@@ -398,6 +398,7 @@ def vpin(
     volume: pd.Series,
     close: pd.Series,
     n_buckets: int = 50,
+    is_volume_clock: bool = False
 ) -> pd.Series:
     """
     Volume-Synchronized Probability of Informed Trading (VPIN estimado).
@@ -413,12 +414,21 @@ def vpin(
         Série de preços.
     n_buckets : int
         Número de buckets para a estimativa rolling.
+    is_volume_clock : bool
+        Indica se a série está no volume clock. Se não estiver, loga um warning.
 
     Returns
     -------
     pd.Series
         VPIN em [0, 1]. Valores altos indicam mais informação assimétrica.
     """
+    if not is_volume_clock:
+        logger.warning(
+            "CRÍTICO: VPIN calculado fora do Volume Clock. O resultado será "
+            "uma heurística aproximada (VIR) suscetível ao ruído HFT, e não o "
+            "VPIN de Easley, López de Prado e O'Hara."
+        )
+
     direction = np.sign(close.diff()).replace(0, np.nan).ffill().fillna(0)
 
     buy_volume = volume.where(direction > 0, 0.0)
@@ -527,6 +537,7 @@ def volume_imbalance_zscore(
 def compute_all_features(
     df: pd.DataFrame,
     config: object | None = None,
+    is_volume_clock: bool = False,
 ) -> pd.DataFrame:
     """
     Calcula todas as features a partir de um DataFrame OHLCV.
@@ -537,6 +548,8 @@ def compute_all_features(
         DataFrame com colunas: ``open``, ``high``, ``low``, ``close``, ``volume``.
     config : FeatureConfig, optional
         Configuração. Default: config global.
+    is_volume_clock : bool
+        Passado para funções que esperam volume bars (ex: VPIN).
 
     Returns
     -------
@@ -569,7 +582,7 @@ def compute_all_features(
     # Microestrutura
     if "volume" in df.columns:
         features["ofi"] = order_flow_imbalance(df["volume"], df["close"])
-        features["vpin"] = vpin(df["volume"], df["close"])
+        features["vpin"] = vpin(df["volume"], df["close"], is_volume_clock=is_volume_clock)
         features["volume_imbalance"] = volume_imbalance(df["volume"], df["close"])
         features["volume_imbalance_zscore"] = volume_imbalance_zscore(df["volume"], df["close"])
 

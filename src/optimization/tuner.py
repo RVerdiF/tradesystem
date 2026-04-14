@@ -148,9 +148,6 @@ def objective_phase1(trial, df, interval):
         "be_trigger": trial.suggest_float("be_trigger", *optimization_config.be_trigger_range),
         "ffd_d": trial.suggest_float("ffd_d", *optimization_config.ffd_d_range),
         "atr_period": trial.suggest_int("atr_period", *optimization_config.atr_period_range),
-        # Hurst regime filter (new)
-        "hurst_window": trial.suggest_int("hurst_window", 60, 200, step=20),
-        "hurst_threshold": trial.suggest_float("hurst_threshold", 0.50, 0.70, step=0.05),
         # VIR (Volume Imbalance Ratio) filter parameters
         # voi_window: rolling window (in bars) for VIR and zscore computation
         # voi_threshold: minimum zscore in the signal direction to keep the event

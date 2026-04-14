@@ -286,7 +286,11 @@ def run_pipeline(df: pd.DataFrame, interval: str = "1d", use_volume_bars: bool =
     else:
         dynamic_config = feature_config
 
-    features = compute_all_features(df, config=dynamic_config)
+    features = compute_all_features(
+        df,
+        config=dynamic_config,
+        is_volume_clock=use_volume_bars
+    )
 
     # Fase 3.1: Otimização de Diferenciação Fracionária
     if "ffd_d" in params:
@@ -330,15 +334,9 @@ def run_pipeline(df: pd.DataFrame, interval: str = "1d", use_volume_bars: bool =
     fast_span = params.get("alpha_fast", labeling_config.trend_fast_span)
     slow_span = params.get("alpha_slow", labeling_config.trend_slow_span)
 
-    # Extract Hurst filter params (default None = filter disabled)
-    hurst_window = params.get("hurst_window", 100)
-    hurst_threshold = params.get("hurst_threshold", None)
-
     alpha_model = TrendFollowingAlpha(
         fast_span=fast_span,
         slow_span=slow_span,
-        hurst_window=hurst_window,
-        hurst_threshold=hurst_threshold,
     )
     signal = alpha_model.generate_signal(df)
 
