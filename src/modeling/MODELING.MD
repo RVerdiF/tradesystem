@@ -1,64 +1,55 @@
 # Módulo de Modelagem e Validação (src/modeling)
 
-Este módulo é responsável pelo treinamento do meta-modelo (modelo secundário), pela validação estatística rigorosa e pelo dimensionamento de posição (*bet sizing*). A arquitetura foca na robustez contra o sobreajuste (*overfitting*) e no controle do vazamento de dados (*data leakage*).
+## Objetivo
+O Módulo de Modelagem é o coração preditivo do TradeSystem5000. Ele unifica as features e os rótulos (labels) para treinar um modelo de Machine Learning focado em resolver o problema de classificação binária gerado pelo Meta-Labeling (ver `src/labeling`). Diferente dos pacotes clássicos de ML (como `scikit-learn`), a arquitetura aqui é customizada pesadamente para séries temporais financeiras, abordando o grave problema de sobreajuste (*overfitting*) e vazamento de dados (*data leakage*) inerente aos dados temporalmente sobrepostos. Também é responsável por dimensionar o tamanho financeiro das apostas (Bet Sizing) em tempo real após a inferência.
 
-A implementação segue as diretrizes de **López de Prado** (*Advances in Financial Machine Learning*, Cap. 3, 7 e 10).
+## Integração com outros módulos
+- **Labeling (`src/labeling`) e Features (`src/features`)**: Consome o histórico temporal com inputs ($X$) de features processadas e outputs ($y$) de meta-labels e barreira tripla.
+- **Optimization (`src/optimization`)**: O sintonizador bayesiano utiliza as dobras (folds) da validação cruzada exposta aqui para encontrar hiperparâmetros ótimos para o `classifier`.
+- **Execution (`src/execution`)**: No ambiente de trading real ou simulação backtest, consome as funções de inferência de `classifier.py` e extrai o dimensionamento de ordens via `bet_sizing.py`.
 
----
+## Mapa de funções
 
-## 1. Componentes e Responsabilidades
+### Validação Cruzada Especializada (`cv.py`)
+- `PurgedKFold`: Implementa uma classe (compatível com a interface do scikit-learn) para dividir o *dataset* em dobras de treino e teste não sucessivas, purificando sobreposições para impedir vazamento (look-ahead) provocado pelas barras dependentes (como a duração não-fixa das triplas barreiras).
 
-O subsistema de modelagem é composto por quatro módulos principais:
+### Saneamento de Amostras (`purge_embargo.py`)
+- `get_train_times`: Aplica o *Purging*, varrendo o conjunto temporal e excluindo qualquer observação de treino que inicie antes e termine dentro (ou depois) da janela temporal de teste.
+- `apply_embargo`: Aplica o *Embargoing*, cortando uma faixa de amostras do treino posicionadas imediatamente após o término da dobra de teste. Previne vazamento pela autocorrelação serial comum nos mercados de capitais.
+- `purge_and_embargo`: Orquestra ambas as funções acima fornecendo os limiares rigorosos de subconjuntos de treino limpos.
 
-### 1.1 Meta-Modelo (`classifier.py`)
-*   **Classificador Binário**: Implementa modelos baseados em árvores (XGBoost ou RandomForest) para prever a probabilidade de sucesso de um sinal Alpha.
-*   **Output de Probabilidade**: O modelo não retorna apenas 0 ou 1, mas uma probabilidade contínua que é utilizada pelo motor de execução para filtrar operações e dimensionar lotes.
+### Meta-Modelo Classificador (`classifier.py`)
+- `train_meta_model`: Rotina global que compila o Pipeline de aprendizado (usualmente um `XGBoost` ou `RandomForest`). Ajusta o `class_weight` dinâmico caso os sinais negativos desbalanceiem o *dataset*.
+- `predict_meta_model`: Encapsula a inferência e retorna explicitamente o `predict_proba` (a confiança no modelo primário), um valor contínuo essencial para dimensionar as apostas, ao invés do tradicional output binário bruto.
 
-### 1.2 Prevenção de Vazamento de Dados (`purge_embargo.py`)
-*   **Purging**: Remove do conjunto de treinamento as observações que se sobrepõem temporalmente com o conjunto de teste.
-*   **Embargo**: Adiciona um intervalo extra após o conjunto de teste para garantir que a autocorrelação serial não cause vazamento de informações para o treinamento (Cap. 7 AFML).
+### Dimensionamento da Posição / Bet Sizing (`bet_sizing.py`)
+- `compute_kelly_fraction`: Deriva a agressividade do risco do trade calculando a fração do critério de Kelly, unindo a probabilidade extraída do classificador contra a razão Risco/Recompensa.
+- `discretize_bet`: Converte as frações contínuas sugeridas por Kelly em número inteiro de contratos futuros negociáveis (ex: WINFUT), arredondando aos blocos e respeitando limites estritos.
+- `apply_conviction_threshold`: Zera o Kelly / tamanho da posição se o Meta-Modelo reportar uma convicção insatisfatória, mitigando execuções de ruído.
 
-### 1.3 Validação Cruzada (`cv.py`)
-*   **Purged K-Fold CV**: Uma evolução do K-Fold tradicional adaptada para séries temporais financeiras. Ela integra as técnicas de Purging e Embargo em cada dobra (*fold*) da validação, garantindo que as métricas de performance sejam realistas e não infladas por vazamento de dados.
+### Avaliação de Features (`feature_evaluation.py`)
+- *Utilidades para investigar importância preditiva de features, como MDA (Mean Decrease Accuracy) ou MDI, garantindo que colunas irrelevantes não diluam o sinal na modelagem.* (Implementação contextual das métricas financeiras).
 
-### 1.4 Dimensionamento de Posição (`bet_sizing.py`)
-*   **Fração de Kelly**: Utiliza o critério de Kelly (ou Kelly Fracionário) para definir o tamanho da posição baseando-se na probabilidade retornada pelo meta-modelo e na relação risco/retorno esperada.
-*   **Ajuste por Probabilidade**: Permite que o sistema aumente a exposição em sinais de alta confiança e reduza (ou zere) em sinais duvidosos.
+## Lógica geral
+Séries temporais financeiras não são vetores de dados independentes. Se o Trade A começa na hora 1 e acaba na hora 3, e o Trade B (que cai numa dobra de Teste do K-Fold) começa na hora 2, o algoritmo de ML "vê" o futuro (o fechamento das horas 2 e 3 está embutido nos retornos de A). Portanto, `cv.py` e `purge_embargo.py` fazem fatiamentos matemáticos temporais baseados no índice de tempo do trade ($t_0$) até a sua liquidação ($t_1$).
+Só depois desse preparo laborioso que o XGBoost (em `classifier.py`) é efetivamente treinado.
+Na fase de *Deploy*/Inferência, o sistema pega as probabilidades reportadas pelo classificador e passa pelo filtro rigoroso do critério de Kelly. Assim, o robô aposta grande em trades de alta clareza (90%+ de acerto) e pequeno em cenários ambíguos.
 
----
+## Lógica matemática
+1. **Purging & Embargoing**:
+   Seja $I_{test} = [t_{test\_start}, t_{test\_end}]$ o intervalo de teste.
+   Um trade de treino em $I_{train} = [t_0, t_1]$ é descartado (purged) se:
+   $$ \text{Overlap} \implies (t_0 \le t_{test\_end}) \land (t_1 \ge t_{test\_start}) $$
+   Após o expurgo de sobreposição, o Embargo exclui amostras de treino se:
+   $$ \text{Embargo} \implies (t_0 > t_{test\_end}) \land (t_0 \le t_{test\_end} + E) $$
+   Onde $E$ é a duração da fração de embargo $h$.
 
-## 2. Fluxo de Modelagem
-
-O processo de treinamento e validação segue esta sequência:
-
-1.  **Preparação**: As features e labels (Meta-Labels) são carregadas.
-2.  **Definição de Dobras**: O `cv.py` define os intervalos de treino/teste com Purge e Embargo.
-3.  **Treinamento**: O classificador é treinado em cada dobra.
-4.  **Avaliação**: Métricas como Log-Loss, Precision e F1-Score são calculadas de forma agregada.
-5.  **Bet Sizing**: A função de Kelly é calibrada com base nos resultados da validação cruzada.
-
----
-
-## 3. Exemplo de Uso
-
-```python
-from src.modeling.classifier import train_meta_model
-from src.modeling.cv import PurgedKFold
-from src.modeling.bet_sizing import get_kelly_size
-
-# 1. Configurar Validação Cruzada com Purge e Embargo
-cv = PurgedKFold(n_splits=5, pct_embargo=0.01)
-
-# 2. Treinar Meta-Modelo
-model = train_meta_model(X, y, cv=cv)
-
-# 3. Calcular Tamanho da Posição para novo sinal
-prob = model.predict_proba(X_new)[:, 1]
-size = get_kelly_size(prob, win_rate=0.55, edge=1.5)
-```
-
----
-
-## 4. Referências Técnicas
-*   *Advances in Financial Machine Learning* (Cap. 7: Cross-Validation e Cap. 10: Bet Sizing), Marcos López de Prado.
-*   *The Elements of Statistical Learning*, Hastie et al.
+2. **Fração de Kelly (Half/Fractional Kelly)**:
+   Baseado na probabilidade contínua gerada por um Sigmoid ou Softmax (XGBoost):
+   $$ p = \text{prob\_win} $$
+   $$ q = 1 - p $$
+   O Kelly fracionário é expresso como a vantagem sobre as *Odds* (razão recompensa-risco do Alpha/Tripla Barreira):
+   $$ f\_kelly = \left( p - \frac{q}{\text{Odds}} \right) \cdot \text{fraction\_limit} $$
+   Se as Odds são $1:1$ (TP e SL são proporcionais ao risco):
+   $$ f = (2p - 1) $$
+   Apenas sinais com vantagem real ($p > 0.5$) resultarão num tamanho de aposta $> 0$.

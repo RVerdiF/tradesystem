@@ -1,66 +1,49 @@
 # Módulo de Rotulagem (src/labeling)
 
-Este módulo é responsável pela definição da variável alvo (*target*) para o treinamento dos modelos. Ele implementa o **Triple Barrier Method (TBM)** e o **Meta-Labeling**, técnicas fundamentais para evitar o viés de look-ahead e lidar com a natureza não estacionária dos dados financeiros.
+## Objetivo
+O módulo de Labeling é responsável por definir a variável alvo (*target* ou rotulagem) para o treinamento dos modelos de Machine Learning. Diferente de rotulagens fixas simplistas (como prever o preço daqui a N dias), o módulo implementa o método da Tripla Barreira e Meta-Labeling (baseado nas técnicas de Marcos López de Prado). Isso fornece um *ground truth* muito mais realista do risco-retorno na execução de um trade, considerando volatilidade dinâmica e filtragem rigorosa de alvos ao longo do tempo de duração do sinal.
 
-A lógica de rotulagem segue os princípios de **López de Prado** (*Advances in Financial Machine Learning*, Cap. 3).
+## Integração com outros módulos
+- **Features (`src/features`)**: A saída dos eventos detectados (ex: Filtro CUSUM) são enviados ao pipeline de rotulagem.
+- **Modeling (`src/modeling`)**: O resultado deste módulo são os *meta-labels* (0 ou 1) que alimentam o modelo `classifier.py` permitindo-o aprender se deve ou não entrar num sinal alpha secundário.
+- **Configurações (`config/settings.py`)**: Define limiares base como span de volatilidade (`volatility_span`), proporção de risco-retorno para barreiras (`pt_sl_ratio`), o limite de tempo em barras (`max_holding_bars`), etc.
 
----
+## Mapa de funções
 
-## 1. Componentes e Responsabilidades
+### Volatilidade Dinâmica (`volatility.py`)
+- `get_daily_vol`: Estima a volatilidade de um ativo com base na Média Móvel Exponencial Ponderada (EWMA) dos retornos absolutos para um determinado intervalo de barras. Isso garante que a largura dos alvos e stops no método de Tripla Barreira seja diretamente proporcional ao humor volátil do mercado daquele regime temporal específico.
 
-O subsistema de labeling é composto por quatro módulos principais:
+### Modelo Alpha Simulado (`alpha.py`)
+- `bollinger_alpha`: Gera sinais básicos de reversão ou momento à margem das bandas de Bollinger.
+- `macd_alpha`: Sinais táticos puros advindos de cruzamento e divergência de Médias Moveis.
+- `composite_alpha`: Reúne múltiplos alphas fracos combinando seus votos.
 
-### 1.1 Volatilidade Dinâmica (`volatility.py`)
-*   **Estimativa de Volatilidade (EWMA)**: Calcula a volatilidade diária usando uma média móvel exponencial ponderada (EWMA).
-*   **Target Sizing**: Define o tamanho dos alvos (Take Profit e Stop Loss) de forma dinâmica, baseando-se na volatilidade atual do ativo. Isso garante que o sistema seja adaptável a diferentes regimes de mercado.
+### Meta-Labeling (`meta_labeling.py`)
+- `get_meta_labels`: Cruza o sucesso final retornado pelas Triplas Barreiras com o sinal direcional pretendido pelo Alpha para definir o label binomial que aprova ou rejeita (0 ou 1) o sinal original.
 
-### 1.2 Triple Barrier Method (`triple_barrier.py`)
-*   **As Três Barreiras**:
-    1.  **Barreira Superior (Horizontal)**: Take Profit (TP), atingida se o preço sobe até o alvo.
-    2.  **Barreira Inferior (Horizontal)**: Stop Loss (SL), atingida se o preço cai até o limite.
-    3.  **Barreira de Tempo (Vertical)**: Saída por tempo, atingida se nenhuma barreira horizontal for tocada dentro do limite de tempo pré-definido.
-*   **Rotulagem Primária**: O rótulo é determinado por qual barreira foi tocada primeiro, permitindo capturar o resultado real de uma operação.
+### Tripla Barreira (`triple_barrier.py`)
+- `create_events`: Identifica o ciclo de vida do trade com o *start* e o *end* estrito pelo tempo máximo permitido em mercado `max_holding`.
+- `apply_triple_barrier`: Dispara um rastreador intrabarra (verificando mínimas e máximas da série) para checar quem é rompido primeiro: O limite vertical (tempo), o alvo de lucro superior horizontal ou o Stop loss inferior horizontal (além de permitir Breakeven progressivo).
+- `_find_dynamic_touch`: Função núcleo em numba que resolve o caminho dentro do labirinto dos preços, decidindo com viés conservador as ambiguidades onde o alvo e o stop são batidos simultaneamente (retornando stop primeiro).
+- `get_labels`: Função de unificação do processo de Tripla barreira devolvendo a tabela de labels completa para modelagem primária (+1, -1, 0).
 
-### 1.3 Modelo Primário (Alpha) (`alpha.py`)
-*   **Geração de Sinais de Tendência**: Define a direção inicial da operação (Buy/Sell/Neutral). 
-*   **Identificação de Side**: O sinal do modelo Alpha é o ponto de partida para o processo de Meta-Labeling.
+## Lógica geral
+A premissa baseada no fluxo de *Meta-Labeling* é que tentar prever direções financeiras (sobe ou desce) com Machine Learning usualmente produz falsos positivos custosos. O modelo propõe separar o processo. O sistema usa "modelos" teóricos de `alpha` para gerar a intenção do trade. A `volatilidade` dita o tamanho dos stops. O `triple_barrier` resolve simulando o trajeto do sinal. E o `meta_labeling` pega as vitórias provadas para treinar o classificador secundário (Se Alpha disse Compra e Trade foi Positivo = 1; Se foi Negativo = 0). O foco se volta para dimensionar e prever a qualidade (falsos positivos).
 
-### 1.4 Meta-Labeling (`meta_labeling.py`)
-*   **Rotulagem Secundária**: Em vez de prever a direção (Buy/Sell), o Meta-Labeling prevê se o sinal do modelo Alpha será bem-sucedido ou não (0 ou 1).
-*   **Filtragem de Falsos Positivos**: Esta técnica permite que o sistema filtre sinais de baixa probabilidade de lucro, aumentando a precisão e o Sharpe Ratio global da estratégia (Cap. 3.6 AFML).
+## Lógica matemática
+1. **Volatilidade (EWMA)**:
+   A volatilidade é baseada num decaimento exponencial, calculando a raiz quadrada da variância diária média:
+   $$ \sigma_t = \sqrt{ \text{EWM}[ (R_t)^2, \, \text{span}=T] } $$
 
----
+2. **Cálculo da Tripla Barreira (Take Profit e Stop Loss Dinâmicos)**:
+   Os limites horizontais são funções da volatilidade do ativo no instante $t_0$:
+   $$ \text{Upper Target} (PT) = p_{t0} \cdot \sigma_{t0} \cdot m_{pt} $$
+   $$ \text{Lower Limit} (SL) = -p_{t0} \cdot \sigma_{t0} \cdot m_{sl} $$
+   A barreira vertical ($t1$) é:
+   $$ t_1 = t_0 + \text{max\_holding\_bars} $$
+   Se a barreira superior ou inferior não forem tocadas, força-se a saída pelo preço em $t_1$.
 
-## 2. Fluxo de Rotulagem
-
-O processo completo de rotulagem segue estes passos:
-
-1.  **Cálculo da Volatilidade**: Define os alvos dinâmicos baseados no retorno recente.
-2.  **Geração de Sinais Alpha**: O modelo primário identifica oportunidades de entrada.
-3.  **Aplicação do Triple Barrier**: Para cada entrada, o sistema rastreia o preço até que uma das três barreiras seja tocada.
-4.  **Meta-Labeling**: O resultado do Triple Barrier é comparado com o sinal Alpha para gerar o rótulo binário (Sucesso/Falha) para o modelo secundário.
-
----
-
-## 3. Exemplo de Uso
-
-```python
-from src.labeling.volatility import get_daily_vol
-from src.labeling.triple_barrier import apply_tbm
-from src.labeling.meta_labeling import get_meta_labels
-
-# 1. Calcular volatilidade dinâmica
-vol = get_daily_vol(df["close"], span=100)
-
-# 2. Aplicar Triple Barrier
-events = apply_tbm(df["close"], t_events=events_list, pt_sl=[1, 1], target=vol)
-
-# 3. Gerar labels binários para Meta-Model
-labels = get_meta_labels(events, side=df["alpha_side"])
-```
-
----
-
-## 4. Referências Técnicas
-*   *Advances in Financial Machine Learning* (Cap. 3), Marcos López de Prado.
-*   *Machine Learning for Asset Managers*, Marcos López de Prado.
+3. **Retorno Ajustado por Lado (Side-Adjusted Return)**:
+   A avaliação de lucro e prejuízo em compras ($Side=1$) e vendas ($Side=-1$) obedece:
+   $$ r_{adj} = \left( \frac{p_{t}}{p_{entry}} - 1 \right) \cdot Side $$
+   Isso normaliza a lógica para focar estritamente se o viés subjacente e a força previstos estavam corretos, independentemente de ser operação short ou long.

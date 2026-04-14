@@ -1,70 +1,43 @@
-# Módulo de Backtest - TradeSystem5000
+# Módulo de Backtest (src/backtest)
 
-Este módulo é responsável pela validação rigorosa de estratégias de trading, utilizando técnicas avançadas de Machine Learning Financeiro (AFML) para evitar overfitting e garantir estimativas realistas de performance.
+## Objetivo
+O Módulo de Backtest é um simulador de execução e validador estatístico. Diferente de plataformas comerciais de varejo que meramente plotam curvas de capital que sofrem de overfitting crônico, o TradeSystem5000 foca na robustez. O módulo reproduz a operação do pipeline e calcula métricas institucionais, precifica realisticamente derrapagens e taxas brasileiras (B3), e principalmente: resolve o problema de vazamento de dados gerando validações cruzadas purgadas (CPCV) e testando a verdadeira força da estratégia por meio da Deflação de Sharpe (DSR).
 
-## 1. Arquitetura do Sistema
+## Integração com outros módulos
+- **Modeling (`src/modeling`)**: Interage profundamente para rodar os splits de Cross-Validation com purga (Purged CV), e para testar retornos previstos versus caminhos alternativos da história.
+- **Optimization (`src/optimization`)**: Recebe como *callback* o Deflated Sharpe Ratio que julga no final se o afinador Bayesiano encontrou Ouro ou apenas ajustou dados ao ruído ("Sorte").
+- **Execution (`src/execution`)**: Serve como o "gêmeo digital" do sistema de risco, estimando cenários via simulações de ruína que depois regem o Risk Manager.
 
-O backtesting no TradeSystem5000 não é apenas uma simulação de preços, mas um pipeline integrado que percorre desde a amostragem de dados até a atribuição de performance.
+## Mapa de funções
 
-### Componentes Principais (`src/backtest/`)
+### Validação Cruzada Combinatória (`cpcv.py`)
+- `CombinatorialPurgedCV`: Classe que fatia a série temporal em $N$ blocos. Diferente do K-Fold tradicional, ele cria permutações gerando *Backtest Paths* únicos. Ex: Se temos 6 blocos de tempo onde a crise de 2020 é o bloco 3 e o bull-market é o bloco 5, ele treina e testa em várias permutações, garantindo que o Meta-Modelo preveja a crise antes e depois dela ter acontecido no bloco de teste.
+- `split`: Executa a purga e embargo e provê as coordenadas (índices).
+- `backtest_paths`: Reconstrói visualmente e financeiramente as múltiplas histórias paralelas do que "poderia ter acontecido".
 
-- **`metrics.py`**: Implementa métricas estatísticas de performance.
-  - **Sharpe Ratio Anualizado**: Ajustado pela frequência dos dados.
-  - **Deflated Sharpe Ratio (DSR)**: Corrige o viés de seleção (data snooping) quando múltiplos testes são realizados.
-  - **Drawdown & Calmar**: Medidas de risco e retorno sobre o risco máximo.
-  - **Probabilidade de Ruína**: Estimativa via Monte Carlo do risco de quebra.
+### Sharpe Deflacionado (`dsr.py`)
+- `deflated_sharpe_ratio`: Calcula a probabilidade do Sharpe Ratio máximo observado na bateria de testes Bayesiana não ser o viés do limite máximo esperado sob a Hipótese Nula ($H_0$).
 
-- **`cost_model.py`**: Modelagem realista de custos para o mercado brasileiro (B3).
-  - **Custos Fixos/Variáveis**: Corretagem, emolumentos B3, taxa de liquidação e ISS.
-  - **Slippage**: Modelo de impacto de mercado baseado na participação do volume médio diário.
+### Modelo de Custo (B3) (`cost_model.py`)
+- `BrazilianCostModel`: Parametriza Custos de Corretagem, Emolumentos e Taxa de Liquidação B3 para o contrato de mini índice e dólar, além de ISS e impostos.
+- `SlippageModel`: Calcula a *derrapagem* do preço baseada na quantidade que o robô empurra contra o livro restrito ao volume diário de negociação (usando constante elástica).
+- `total_cost`: Pipeline de fachada para estimar o Spread transacional total em série.
 
-- **`cpcv.py`**: *Combinatorial Purged Cross-Validation*.
-  - Técnica fundamental para gerar múltiplos caminhos *Out-of-Sample* (OOS) sem vazamento de dados (*leakage*), essencial para meta-labeling.
+### Atribuição (`attribution.py`) e Métricas (`metrics.py`)
+- Funções essenciais para relatório quantitativo. Em `metrics`, calculam-se o Rácio de Calmar, Rácio de Sharpe (Anualizado), Drawdown e Simulações de Monte Carlo de Ruína.
+- Em `attribution`, ele decompõe os lucros em fatias, respondendo matematicamente: *Quanto do meu lucro se deve ao Sinal Alpha cego, e quanto do Sharpe "Shift/Lift" é mérito da restrição do Meta-Labeling ML?*
 
-- **`attribution.py`**: Análise de atribuição de performance.
-  - Decompõe o retorno entre o modelo Alpha (sinal base) e o Meta-Model (filtro de confiança), permitindo medir o "Sharpe Lift" agregado pelo Machine Learning.
+## Lógica geral
+Um Backtest não gera um valor absoluto; gera uma distribuição. A série é cortada no Combinatorial CV; os testes são expurgados com Purging e Embargo limitando a capacidade do ML de espiar o Teste. A série de retornos brutos passa pelo `total_cost` retirando da equidade a perda irrecuperável de taxas e ineficiência de Book. A lista dos melhores Sharpe Ratios obtidos passa pelo Deflator (DSR). Se o valor final for maior que `0.95`, a estratégia é aprovada.
 
-- **`dsr.py`**: Implementação específica do Sharpe Deflacionado baseado em López de Prado (Cap. 14).
-
-## 2. Fluxo de Execução (Pipeline)
-
-O orquestrador central é o `src/main_backtest.py`. O fluxo segue estas etapas:
-
-1.  **Ingestão de Dados**: Carregamento via MT5, Yahoo Finance ou geração sintética.
-2.  **Amostragem**: Opcionalmente converte barras de tempo para barras de volume ou dólar.
-3.  **Features & Labeling**: Cálculo de indicadores, diferenciação fracionária (FFD) e aplicação da Tripla Barreira.
-4.  **Treinamento & CV**: O Meta-Model é treinado usando CPCV para garantir que cada teste seja verdadeiramente OOS.
-5.  **Simulação de Trades**: Aplicação dos tamanhos de aposta (*bet sizing*) e cálculo de retornos líquidos (pós-custos).
-6.  **Relatório**: Geração de métricas de performance e análise de atribuição.
-
-## 3. Como Executar
-
-O backtest pode ser iniciado via CLI com diferentes fontes de dados e configurações.
-
-### Exemplos de Comandos:
-
-**1. Backtest com dados do MetaTrader 5 (Padrão):**
-```bash
-python src/main_backtest.py --mode mt5 --symbol PETR4 --interval 1h --n-bars 5000
-```
-
-**2. Backtest com dados do Yahoo Finance (Diário):**
-```bash
-python src/main_backtest.py --mode yfinance --symbol VALE3.SA --years 5 --interval 1d
-```
-
-**3. Teste com Barras de Volume (Volume Bars):**
-```bash
-python src/main_backtest.py --mode yfinance --symbol WINJ24 --volume-bars --interval 5m
-```
-
-**4. Simulação Sintética (Sanity Check):**
-```bash
-python src/main_backtest.py --mode synthetic
-```
-
-## 4. Referências Técnicas
-
-A metodologia deste módulo é baseada em:
-- López de Prado, M. (2018). *Advances in Financial Machine Learning*. Wiley.
-- López de Prado, M. (2020). *Machine Learning for Asset Managers*. Cambridge University Press.
+## Lógica matemática
+1. **Modelagem de Custos (Slippage Estimada)**:
+   A derrapagem percentual é modelada baseada na raiz da proporção transacionada:
+   $$ \text{Slippage}_t = \text{Const} \times \sqrt{\frac{V_{trade}}{V_{avg\_daily}}} $$
+2. **Deflated Sharpe Ratio (DSR)**:
+   Baseado na variância dos Sharpes Testados $\sigma^2_{SR}$, calcula o máximo Sharpe esperado caso a estratégia não tivesse valor real ($H_0$):
+   $$ \text{E}[max(SR)] = \sigma_{SR} \left[ (1 - \gamma) Z^{-1}(1-\frac{1}{N}) + \gamma Z^{-1}\left(1-\frac{1}{N e}\right) \right] $$
+   E o DSR converte isso num valor $Z$ de probabilidade acumulada normal, considerando as assimetrias (Skew e Kurtosis).
+3. **Múltiplos Caminhos (CPCV)**:
+   O número de trajetos simuláveis é a análise combinatória dos Blocos:
+   $$ P = \binom{N}{k} = \frac{N!}{k!(N-k)!} $$
