@@ -192,6 +192,9 @@ def objective_phase2(trial, df, interval, base_params):
             "xgb_gamma": trial.suggest_float("xgb_gamma", *optimization_config.xgb_gamma_range),
             "xgb_lambda": trial.suggest_float("xgb_lambda", *optimization_config.xgb_lambda_range),
             "xgb_alpha": trial.suggest_float("xgb_alpha", *optimization_config.xgb_alpha_range),
+            "xgb_min_child_weight": trial.suggest_float(
+                "xgb_min_child_weight", *optimization_config.xgb_min_child_weight_range
+            ),
             "scale_pos_weight": trial.suggest_float(
                 "scale_pos_weight", *optimization_config.scale_pos_weight_range
             ),

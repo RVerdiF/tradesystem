@@ -298,31 +298,16 @@ def run_pipeline(df: pd.DataFrame, interval: str = "1d", use_volume_bars: bool =
 
     features = features.dropna()
     df = df.reindex(features.index)
+    # Adiciona série FracDiff para o Alpha operar sobre dados estacionários
+    df = df.copy()
+    df["close_fracdiff"] = features["ffd"]
     logger.info(f"Features prontas: {features.shape}")
 
-    # Validação anti look-ahead: ativa apenas se um passo de normalização explícita (ex:
-    # normalize_features) for adicionado ao pipeline E produzir colunas *_zscore em `features`.
-    # Atualmente compute_all_features não produz _zscore; normalized_cols é sempre [] e o
-    # bloco abaixo é sempre ignorado — sem efeito sobre o pipeline corrente.
-    #
-    # COMO INTEGRAR: capturar raw_features = compute_all_features(...) antes de normalizar,
-    # então chamar:
-    #   validate_no_lookahead(normalized=features[normalized_cols],
-    #                         original=raw_features[base_feature_cols])
-    # onde base_feature_cols são os nomes SEM sufixo _zscore (mesmos nomes de raw_features).
-    # NÃO passar df[OHLCV] como original — os nomes não casam com as colunas _zscore.
-    from src.features.normalizer import ROLLING_NORMALIZED_COLS, validate_no_lookahead
-
-    normalized_cols = [c for c in ROLLING_NORMALIZED_COLS if c in features.columns]
-    if normalized_cols:
-        logger.info("Validando features normalizadas contra look-ahead bias ({} colunas)...", len(normalized_cols))
-        try:
-            ok = validate_no_lookahead(features[normalized_cols], features[normalized_cols])
-            if not ok:
-                logger.error("Look-ahead bias detectado nas features normalizadas — trial rejeitado.")
-                return None
-        except Exception as e:
-            logger.warning("Falha na validação anti look-ahead (não-fatal): {}", e)
+    # Validação anti look-ahead: compute_all_features não produz colunas _zscore (sem
+    # normalização explícita), então não há superfície de vazamento aqui. Se no futuro
+    # normalize_features() for adicionado ao pipeline, capturar raw_features ANTES de
+    # normalizar e chamar validate_no_lookahead(normalized=features[zscore_cols],
+    # original=raw_features[base_cols]) — NÃO passar o mesmo df para ambos os argumentos.
 
     # ---------------------------------------------------------
     # Fase 3: Alpha e Labeling (Tripla Barreira)
@@ -408,11 +393,49 @@ def run_pipeline(df: pd.DataFrame, interval: str = "1d", use_volume_bars: bool =
     reg_alpha = params.get("xgb_alpha", ml_config.xgb_alpha)
     meta_threshold = params.get("meta_threshold", 0.5)
 
+    # Diagnóstico global de desbalanceamento e sanidade do min_child_weight
+    global_pos_rate = y_meta.mean()
+    logger.info(
+        "Meta-Model dataset: {} amostras | {:.1f}% positivos ({} de {}) | min_child_weight={:.1f}",
+        len(y_meta), global_pos_rate * 100, int(y_meta.sum()), len(y_meta), min_child_weight,
+    )
+    if global_pos_rate < 0.10 or global_pos_rate > 0.90:
+        n_pos = int(y_meta.sum())
+        n_neg = len(y_meta) - n_pos
+        ideal_spw = n_neg / n_pos if n_pos > 0 else 1.0
+        ideal_threshold = global_pos_rate  # threshold próximo da taxa base calibra o ponto de corte
+        logger.warning(
+            "Desbalanceamento severo de classes ({:.1f}% positivos). "
+            "scale_pos_weight ideal ≈ {:.1f} (neg/pos = {}/{}). "
+            "meta_threshold funcional ≈ {:.2f}–{:.2f} (baseado na taxa de positivos). "
+            "Verifique também se max_holding da Triple Barrier é compatível com o horizonte do Alpha.",
+            global_pos_rate * 100, ideal_spw, n_neg, n_pos,
+            ideal_threshold * 0.5, ideal_threshold * 1.5,
+        )
+    avg_fold_size = len(y_meta) * (1 - 1 / 6)  # estimativa grosseira do fold de treino no CPCV 6/2
+    hessian_per_sample = 0.25  # p*(1-p) com p≈0.5 no início
+    min_samples_needed = min_child_weight / hessian_per_sample
+    if min_samples_needed > avg_fold_size * 0.3:
+        logger.warning(
+            "min_child_weight={:.1f} exige ~{:.0f} amostras por nó — alto para folds de ~{:.0f} amostras. "
+            "O XGBoost pode não conseguir criar splits (AUC→0.5). Considere reduzir min_child_weight.",
+            min_child_weight, min_samples_needed, avg_fold_size,
+        )
+
     for i, (train_idx, test_idx) in enumerate(splits):
         if len(train_idx) < 10: continue
 
         X_train, y_train = X.iloc[train_idx], y_meta.iloc[train_idx]
         X_test, y_test = X.iloc[test_idx], y_meta.iloc[test_idx]
+
+        # Diagnóstico de desbalanceamento — crucial para interpretar AUC
+        pos_rate = y_train.mean()
+        if pos_rate < 0.10 or pos_rate > 0.90:
+            logger.warning(
+                "Fold {}: desbalanceamento extremo no treino — {:.1f}% positivos ({} de {}). "
+                "Considere revisar o Alpha ou os parâmetros da Triple Barrier.",
+                i + 1, pos_rate * 100, int(y_train.sum()), len(y_train),
+            )
 
         model = MetaClassifier(
             n_estimators=150,
@@ -449,6 +472,33 @@ def run_pipeline(df: pd.DataFrame, interval: str = "1d", use_volume_bars: bool =
 
         probs = model.predict_proba(X_test)[:, 1]
         preds = probs > meta_threshold
+
+        # Log AUC treino vs. teste por fold
+        if len(np.unique(y_test)) > 1:
+            import warnings
+            from sklearn.metrics import roc_auc_score as _auc
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                fold_train_auc = _auc(y_train, model.predict_proba(X_train)[:, 1])
+                fold_test_auc = _auc(y_test, probs)
+            gap = fold_train_auc - fold_test_auc
+            if fold_train_auc <= 0.52 and fold_test_auc <= 0.52:
+                # Modelo não aprendeu nada — underfitting (min_child_weight alto demais ou dados insuficientes)
+                logger.warning(
+                    "Fold {}: AUC treino={:.3f} | AUC teste={:.3f} | UNDERFITTING — modelo não discrimina. "
+                    "Verifique min_child_weight vs. tamanho do fold e desbalanceamento de classes.",
+                    i + 1, fold_train_auc, fold_test_auc,
+                )
+            elif gap > 0.15:
+                logger.warning(
+                    "Fold {}: AUC treino={:.3f} | AUC teste={:.3f} | gap={:.3f} — possível overfitting",
+                    i + 1, fold_train_auc, fold_test_auc, gap,
+                )
+            else:
+                logger.info(
+                    "Fold {}: AUC treino={:.3f} | AUC teste={:.3f} | gap={:.3f}",
+                    i + 1, fold_train_auc, fold_test_auc, gap,
+                )
 
         all_test_preds.append(pd.Series(preds, index=X_test.index))
         all_test_probs.append(pd.Series(probs, index=X_test.index))

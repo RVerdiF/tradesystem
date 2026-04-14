@@ -139,14 +139,14 @@ def test_live_pipeline_call_success(
 ):
     # Setup mocks
     mock_features.return_value = pd.DataFrame(
-        {"feat1": [1.0] * 100, "feat2": [2.0] * 100}, index=sample_df.index
+        {"feat1": [1.0] * 100, "feat2": [2.0] * 100, "ffd": [0.5] * 100}, index=sample_df.index
     )
-    mock_ffd.return_value = pd.Series([0.5] * 100, index=sample_df.index)
+    mock_ffd.return_value = pd.Series([0.5] * 100, index=sample_df.index, name="ffd")
     mock_kelly.return_value = 0.2
-    
+
     pipeline = LivePipeline(mock_artifacts)
     result = pipeline(sample_df)
-    
+
     assert result["side"] == 1
     assert result["meta_prob"] == 0.6
     assert result["kelly_fraction"] == 0.2

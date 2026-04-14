@@ -170,6 +170,16 @@ class FeatureConfig:
     # Normalização
     zscore_window: int = 50
 
+    # Regime Detection (Hurst Exponent)
+    hurst_window: int = 100  # Janela rolante para cálculo do Hurst
+    hurst_step: int = 5  # Passo de cálculo (>1 para performance)
+    hurst_threshold: float = 0.55  # H > este valor = regime de tendência válido
+
+    # Volume Imbalance (Order Flow Filter)
+    vol_imbalance_window: int = 20  # Janela do volume imbalance
+    vol_imbalance_z_window: int = 50  # Janela para z-score do imbalance
+    vol_imbalance_z_threshold: float = 0.5  # Z-score mínimo para validar sinal
+
 
 # ---------------------------------------------------------------------------
 # Labeling (Fase 3 — Alpha + Tripla Barreira)
@@ -193,8 +203,8 @@ class LabelingConfig:
     # Tripla Barreira
     pt_sl_ratio: tuple[float, float] = (2.77, 2.98)  # (profit_take, stop_loss) (Otimizado PETR4.SA)
     be_trigger: float = 0.0  # Gatilho de breakeven (0.0 = desativado)
-    max_holding_periods: int = 10  # Barreira vertical (barras máximas)
-    min_return: float = 0.0  # Retorno mínimo para considerar label +1
+    max_holding_periods: int = 50  # Barreira vertical (barras máximas)
+    min_return: float = 0.005  # Retorno mínimo para considerar label +1
 
 
 # ---------------------------------------------------------------------------
@@ -207,9 +217,9 @@ class MLConfig:
     # Validação Cruzada
     cv_splits: int = 5
     embargo_pct: float = 0.03  # 5% — excede max_holding_periods e rompe autocorrelação
-    xgb_max_depth: int = 4  # Produção (reduzido de 8)
+    xgb_max_depth: int = 2  # Produção: raso para evitar memorização de padrões espúrios
     xgb_gamma: float = 0.0  # Desativado (evita árvores vazias em amostras pequenas)
-    xgb_min_child_weight: float = 2.0  # Peso mínimo reduzido (permitir splits em amostras menores)
+    xgb_min_child_weight: float = 5.0  # Balanceado: impede splits espúrios sem bloquear aprendizado em datasets ~300 amostras
     xgb_lambda: float = 1.0  # L2 Regularization
     xgb_alpha: float = 0.0  # L1 Regularization
 
@@ -227,7 +237,7 @@ class OptimizationConfig:
     # Ranges de busca fundamentais (Top 10 - "Faxina Real")
     cusum_range: tuple[float, float] = (0.001, 0.003)
     pt_sl_range: tuple[float, float] = (1.0, 3.0)  # SL floor=1.5 em tuner.py
-    meta_threshold_range: tuple[float, float] = (0.55, 0.70)
+    meta_threshold_range: tuple[float, float] = (0.05, 0.45)  # calibrado para datasets desbalanceados (5-10% positivos)
     max_depth_range: tuple[int, int] = (1, 2)
 
     # Primary Model (Alpha)
@@ -244,6 +254,7 @@ class OptimizationConfig:
     xgb_gamma_range: tuple[float, float] = (0.0, 2.0)
     xgb_lambda_range: tuple[float, float] = (1.0, 5.0)
     xgb_alpha_range: tuple[float, float] = (0.0, 2.0)
+    xgb_min_child_weight_range: tuple[float, float] = (1.0, 20.0)  # piso 1 permite aprender em folds pequenos (~50 amostras); teto 20 mantém regularização
     ffd_d_range: tuple[float, float] = (0.1, 0.9)
     atr_period_range: tuple[int, int] = (7, 21)
 
@@ -256,8 +267,8 @@ class OptimizationConfig:
     # Meta-Model hyperparameters for Phase 2
     scale_pos_weight_range: tuple[float, float] = (
         1.0,
-        2.5,
-    )  # Conservative range as suggested in plan
+        25.0,
+    )  # range amplo: cobre desde datasets balanceados até 25:1 de desbalanceamento
 
 
 # ---------------------------------------------------------------------------

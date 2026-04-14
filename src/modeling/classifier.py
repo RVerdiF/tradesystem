@@ -151,7 +151,7 @@ class MetaClassifier(BaseEstimator, ClassifierMixin):
         self.model.fit(X, y, sample_weight=sample_weight)
         self.is_fitted_ = True
 
-        # Métricas de treino só pra debug rápido
+        # Métricas de treino — visível em INFO para diagnóstico de overfitting
         train_proba = self.model.predict_proba(X)[:, 1]
         try:
             if len(np.unique(y)) > 1:
@@ -160,7 +160,14 @@ class MetaClassifier(BaseEstimator, ClassifierMixin):
                 with warnings.catch_warnings():
                     warnings.simplefilter("ignore", category=UserWarning)
                     auc = roc_auc_score(y, train_proba)
-                    logger.debug("AUC no treino: {:.4f} (Overfit?)", auc)
+                    if auc > 0.80:
+                        logger.warning(
+                            "AUC TREINO ALTO: {:.4f} — risco de overfitting. "
+                            "Verifique max_depth e min_child_weight.",
+                            auc,
+                        )
+                    else:
+                        logger.info("AUC no treino: {:.4f}", auc)
         except ValueError:
             pass  # Somente 1 classe no y
 

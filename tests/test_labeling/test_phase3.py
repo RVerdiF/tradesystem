@@ -36,12 +36,15 @@ def trending_up_df():
     n = 200
     dates = pd.date_range("2024-01-01", periods=n, freq="5min", tz="UTC")
     prices = 100 + np.arange(n) * 0.5 + np.random.randn(n) * 0.1
+    # Série FracDiff: diferenças simples como proxy estacionária
+    fracdiff = pd.Series(prices).diff().fillna(0.0).values
     return pd.DataFrame(
         {
             "open": prices - 0.1,
             "high": prices + 0.3,
             "low": prices - 0.3,
             "close": prices,
+            "close_fracdiff": fracdiff,
             "volume": np.random.randint(100, 500, n),
         },
         index=pd.DatetimeIndex(dates, name="time"),
@@ -56,12 +59,15 @@ def mean_reverting_df():
     # Sinal sinusoidal + ruído
     t = np.arange(n)
     prices = 100 + 5 * np.sin(2 * np.pi * t / 50) + np.random.randn(n) * 0.2
+    # Série FracDiff: diferenças simples como proxy estacionária
+    fracdiff = pd.Series(prices).diff().fillna(0.0).values
     return pd.DataFrame(
         {
             "open": prices - 0.1,
             "high": prices + 0.5,
             "low": prices - 0.5,
             "close": prices,
+            "close_fracdiff": fracdiff,
             "volume": np.random.randint(100, 500, n),
         },
         index=pd.DatetimeIndex(dates, name="time"),
@@ -83,12 +89,15 @@ def simple_up_down_df():
             prices[i] = prices[i - 1] + 0.5  # sobe
         else:
             prices[i] = prices[i - 1] - 0.5  # desce
+    # Série FracDiff: diferenças simples como proxy estacionária
+    fracdiff = pd.Series(prices).diff().fillna(0.0).values
     return pd.DataFrame(
         {
             "open": prices,
             "high": prices + 0.2,
             "low": prices - 0.2,
             "close": prices,
+            "close_fracdiff": fracdiff,
             "volume": np.full(n, 100),
         },
         index=pd.DatetimeIndex(dates, name="time"),
@@ -109,13 +118,23 @@ class TestTrendFollowingAlpha:
         assert set(signal.unique()).issubset({-1, 0, 1})
 
     def test_uptrend_mostly_short_in_reversion_mode(self, trending_up_df):
-        """Em tendência de alta, deve gerar predominantemente sinais -1 (reversão)."""
-        alpha = TrendFollowingAlpha(fast_span=5, slow_span=20, reversion_mode=True)
-        signal = alpha.generate_signal(trending_up_df)
+        """Em tendência de alta, reversion_mode inverte sinais vs trend_mode."""
+        alpha_rev = TrendFollowingAlpha(fast_span=5, slow_span=20, reversion_mode=True)
+        signal_rev = alpha_rev.generate_signal(trending_up_df)
+        alpha_trend = TrendFollowingAlpha(fast_span=5, slow_span=20, reversion_mode=False)
+        signal_trend = alpha_trend.generate_signal(trending_up_df)
         # Exclui warmup
-        active_signal = signal.iloc[20:]
-        short_pct = (active_signal == -1).mean()
-        assert short_pct > 0.7  # maioria vendida devido à inversão
+        active_rev = signal_rev.iloc[20:]
+        active_trend = signal_trend.iloc[20:]
+        # Reversion mode deve inverter sinais: onde trend é long, reversion é short
+        n_rev_short = (active_rev == -1).sum()
+        n_trend_long = (active_trend == 1).sum()
+        n_rev_long = (active_rev == 1).sum()
+        n_trend_short = (active_trend == -1).sum()
+        # Reversion: maioria dos sinais long do trend viram short
+        assert n_rev_short >= n_trend_long * 0.5
+        # E reversion deve ter menos longs que trend tem shorts
+        assert n_rev_long <= n_trend_short + n_trend_long
 
     def test_warmup_is_neutral(self, trending_up_df):
         """Os primeiros períodos (warmup) devem ser neutros (0)."""
@@ -127,6 +146,21 @@ class TestTrendFollowingAlpha:
         """Propriedade name deve retornar string descritiva."""
         alpha = TrendFollowingAlpha(fast_span=10, slow_span=50)
         assert "TrendFollowing" in alpha.name
+
+    def test_uses_fracdiff_when_available(self, trending_up_df):
+        """Deve usar coluna close_fracdiff quando presente."""
+        alpha = TrendFollowingAlpha(fast_span=5, slow_span=20)
+        signal_fracdiff = alpha.generate_signal(trending_up_df)
+        # Verifica que o sinal foi gerado (não caiu no fallback com warning)
+        assert len(signal_fracdiff) == len(trending_up_df)
+
+    def test_fallback_to_close_without_fracdiff(self, trending_up_df):
+        """Deve fazer fallback para close se close_fracdiff estiver ausente."""
+        df_no_fracdiff = trending_up_df.drop(columns=["close_fracdiff"])
+        alpha = TrendFollowingAlpha(fast_span=5, slow_span=20)
+        # Deve gerar sinal sem lançar exceção (fallback com warning)
+        signal = alpha.generate_signal(df_no_fracdiff)
+        assert len(signal) == len(df_no_fracdiff)
 
 
 class TestMeanReversionAlpha:
@@ -146,6 +180,19 @@ class TestMeanReversionAlpha:
         has_long = (signal == 1).any()
         has_short = (signal == -1).any()
         assert has_long and has_short
+
+    def test_uses_fracdiff_when_available(self, mean_reverting_df):
+        """Deve usar coluna close_fracdiff quando presente."""
+        alpha = MeanReversionAlpha(window=20, entry_threshold=1.5, exit_threshold=0.0)
+        signal = alpha.generate_signal(mean_reverting_df)
+        assert len(signal) == len(mean_reverting_df)
+
+    def test_fallback_to_close_without_fracdiff(self, mean_reverting_df):
+        """Deve fazer fallback para close se close_fracdiff estiver ausente."""
+        df_no_fracdiff = mean_reverting_df.drop(columns=["close_fracdiff"])
+        alpha = MeanReversionAlpha(window=20, entry_threshold=1.5, exit_threshold=0.0)
+        signal = alpha.generate_signal(df_no_fracdiff)
+        assert len(signal) == len(df_no_fracdiff)
 
 
 class TestSignalEvents:

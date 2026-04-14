@@ -122,6 +122,9 @@ def train_model(df: pd.DataFrame, interval: str = "1h", params: dict | None = No
     features["ffd"] = frac_diff_ffd(df["close"], d=optimal_d)
     features = features.dropna()
     df_aligned = df.reindex(features.index)
+    # Adiciona série FracDiff para o Alpha operar sobre dados estacionários
+    df_aligned = df_aligned.copy()
+    df_aligned["close_fracdiff"] = features["ffd"]
     logger.info(f"Features: {features.shape}")
 
     if params is None:
@@ -262,11 +265,18 @@ class LivePipeline:
             if features.empty or len(features) < 10:
                 return self._neutral()
 
+            # Salva série FracDiff antes de selecionar colunas do modelo
+            ffd_series = features["ffd"]
+
             # Garante mesmas colunas do treino
             missing = set(self.feature_columns) - set(features.columns)
             for col in missing:
                 features[col] = 0.0
             features = features[self.feature_columns]
+
+            # Adiciona close_fracdiff para o Alpha operar sobre série estacionária
+            df = df.copy()
+            df["close_fracdiff"] = ffd_series
 
             # 2. Sinal Alpha (última barra)
             signal = self.alpha.generate_signal(df)
