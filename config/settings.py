@@ -18,12 +18,10 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DATA_DIR = PROJECT_ROOT / "data"
 RAW_DATA_DIR = DATA_DIR / "raw"
 PROCESSED_DATA_DIR = DATA_DIR / "processed"
-SAMPLES_DATA_DIR = DATA_DIR / "samples"
-LOG_DIR = PROJECT_ROOT / "logs"
 DB_PATH = PROJECT_ROOT / "data" / "tradesystem.db"
 
 # Garante que diretórios existam
-for _d in (RAW_DATA_DIR, PROCESSED_DATA_DIR, SAMPLES_DATA_DIR, LOG_DIR):
+for _d in (RAW_DATA_DIR, PROCESSED_DATA_DIR):
     _d.mkdir(parents=True, exist_ok=True)
 
 
@@ -46,13 +44,6 @@ class MT5Config:
 # ---------------------------------------------------------------------------
 # Símbolos e Timeframes
 # ---------------------------------------------------------------------------
-DEFAULT_SYMBOLS: list[str] = [
-    "PETR4",
-    "VALE3",
-    "WINFUT",
-    "WDOFUT",
-]
-
 # Timeframes MT5 (constantes numéricas do MetaTrader5)
 # 1=M1, 5=M5, 15=M15, 60=H1, 1440=D1
 DEFAULT_TIMEFRAME: int = 5  # M5
@@ -92,8 +83,6 @@ class RiskConfig:
     max_drawdown_pct: float = 0.05  # 5% drawdown máximo
     max_daily_profit_pct: float = 0.02  # 2% lucro máximo diário (novo)
     cool_down_minutes: float = 5.0  # Minutos de resfriamento pós-saída (novo)
-    max_position_size: float = 200.0  # lote máximo por trade
-    max_open_positions: int = 5
     kelly_fraction: float = 0.5  # Kelly fracionário (50%)
     min_conviction_threshold: float = (
         0.5  # Limiar mínimo de probabilidade do Meta-Model para operar
@@ -126,24 +115,6 @@ class CostConfig:
 
 
 # ---------------------------------------------------------------------------
-# Logging
-# ---------------------------------------------------------------------------
-@dataclass(frozen=True)
-class LogConfig:
-    """Configuração de logging."""
-
-    level: str = "INFO"
-    rotation: str = "10 MB"
-    retention: str = "30 days"
-    format: str = (
-        "<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | "
-        "<level>{level: <8}</level> | "
-        "<cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> | "
-        "<level>{message}</level>"
-    )
-
-
-# ---------------------------------------------------------------------------
 # Feature Engineering
 # ---------------------------------------------------------------------------
 @dataclass(frozen=True)
@@ -173,12 +144,8 @@ class FeatureConfig:
     # Regime Detection (Hurst Exponent)
     hurst_window: int = 100  # Janela rolante para cálculo do Hurst
     hurst_step: int = 5  # Passo de cálculo (>1 para performance)
-    hurst_threshold: float = 0.55  # H > este valor = regime de tendência válido
 
     # Volume Imbalance (Order Flow Filter)
-    vol_imbalance_window: int = 20  # Janela do volume imbalance
-    vol_imbalance_z_window: int = 50  # Janela para z-score do imbalance
-    vol_imbalance_z_threshold: float = 0.5  # Z-score mínimo para validar sinal
 
 
 # ---------------------------------------------------------------------------
@@ -282,7 +249,6 @@ class ExecutionConfig:
     poll_interval: float = 0.5  # Segundos entre leitura de ticks
     max_slippage_ticks: int = 5  # Desvio máximo aceito em envio a mercado
     magic_number: int = 5000  # Identificador das ordens do sistema
-    reconciliation_interval: int = 60  # Segundos entre reconciliações posição real vs esperada
     live_bars: int = 1000  # Barras buscadas do MT5 por ciclo (deve exceder min_bars do pipeline)
 
 
@@ -294,7 +260,6 @@ bar_sampling_config = BarSamplingConfig()
 cleaning_config = CleaningConfig()
 risk_config = RiskConfig()
 cost_config = CostConfig()
-log_config = LogConfig()
 feature_config = FeatureConfig()
 labeling_config = LabelingConfig()
 ml_config = MLConfig()
