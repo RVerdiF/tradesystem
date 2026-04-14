@@ -132,7 +132,7 @@ def objective_phase1(trial, df, interval):
             trial.suggest_float("pt_mult", *optimization_config.pt_sl_range),
             trial.suggest_float(
                 "sl_mult",
-                max(1.5, optimization_config.pt_sl_range[0]),
+                max(1.5, float(optimization_config.pt_sl_range[0]) if hasattr(optimization_config.pt_sl_range[0], "__float__") else 1.5),
                 optimization_config.pt_sl_range[1],
             ),
         ),
@@ -184,19 +184,19 @@ def objective_phase2(trial, df, interval, base_params):
     params.update(
         {
             "meta_threshold": trial.suggest_float(
-                "meta_threshold", *optimization_config.meta_threshold_range
+                "meta_threshold", optimization_config.meta_threshold_range[0], optimization_config.meta_threshold_range[1]
             ),
             "xgb_max_depth": trial.suggest_int(
-                "xgb_max_depth", *optimization_config.max_depth_range
+                "xgb_max_depth", optimization_config.max_depth_range[0], optimization_config.max_depth_range[1]
             ),
-            "xgb_gamma": trial.suggest_float("xgb_gamma", *optimization_config.xgb_gamma_range),
-            "xgb_lambda": trial.suggest_float("xgb_lambda", *optimization_config.xgb_lambda_range),
-            "xgb_alpha": trial.suggest_float("xgb_alpha", *optimization_config.xgb_alpha_range),
+            "xgb_gamma": trial.suggest_float("xgb_gamma", optimization_config.xgb_gamma_range[0], optimization_config.xgb_gamma_range[1]),
+            "xgb_lambda": trial.suggest_float("xgb_lambda", optimization_config.xgb_lambda_range[0], optimization_config.xgb_lambda_range[1]),
+            "xgb_alpha": trial.suggest_float("xgb_alpha", optimization_config.xgb_alpha_range[0], optimization_config.xgb_alpha_range[1]),
             "xgb_min_child_weight": trial.suggest_float(
-                "xgb_min_child_weight", *optimization_config.xgb_min_child_weight_range
+                "xgb_min_child_weight", optimization_config.xgb_min_child_weight_range[0], optimization_config.xgb_min_child_weight_range[1]
             ),
             "scale_pos_weight": trial.suggest_float(
-                "scale_pos_weight", *optimization_config.scale_pos_weight_range
+                "scale_pos_weight", optimization_config.scale_pos_weight_range[0], optimization_config.scale_pos_weight_range[1]
             ),
         }
     )

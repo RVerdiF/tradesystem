@@ -94,6 +94,8 @@ def test_run_optimization_integration(sample_df, mock_results):
             mock_config.xgb_gamma_range = (0.0, 2.0)
             mock_config.xgb_lambda_range = (1.0, 5.0)
             mock_config.xgb_alpha_range = (0.0, 2.0)
+            mock_config.xgb_min_child_weight_range = (1.0, 20.0)
+            mock_config.scale_pos_weight_range = (1.0, 25.0)
 
             results = run_optimization(sample_df, "1h")
             
