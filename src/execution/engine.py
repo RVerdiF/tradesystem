@@ -201,7 +201,7 @@ class AsyncTradingEngine:
 
             # Executa todos os processamentos em paralelo usando asyncio.gather
             tasks = [self._process_symbol(sym) for sym in self.symbols]
-            await asyncio.gather(*tasks)
+            await asyncio.gather(*tasks, return_exceptions=True)
 
             # Controla a frequência de polling para não fritar CPU / API MT5
             elapsed = time.monotonic() - start_time
