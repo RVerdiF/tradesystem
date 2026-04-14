@@ -83,8 +83,8 @@ class TestPurgeEmbargo:
         test_end = synthetic_events.iloc[10]    # 11:45
         test_times = pd.Series(index=[test_start], data=[test_end])
         
-        # Treino "purged" ainda tem todos os da frente
-        train_times = synthetic_events.drop(test_start) 
+        # Treino "purged" deve ser obtido via get_train_times para simular cenário real
+        train_times = get_train_times(synthetic_events, test_times)
         
         # Vamos pedir embargo de 12 minutos via step absoluto (evita calculo relativo pct pro teste unitario)
         valid = apply_embargo(train_times, test_times, step=pd.Timedelta(minutes=12))
