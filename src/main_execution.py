@@ -70,7 +70,7 @@ from src.features.frac_diff import find_min_d, frac_diff_ffd, get_weights_ffd
 from src.features.indicators import compute_all_features
 
 # Alpha e Labeling
-from src.labeling.alpha import TrendFollowingAlpha, get_signal_events
+from src.labeling.alpha import CompositeAlpha, get_signal_events
 from src.labeling.triple_barrier import create_events, get_labels
 from src.labeling.volatility import get_volatility_targets
 from src.modeling.bet_sizing import compute_kelly_fraction
@@ -134,7 +134,7 @@ def train_model(df: pd.DataFrame, interval: str = "1h", params: dict | None = No
     slow_span = params.get("alpha_slow", labeling_config.trend_slow_span)
 
     # --- Alpha ---
-    alpha = TrendFollowingAlpha(
+    alpha = CompositeAlpha(
         fast_span=fast_span,
         slow_span=slow_span,
     )
@@ -249,7 +249,7 @@ class LivePipeline:
     def __init__(self, artifacts: dict) -> None:
         self.model: MetaClassifier = artifacts["model"]
         self.optimal_d: float = artifacts["optimal_d"]
-        self.alpha: TrendFollowingAlpha = artifacts["alpha"]
+        self.alpha: CompositeAlpha = artifacts["alpha"]
         self.feature_columns: list[str] = artifacts["feature_columns"]
 
         # Buffer mínimo: kernel FFD + margem para EMAs/rolling warm-up

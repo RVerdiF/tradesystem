@@ -41,8 +41,8 @@ class MetaClassifier(BaseEstimator, ClassifierMixin):
 
     Wraps um XGBoost Classifier ou RandomForestClassifier.
 
-    NOTA: scale_pos_weight é mantido fixo em 1.0 (sem balanceamento automático).
-    O modelo deve manter viés conservador onde não operar é a escolha padrão.
+    NOTA: scale_pos_weight é calculado dinamicamente no método fit() para garantir
+    a penalização proporcional de classes desbalanceadas.
 
     Parameters
     ----------
@@ -144,9 +144,14 @@ class MetaClassifier(BaseEstimator, ClassifierMixin):
             X.shape[1] if len(X.shape) > 1 else 0,
         )
 
-        # NOTA: scale_pos_weight removido (valor fixo em 1.0 na inicialização).
-        # O modelo deve manter seu viés natural conservador — não operar é a escolha padrão.
-        # Ver plano: scale_pos_weight_fix
+        # Calcular dinamicamente o peso da classe positiva
+        if self.use_xgboost:
+            n_pos = np.sum(y == 1)
+            n_neg = np.sum(y == 0)
+            if n_pos > 0:
+                dynamic_spw = n_neg / n_pos
+                self.model.set_params(scale_pos_weight=dynamic_spw)
+                logger.info("XGBoost configurado com scale_pos_weight dinâmico: {:.4f}", dynamic_spw)
 
         self.model.fit(X, y, sample_weight=sample_weight)
         self.is_fitted_ = True

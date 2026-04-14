@@ -180,6 +180,10 @@ class FeatureConfig:
     vol_imbalance_z_window: int = 50  # Janela para z-score do imbalance
     vol_imbalance_z_threshold: float = 0.5  # Z-score mínimo para validar sinal
 
+    # VPIN
+    vpin_bucket_size: int = 5000
+    vpin_window: int = 50
+
 
 # ---------------------------------------------------------------------------
 # Labeling (Fase 3 — Alpha + Tripla Barreira)
@@ -202,8 +206,8 @@ class LabelingConfig:
 
     # Tripla Barreira
     pt_sl_ratio: tuple[float, float] = (2.77, 2.98)  # (profit_take, stop_loss) (Otimizado PETR4.SA)
-    be_trigger: float = 0.0  # Gatilho de breakeven (0.0 = desativado)
-    max_holding_periods: int = 50  # Barreira vertical (barras máximas)
+    be_trigger: float = 0.5  # Gatilho de breakeven (0.0 = desativado)
+    max_holding_periods: int = 100  # Barreira vertical (barras máximas)
     min_return: float = 0.005  # Retorno mínimo para considerar label +1
 
 
@@ -236,7 +240,7 @@ class OptimizationConfig:
 
     # Ranges de busca fundamentais (Top 10 - "Faxina Real")
     cusum_range: tuple[float, float] = (0.001, 0.003)
-    pt_sl_range: tuple[float, float] = (1.0, 3.0)  # SL floor=1.5 em tuner.py
+    pt_sl_range: tuple[float, float] = (0.5, 3.5)  # SL floor=1.5 em tuner.py
     meta_threshold_range: tuple[float, float] = (0.05, 0.45)  # calibrado para datasets desbalanceados (5-10% positivos)
     max_depth_range: tuple[int, int] = (1, 2)
 
