@@ -1,55 +1,86 @@
 # Módulo de Modelagem e Validação (src/modeling)
 
-## Objetivo
-O Módulo de Modelagem é o coração preditivo do TradeSystem5000. Ele unifica as features e os rótulos (labels) para treinar um modelo de Machine Learning focado em resolver o problema de classificação binária gerado pelo Meta-Labeling (ver `src/labeling`). Diferente dos pacotes clássicos de ML (como `scikit-learn`), a arquitetura aqui é customizada pesadamente para séries temporais financeiras, abordando o grave problema de sobreajuste (*overfitting*) e vazamento de dados (*data leakage*) inerente aos dados temporalmente sobrepostos. Também é responsável por dimensionar o tamanho financeiro das apostas (Bet Sizing) em tempo real após a inferência.
+## Objetivo Detalhado
+Este Módulo encapsula o motor cognitivo e gerencial do TradeSystem5000. No escopo algorítmico tradicional, o treinamento (fit) do Machine Learning é meramente estatístico: injeta-se todo o passado ($X, y$) e cospe-se pesos treinados sem levar o viés temporal a sério. Aqui, essa prática ingênua é categoricamente estirpada com as técnicas agressivas da Teoria Financeira Quantitativa do *Purging* e do *Embargo*.
 
-## Integração com outros módulos
-- **Labeling (`src/labeling`) e Features (`src/features`)**: Consome o histórico temporal com inputs ($X$) de features processadas e outputs ($y$) de meta-labels e barreira tripla.
-- **Optimization (`src/optimization`)**: O sintonizador bayesiano utiliza as dobras (folds) da validação cruzada exposta aqui para encontrar hiperparâmetros ótimos para o `classifier`.
-- **Execution (`src/execution`)**: No ambiente de trading real ou simulação backtest, consome as funções de inferência de `classifier.py` e extrai o dimensionamento de ordens via `bet_sizing.py`.
+Este diretório atua unindo o preparo imunológico contra a fuga/vazamento de dados (Data Leakage) antes de fornecer as matrizes embutidas para as árvores do *XGBoost* avaliarem se um sinal secundário compensa ou não (Classificação Binária). Para além do aprendizado, ele toma a frente na Matemática Financeira Aplicada, transmutando probabilidades gélidas em recomendações ativas de apostas proporcionais via Teoria de Kelly.
 
-## Mapa de funções
+## Integração com Outros Módulos
+- **Labeling (`src/labeling`) e Features (`src/features`)**: Carrega a tabela complexa e final do ciclo (Features $X$ geradas da Diferenciação e CUSUM vs Meta-Labels Binomiais $y$).
+- **Optimization (`src/optimization`)**: Empresta a lógica modular `PurgedKFold` e a injeção do modelo de Classificador para que o Optuna os mutile milhões de vezes validando scores imunes e achando os hiperparâmetros campeões do ML.
+- **Execution (`src/execution`)**: Alimenta a execução "Live", servindo como uma biblioteca *plug-and-play* fornecendo as funções pesadas já preparadas `predict_meta_model` para despachar probabilidades puras que, na mesma tacada, acionam as calculadoras de lotes do `bet_sizing`.
 
-### Validação Cruzada Especializada (`cv.py`)
-- `PurgedKFold`: Implementa uma classe (compatível com a interface do scikit-learn) para dividir o *dataset* em dobras de treino e teste não sucessivas, purificando sobreposições para impedir vazamento (look-ahead) provocado pelas barras dependentes (como a duração não-fixa das triplas barreiras).
+## Mapa de Funções e Componentes Chave
 
-### Saneamento de Amostras (`purge_embargo.py`)
-- `get_train_times`: Aplica o *Purging*, varrendo o conjunto temporal e excluindo qualquer observação de treino que inicie antes e termine dentro (ou depois) da janela temporal de teste.
-- `apply_embargo`: Aplica o *Embargoing*, cortando uma faixa de amostras do treino posicionadas imediatamente após o término da dobra de teste. Previne vazamento pela autocorrelação serial comum nos mercados de capitais.
-- `purge_and_embargo`: Orquestra ambas as funções acima fornecendo os limiares rigorosos de subconjuntos de treino limpos.
+### 1. Purga e Embargo - A Imunização de Data Leakage (`purge_embargo.py`)
+No ML clássico (como `scikit-learn`), a função `train_test_split` randomiza e mistura aleatoriamente os dados. Em séries financeiras (se os Trades de Treino abrangerem eventos onde o Fechamento da barra cai temporalmente nos dias reservados para Teste), o modelo espia o futuro.
+- `get_train_times`: Aplica a "Purga". Escrutina todas as datas abertas contra os splits designados para testes ocultos, decapando e exterminando impiedosamente qualquer operação do treino que nasça ou persista durante e após o relógio do teste ter iniciado.
+- `apply_embargo`: Após testarmos modelos sobre o período de Dezembro/2023, não podemos simplesmente ligar o Treino no primeiro de Janeiro/2024. A autocorrelação temporal (Momentum de longo prazo) derramará o aprendizado de Dezembro artificialmente. Cria-se o "Embargo", um abismo sintético invisível de tempo de duração estrita logo após a dobra de teste expirar para isolar regimes temporais sucessivos.
 
-### Meta-Modelo Classificador (`classifier.py`)
-- `train_meta_model`: Rotina global que compila o Pipeline de aprendizado (usualmente um `XGBoost` ou `RandomForest`). Ajusta o `class_weight` dinâmico caso os sinais negativos desbalanceiem o *dataset*.
-- `predict_meta_model`: Encapsula a inferência e retorna explicitamente o `predict_proba` (a confiança no modelo primário), um valor contínuo essencial para dimensionar as apostas, ao invés do tradicional output binário bruto.
+### 2. K-Fold Purificado Compatível (`cv.py`)
+Módulo de *facade* arquitetural. Como toda a comunidade trabalha em cima da padronização de compatibilidade de bibliotecas, foi escrito do zero esse módulo para "enganar" as métricas do Optuna/Scikit, fornecendo arrays limpos no padrão compatível com `cross_val_score`.
+- `PurgedKFold`: Injeta a Purga e Embargo nos iteradores *yield* nativos para serem consumidos como dobras de dados intocados.
 
-### Dimensionamento da Posição / Bet Sizing (`bet_sizing.py`)
-- `compute_kelly_fraction`: Deriva a agressividade do risco do trade calculando a fração do critério de Kelly, unindo a probabilidade extraída do classificador contra a razão Risco/Recompensa.
-- `discretize_bet`: Converte as frações contínuas sugeridas por Kelly em número inteiro de contratos futuros negociáveis (ex: WINFUT), arredondando aos blocos e respeitando limites estritos.
-- `apply_conviction_threshold`: Zera o Kelly / tamanho da posição se o Meta-Modelo reportar uma convicção insatisfatória, mitigando execuções de ruído.
+**Snippet do Setup Validação Purificada e Embargada:**
+```python
+from src.modeling.cv import PurgedKFold
+from src.modeling.classifier import train_meta_model
+import xgboost as xgb
 
-### Avaliação de Features (`feature_evaluation.py`)
-- *Utilidades para investigar importância preditiva de features, como MDA (Mean Decrease Accuracy) ou MDI, garantindo que colunas irrelevantes não diluam o sinal na modelagem.* (Implementação contextual das métricas financeiras).
+# Gera um split de validação anti-vazamento separando a história
+# em 5 dobras onde 1% de todos os tempos são queimados como "Embargo"
+# após cada subconjunto de teste.
+cv_generator = PurgedKFold(
+    n_splits=5,
+    samples_info=df_trade_timeline, # Série pandas de T0(início) e T1(fim) do Trade
+    pct_embargo=0.01
+)
 
-## Lógica geral
-Séries temporais financeiras não são vetores de dados independentes. Se o Trade A começa na hora 1 e acaba na hora 3, e o Trade B (que cai numa dobra de Teste do K-Fold) começa na hora 2, o algoritmo de ML "vê" o futuro (o fechamento das horas 2 e 3 está embutido nos retornos de A). Portanto, `cv.py` e `purge_embargo.py` fazem fatiamentos matemáticos temporais baseados no índice de tempo do trade ($t_0$) até a sua liquidação ($t_1$).
-Só depois desse preparo laborioso que o XGBoost (em `classifier.py`) é efetivamente treinado.
-Na fase de *Deploy*/Inferência, o sistema pega as probabilidades reportadas pelo classificador e passa pelo filtro rigoroso do critério de Kelly. Assim, o robô aposta grande em trades de alta clareza (90%+ de acerto) e pequeno em cenários ambíguos.
+# Aciona o XGBoost com a certeza que ele não decorará o gabarito
+modelo_seguro = train_meta_model(X_features, y_meta_labels, cv=cv_generator)
+```
 
-## Lógica matemática
-1. **Purging & Embargoing**:
-   Seja $I_{test} = [t_{test\_start}, t_{test\_end}]$ o intervalo de teste.
-   Um trade de treino em $I_{train} = [t_0, t_1]$ é descartado (purged) se:
-   $$ \text{Overlap} \implies (t_0 \le t_{test\_end}) \land (t_1 \ge t_{test\_start}) $$
-   Após o expurgo de sobreposição, o Embargo exclui amostras de treino se:
-   $$ \text{Embargo} \implies (t_0 > t_{test\_end}) \land (t_0 \le t_{test\_end} + E) $$
-   Onde $E$ é a duração da fração de embargo $h$.
+### 3. Modelo Treinador de Probabilidade (`classifier.py`)
+Sub-núcleo algorítmico do XGBoost. Diferente da classificação ordinária, ele tem pesos manipulados (Scale_Pos_Weight) contra a disparidade de classes severas nas bases de dados (geralmente sobram 90% falhas para 10% sucessos no trade).
+- `predict_meta_model`: A engrenagem de resposta contínua. Nós exigimos da inferência o flutuante escalar probabilístico (ex: $P=0.68$) do estimador ao invés da mera saída bruta arredondada $[0, 1]$, fator inegociável para calibragem matemática da posição futura com Kelly.
 
-2. **Fração de Kelly (Half/Fractional Kelly)**:
-   Baseado na probabilidade contínua gerada por um Sigmoid ou Softmax (XGBoost):
-   $$ p = \text{prob\_win} $$
-   $$ q = 1 - p $$
-   O Kelly fracionário é expresso como a vantagem sobre as *Odds* (razão recompensa-risco do Alpha/Tripla Barreira):
-   $$ f\_kelly = \left( p - \frac{q}{\text{Odds}} \right) \cdot \text{fraction\_limit} $$
-   Se as Odds são $1:1$ (TP e SL são proporcionais ao risco):
-   $$ f = (2p - 1) $$
-   Apenas sinais com vantagem real ($p > 0.5$) resultarão num tamanho de aposta $> 0$.
+### 4. Gestão Quantitativa da Banca e Contratos (`bet_sizing.py`)
+Enquanto Analistas Físicos operam *stop/take* fixo ("1 lote sempre e para todo trade"), Sistemas AFML não correm esse nível de risco burro. Um trade com Probabilidade $P = 55\%$ deve despender muito menos capital exposto ao leão mercadológico que um trade que cruzou o classificador reportando $P = 98\%$.
+- `compute_kelly_fraction`: Utiliza a Probabilidade Contínua do classificador injetada diretamente na Fórmula Fracionária de Kelly, modulada pelo limiar e *odds*. Retorna números não lineares cravados em $[0, 1]$ de exposição sugerida.
+- `discretize_bet`: Lida com a chata infraestrutura das corretoras; afinal, você não pode negociar "0,42 contratos do WING26", logo precisa traduzir 42% fracionários num envelope unitário absoluto com teto pré-aprovado (`max_position` permitida pelo Robô) re-enviando os pacotes finais pro MT5.
+
+**Snippet do Consumo Direto para Betting Size (Kelly Sizing):**
+```python
+from src.modeling.bet_sizing import compute_kelly_fraction, discretize_bet
+
+# 1. Pega as probabilidades do modelo que rodou os dados de hoje
+prob_win = model.predict_proba(current_market_features)[:, 1] # Retorna ex: 0.82 (82% de convicção)
+
+# 2. Insere a convicção para extrair o quanto da banca vamos expor
+kelly_size_perc = compute_kelly_fraction(
+    prob_win=prob_win,
+    odds=2.0,      # Aquele setup histórico possui uma taxa de Win/Loss media de $2 p/ $1
+    fraction=0.5   # Half-Kelly (Corta o Kelly agressivo puro pela metade por segurança)
+)
+
+# 3. Transforma o output da matemática contínua num volume palpável e real em Lotes pra B3
+lotes_alvo = discretize_bet(kelly_size_perc, max_position=10, step_size=1)
+print(f"Comando Final de Máquina: Emitir agressão a mercado no tamanho de {lotes_alvo} lotes.")
+```
+
+## A Lógica Geral Sobre O Dilema Crônico do Vazamento (Leakage)
+
+A armadilha na predição de ações consiste em pensar no mercado como planilhas médicas ou perfis de cliente independentes (um diagnóstico do paciente A não altera nem predispõe ou prevê o paciente B).
+Num histórico intradiário do Ibovespa, uma tendência se propaga serialmente e temporalmente criando um fantasma de eco durável pelas próximas centenas de ticks (a autocorrelação temporal).
+Se numa dobra o seu CV divide a barra temporal estrita $t=499$ para teste e a amostra de $t=500$ é sorteada magicamente para integrar a base de treino subjacente que forjará os pesos lógicos do estimador daquele CV, ocorre o Vazamento do Futuro, estourando as avaliações com uma precisão mágica fraudulenta (Overfitting Extremo). Por isso nós purgamos rigidamente dobras adjacentes.
+
+## Fisiologia Matemática Aplicada e Otimizada
+
+### A Matemática de Kelly Adaptada Para Retornos e Perdas Empíricas
+O Critério de Kelly não fracionário é originário de Bell Labs pra telefonia e modificado por Edward Thorp (Afastando as falácias dos cassinos). Se pautado diretamente para trading, tem a característica violenta de quebrar os especuladores se as probabilidades sofrerem ínfima mutação frente à calibração (overbetting contínuo gerando falência matemática assintótica).
+Considerando as probabilidades extraídas da predição $\hat{p}$:
+Seja $b$ o Odds (lucro do trade perdedor em razão à perda) ditado pela sua meta na tripla barreira. A fração agressiva inicial da carteira otimizada $\hat{f}$ que maximiza matematicamente o Log-Retorno histórico do capital seria:
+$$ \hat{f} = \hat{p} - \frac{1 - \hat{p}}{b} $$
+Nós introduzimos o redutor mitigatório (*Fractional Kelly*) designado pela variável empírica de conservação $c$ (Ex: $0.5$ que dita Half-Kelly):
+$$ F_{final} = \hat{f} \cdot c $$
+Sinais que cruzem o limiar do limbo de vantagem de casa $\hat{f} \le 0$ são clipados em zero. Não se envia uma ordem para predição incerta ou desvantajosa estatisticamente. A decisão booleana "Devo apostar ou ficar de fora das taxas B3?" se aninha perfeitamente num único output escalar suave gerado entre $[0, c]$.
