@@ -213,34 +213,6 @@ class TestCoolDown:
         assert "MAX DAILY LOSS REACHED" in rm.halt_reason
         assert "PETR4" not in rm._cool_down_until
 
-    def test_update_equity_missing_trade_day(self):
-        """Testa reativar sistema no dia seguinte."""
-        import src.execution.risk as risk_module
-    
-        rm = RiskManager(start_balance=100000.0)
-        rm.system_state = "HALTED_FOR_DAY"
-        rm.last_trading_day = datetime.date(2023, 1, 1)
-    
-        with patch.object(risk_module.datetime, 'date', wraps=datetime.date) as mock_date:
-            with patch.object(risk_module.datetime, 'datetime', wraps=datetime.datetime) as mock_dt:
-                mock_date.today.return_value = datetime.date(2023, 1, 2)
-                mock_dt.now.return_value = datetime.datetime(2023, 1, 2, 10, 0, 0)
-                rm.update_equity(100000.0, 100000.0)
-                assert rm.system_state == "ACTIVE"
-
-    def test_update_equity_missing_start_balance(self):
-        """Testa se balance eh inicializado quando for None."""
-        import src.execution.risk as risk_module
-        rm = RiskManager(start_balance=None)
-        
-        with patch.object(risk_module.datetime, 'date', wraps=datetime.date) as mock_date:
-            mock_date.today.return_value = datetime.date(2023, 1, 1)
-            rm.last_trading_day = datetime.date(2023, 1, 1)
-            
-            rm.update_equity(100000.0, 100000.0)
-            assert rm.start_balance == 100000.0
-            assert rm.highest_equity == 100000.0
-
     def test_validate_order_halted(self):
         """testa validate_order quando não pode operar"""
         rm = RiskManager(start_balance=100000.0)
@@ -272,3 +244,84 @@ class TestCoolDown:
         rm.notify_trade_closed("PETR4")
         assert rm.system_state == "ACTIVE"
         assert "PETR4" not in rm._cool_down_until
+
+
+class TestUpdateEquity:
+    def test_update_equity_daily_reset(self):
+        """Valida se a mudança de dia reseta corretamente saldo, estado e cool-downs."""
+        rm = RiskManager(start_balance=100000.0)
+
+        # Estado anterior
+        rm.system_state = "HALTED_FOR_DAY"
+        rm.halt_reason = "MAX DAILY LOSS REACHED"
+        rm.last_trading_day = datetime.date(2024, 1, 1)
+        rm._cool_down_until["PETR4"] = datetime.datetime.now() + datetime.timedelta(minutes=30)
+
+        with patch('src.execution.risk.datetime') as mock_datetime:
+            mock_datetime.date.today.return_value = datetime.date(2024, 1, 2)
+            mock_now = MagicMock()
+            mock_now.time.return_value = datetime.time(10, 0, 0) # Dentro do horário
+            mock_datetime.datetime.now.return_value = mock_now
+
+            # Envia novo saldo
+            rm.update_equity(105000.0, 105000.0)
+
+        # Validações do Reset Diário
+        assert rm.start_balance == 105000.0
+        assert rm.last_trading_day == datetime.date(2024, 1, 2)
+        assert len(rm._cool_down_until) == 0
+        assert rm.system_state == "ACTIVE"
+        assert rm.halt_reason == ""
+
+    def test_update_equity_missing_start_balance(self):
+        """Testa se balance é inicializado quando for None."""
+        import src.execution.risk as risk_module
+        rm = RiskManager(start_balance=None)
+
+        with patch.object(risk_module.datetime, 'date', wraps=datetime.date) as mock_date:
+            mock_date.today.return_value = datetime.date.today()
+            rm.last_trading_day = datetime.date.today()
+
+            with patch('src.execution.risk.datetime.datetime') as mock_dt:
+                mock_now = MagicMock()
+                mock_now.time.return_value = datetime.time(10, 0, 0)
+                mock_dt.now.return_value = mock_now
+
+                rm.update_equity(100000.0, 100000.0)
+
+        assert rm.start_balance == 100000.0
+        assert rm.highest_equity == 100000.0
+
+    def test_update_equity_halted_for_day_returns_early(self):
+        """Testa se _check_circuit_breakers retorna imediatamente quando STATE_HALTED_FOR_DAY."""
+        rm = RiskManager(start_balance=100000.0)
+        rm._set_state("HALTED_FOR_DAY", "SOME REASON")
+
+        mock_now = MagicMock()
+        mock_now.time.return_value = datetime.time(8, 0, 0) # Fora do horário
+        with patch('src.execution.risk.datetime.datetime') as mock_dt:
+            mock_dt.now.return_value = mock_now
+            mock_dt.date = datetime.date
+            rm.update_equity(100000.0, 100000.0)
+
+        assert rm.system_state == "HALTED_FOR_DAY"
+        assert rm.halt_reason == "SOME REASON"
+
+    def test_max_drawdown_halts_trading(self):
+        """Testa se _check_circuit_breakers paralisa o sistema em max drawdown."""
+        rm = RiskManager(start_balance=100000.0)
+        rm.max_daily_profit_pct = 0.20
+
+        mock_now = MagicMock()
+        mock_now.time.return_value = datetime.time(10, 0, 0)
+        with patch('src.execution.risk.datetime.datetime') as mock_dt:
+            mock_dt.now.return_value = mock_now
+            mock_dt.date = datetime.date
+
+            rm.update_equity(100000.0, 110000.0)
+            assert rm.highest_equity == 110000.0
+
+            rm.update_equity(100000.0, 104000.0)
+
+        assert rm.system_state == "HALTED_FOR_DAY"
+        assert "MAX DRAWDOWN REACHED" in rm.halt_reason
