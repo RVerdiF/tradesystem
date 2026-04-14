@@ -15,7 +15,7 @@ dependencies = [
     "numba>=0.59,<1",
 
     # MetaTrader 5
-    "MetaTrader5>=5.0.45",
+    "MetaTrader5>=5.0.45; sys_platform == 'win32'",
 
     # Storage
     "pyarrow>=15.0",
