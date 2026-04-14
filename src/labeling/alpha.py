@@ -65,10 +65,13 @@ class TrendFollowingAlpha(AlphaModel):
     """
     Alpha baseado em seguimento de tendência (cruzamento de EMAs).
 
-    Sinal:
+    Sinal (Modo Normal):
     - +1 quando EMA rápida > EMA lenta (tendência de alta)
     - -1 quando EMA rápida < EMA lenta (tendência de baixa)
-    - Transições geram eventos de mudança de sinal
+
+    Sinal (Modo Reversão):
+    - -1 quando EMA rápida > EMA lenta
+    - +1 quando EMA rápida < EMA lenta
 
     Parameters
     ----------
@@ -76,19 +79,24 @@ class TrendFollowingAlpha(AlphaModel):
         Span da EMA rápida. Default: config.
     slow_span : int, optional
         Span da EMA lenta. Default: config.
+    reversion_mode : bool, optional
+        Se True, inverte o sinal (opera contra a tendência). Default: True (conforme Plano de Reversão).
     """
 
     def __init__(
         self,
         fast_span: int | None = None,
         slow_span: int | None = None,
+        reversion_mode: bool = True,
     ) -> None:
         self.fast_span = fast_span or labeling_config.trend_fast_span
         self.slow_span = slow_span or labeling_config.trend_slow_span
+        self.reversion_mode = reversion_mode
 
     @property
     def name(self) -> str:
-        return f"TrendFollowing(fast={self.fast_span}, slow={self.slow_span})"
+        mode_str = "Reversion" if self.reversion_mode else "Trend"
+        return f"TrendFollowing[{mode_str}](fast={self.fast_span}, slow={self.slow_span})"
 
     def generate_signal(self, df: pd.DataFrame) -> pd.Series:
         """
@@ -111,9 +119,15 @@ class TrendFollowingAlpha(AlphaModel):
 
         signal = pd.Series(0, index=close.index, dtype=np.int8, name="signal")
 
-        # +1 quando rápida > lenta, -1 caso contrário
-        signal[ema_fast > ema_slow] = 1
-        signal[ema_fast < ema_slow] = -1
+        # Lógica base: +1 se fast > slow (alta), -1 se fast < slow (baixa)
+        if not self.reversion_mode:
+            signal[ema_fast > ema_slow] = 1
+            signal[ema_fast < ema_slow] = -1
+        else:
+            # Modo Reversão: -1 se fast > slow, +1 se fast < slow
+            signal[ema_fast > ema_slow] = -1
+            signal[ema_fast < ema_slow] = 1
+        
         signal[ema_fast == ema_slow] = 0
 
         # Warm-up: marca NaN até que ambas as EMAs estejam estáveis

@@ -108,14 +108,14 @@ class TestTrendFollowingAlpha:
         assert len(signal) == len(trending_up_df)
         assert set(signal.unique()).issubset({-1, 0, 1})
 
-    def test_uptrend_mostly_long(self, trending_up_df):
-        """Em tendência de alta, deve gerar predominantemente sinais +1."""
-        alpha = TrendFollowingAlpha(fast_span=5, slow_span=20)
+    def test_uptrend_mostly_short_in_reversion_mode(self, trending_up_df):
+        """Em tendência de alta, deve gerar predominantemente sinais -1 (reversão)."""
+        alpha = TrendFollowingAlpha(fast_span=5, slow_span=20, reversion_mode=True)
         signal = alpha.generate_signal(trending_up_df)
         # Exclui warmup
         active_signal = signal.iloc[20:]
-        long_pct = (active_signal == 1).mean()
-        assert long_pct > 0.7  # maioria longa
+        short_pct = (active_signal == -1).mean()
+        assert short_pct > 0.7  # maioria vendida devido à inversão
 
     def test_warmup_is_neutral(self, trending_up_df):
         """Os primeiros períodos (warmup) devem ser neutros (0)."""

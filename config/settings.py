@@ -222,8 +222,8 @@ class OptimizationConfig:
     """Configuração para o otimizador bayesiano (Optuna)."""
 
     # Ranges de busca fundamentais (Top 10 - "Faxina Real")
-    cusum_range: tuple[float, float] = (0.002, 0.015)
-    pt_sl_range: tuple[float, float] = (0.5, 4.5)
+    cusum_range: tuple[float, float] = (0.001, 0.003)
+    pt_sl_range: tuple[float, float] = (1.0, 3.0)      # SL floor=1.5 em tuner.py
     meta_threshold_range: tuple[float, float] = (0.55, 0.70)
     max_depth_range: tuple[int, int] = (1, 2)
     

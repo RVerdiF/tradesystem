@@ -128,7 +128,7 @@ def objective_phase1(trial, df, interval):
         "alpha_slow": trial.suggest_int("alpha_slow", *optimization_config.slow_span_range),
         "pt_sl": (
             trial.suggest_float("pt_mult", *optimization_config.pt_sl_range),
-            trial.suggest_float("sl_mult", *optimization_config.pt_sl_range),
+            trial.suggest_float("sl_mult", max(1.5, optimization_config.pt_sl_range[0]), optimization_config.pt_sl_range[1]),
         ),
         "ma_dist_fast_period": trial.suggest_int("ma_dist_fast_period", *optimization_config.ma_dist_fast_range),
         "ma_dist_slow_period": trial.suggest_int("ma_dist_slow_period", *optimization_config.ma_dist_slow_range),
