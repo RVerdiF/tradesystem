@@ -66,7 +66,7 @@ from src.data.mt5_connector import mt5_session
 # Execução
 from src.execution.engine import AsyncTradingEngine
 from src.features.cusum_filter import adaptive_cusum_events
-from src.features.frac_diff import find_min_d, frac_diff_ffd
+from src.features.frac_diff import find_min_d, frac_diff_ffd, get_weights_ffd
 from src.features.indicators import compute_all_features
 
 # Alpha e Labeling
@@ -212,6 +212,7 @@ def train_model(df: pd.DataFrame, interval: str = "1h", params: dict | None = No
         "optimal_d": optimal_d,
         "alpha": alpha,
         "feature_columns": list(X.columns),
+        "alpha_input_series": "close",  # marcador de versão: Alpha pós-desacoplamento
     }
 
 
@@ -251,11 +252,34 @@ class LivePipeline:
         self.alpha: TrendFollowingAlpha = artifacts["alpha"]
         self.feature_columns: list[str] = artifacts["feature_columns"]
 
+        # Buffer mínimo: kernel FFD + margem para EMAs/rolling warm-up
+        self._ffd_kernel_len = len(
+            get_weights_ffd(self.optimal_d, threshold=feature_config.ffd_threshold)
+        )
+        self._min_bars = self._ffd_kernel_len + 50
+
+        # Verificação de versão do artifact (Alpha pós-desacoplamento)
+        artifact_alpha_input = artifacts.get("alpha_input_series", "close_fracdiff")
+        if artifact_alpha_input != "close":
+            logger.warning(
+                "LivePipeline: artifact foi treinado com alpha_input_series='{}'. "
+                "Modelo atual espera 'close'. Re-treine main_backtest.py antes de operar live.",
+                artifact_alpha_input,
+            )
+
     def __call__(self, df: pd.DataFrame) -> dict:
         """
         Recebe um snapshot histórico (ex: últimas 500 barras) e retorna
         a decisão de trading.
         """
+        if len(df) < self._min_bars:
+            logger.error(
+                "LivePipeline: buffer insuficiente (len(df)={}, mínimo={} = kernel_ffd({}) + 50). "
+                "Retornando sinal neutro para evitar distorção de borda FFD.",
+                len(df), self._min_bars, self._ffd_kernel_len,
+            )
+            return self._neutral()
+
         try:
             # 1. Features
             features = compute_all_features(df)
@@ -274,7 +298,7 @@ class LivePipeline:
                 features[col] = 0.0
             features = features[self.feature_columns]
 
-            # Adiciona close_fracdiff para o Alpha operar sobre série estacionária
+            # close_fracdiff disponível para o filtro de Hurst do Alpha (se habilitado)
             df = df.copy()
             df["close_fracdiff"] = ffd_series
 

@@ -28,6 +28,53 @@ from config.settings import feature_config, labeling_config
 
 
 # ---------------------------------------------------------------------------
+# Hurst Exponent Utility
+# ---------------------------------------------------------------------------
+def compute_hurst_exponent(series: pd.Series, window: int = 100) -> pd.Series:
+    """
+    Compute the rolling Hurst Exponent using the Rescaled Range (R/S) method.
+
+    H > 0.5  =>  trending / persistent series
+    H == 0.5 =>  random walk
+    H < 0.5  =>  mean-reverting series
+
+    Parameters
+    ----------
+    series : pd.Series
+        Price or indicator series. Index must be a DatetimeIndex.
+        For best results, pass close_fracdiff (stationary) rather than raw close.
+    window : int
+        Rolling window length. Minimum recommended: 100 bars.
+        Values below 60 are mathematically unreliable.
+
+    Returns
+    -------
+    pd.Series
+        Rolling Hurst exponent, aligned to the input index.
+        NaN for the first (window - 1) observations and wherever std == 0.
+    """
+    if window < 60:
+        raise ValueError(
+            f"compute_hurst_exponent: window={window} is below the minimum of 60. "
+            "Hurst estimates on short windows are statistically unreliable. "
+            "Use window >= 100 for production."
+        )
+
+    def _rs_hurst(arr: np.ndarray) -> float:
+        """Single-window R/S Hurst calculation. Called by rolling().apply()."""
+        n = len(arr)
+        mean_adj = arr - arr.mean()
+        cumdev = np.cumsum(mean_adj)
+        r = cumdev.max() - cumdev.min()
+        s = arr.std(ddof=1)
+        if s == 0.0 or r == 0.0:
+            return np.nan
+        return np.log(r / s) / np.log(n / 2)
+
+    return series.rolling(window=window).apply(_rs_hurst, raw=True)
+
+
+# ---------------------------------------------------------------------------
 # Filter utilities
 # ---------------------------------------------------------------------------
 def apply_regime_filter(
@@ -183,8 +230,12 @@ class TrendFollowingAlpha(AlphaModel):
         Se True, aplica filtro de regime via Hurst Exponent. Default: False.
     enable_volume_filter : bool, optional
         Se True, aplica filtro de Volume Imbalance. Default: False.
-    hurst_threshold : float, optional
-        Threshold do Hurst para validar tendência. Default: config.
+    hurst_window : int, optional
+        Rolling window length for Hurst exponent. Default: 100.
+        Only used when hurst_threshold is not None.
+    hurst_threshold : float or None
+        If set (e.g. 0.55), signals are zeroed where rolling Hurst < threshold.
+        None (default) disables the filter entirely — backwards compatible.
     vol_imbalance_z_threshold : float, optional
         Z-score mínimo do volume imbalance. Default: config.
     """
@@ -196,6 +247,7 @@ class TrendFollowingAlpha(AlphaModel):
         reversion_mode: bool = True,
         enable_regime_filter: bool = False,
         enable_volume_filter: bool = False,
+        hurst_window: int = 100,
         hurst_threshold: float | None = None,
         vol_imbalance_z_threshold: float | None = None,
     ) -> None:
@@ -204,7 +256,8 @@ class TrendFollowingAlpha(AlphaModel):
         self.reversion_mode = reversion_mode
         self.enable_regime_filter = enable_regime_filter
         self.enable_volume_filter = enable_volume_filter
-        self.hurst_threshold = hurst_threshold if hurst_threshold is not None else feature_config.hurst_threshold
+        self.hurst_window = hurst_window
+        self.hurst_threshold = hurst_threshold
         self.vol_imbalance_z_threshold = vol_imbalance_z_threshold if vol_imbalance_z_threshold is not None else feature_config.vol_imbalance_z_threshold
 
     @property
@@ -214,33 +267,35 @@ class TrendFollowingAlpha(AlphaModel):
 
     def generate_signal(self, df: pd.DataFrame) -> pd.Series:
         """
-        Gera sinais de cruzamento de EMA sobre série estacionária.
+        Gera sinais de cruzamento de EMA sobre a série de preço real (não-estacionária).
 
         Parameters
         ----------
         df : pd.DataFrame
-            Deve conter coluna ``close_fracdiff`` (Diferenciação Fracionária).
-            Se ausente, faz fallback para ``close`` com aviso.
+            Deve conter coluna ``close`` (preço real de fechamento OHLCV).
+            Para o filtro opcional de Hurst, ``close_fracdiff`` é preferido quando disponível.
 
         Returns
         -------
         pd.Series
-            +1 (compra) ou -1 (venda). Sem zeros — sempre posicionado.
+            +1 (compra), -1 (venda), ou 0 (neutro, durante warm-up ou filtros).
 
         Notes
         -----
-        López de Prado (2018): operar sobre preços brutos (não-estacionários)
-        gera regressões espúrias. A série FracDiff é estacionária e orbita
-        em torno de um valor médio constante (geralmente zero).
+        Arquitetura AFML (López de Prado, 2018, Cap. 3):
+        - O **sinal primário (Alpha)** baseado em regras técnicas é uma heurística
+          do trader e DEPENDE da não-estacionaridade para capturar drift/tendência.
+          Por isso, o cruzamento de EMAs é computado sobre ``close`` (preço real).
+        - O **meta-modelo** e demais features operam sobre ``close_fracdiff``
+          (estacionária, com memória preservada via FFD).
+        - A rotulação via Triple Barrier é a ponte entre os dois mundos.
         """
-        if "close_fracdiff" in df.columns:
-            price_series = df["close_fracdiff"]
-        else:
-            logger.warning(
-                "TrendFollowingAlpha: coluna 'close_fracdiff' ausente. "
-                "Fallback para 'close' (série não-estacionária — risco de sinais espúrios)."
+        if "close" not in df.columns:
+            raise KeyError(
+                "TrendFollowingAlpha.generate_signal: coluna 'close' ausente. "
+                "O Alpha opera sobre a série de preço real (não-estacionária)."
             )
-            price_series = df["close"]
+        price_series = df["close"]
 
         ema_fast = price_series.ewm(span=self.fast_span, adjust=False).mean()
         ema_slow = price_series.ewm(span=self.slow_span, adjust=False).mean()
@@ -262,12 +317,47 @@ class TrendFollowingAlpha(AlphaModel):
         warmup = max(self.fast_span, self.slow_span)
         signal.iloc[:warmup] = 0
 
-        # Aplica filtro de regime (Hurst Exponent) se habilitado
+        # ============================================================
+        # Hurst regime filter (disabled by default when hurst_threshold=None)
+        # ============================================================
+        if self.hurst_threshold is not None:
+            # Prefer close_fracdiff if available (more stationary, better Hurst input)
+            if "close_fracdiff" in df.columns:
+                hurst_input = df["close_fracdiff"].dropna()
+                logger.info(
+                    "HurstFilter: using 'close_fracdiff' as input series."
+                )
+            else:
+                hurst_input = df["close"]
+                logger.info(
+                    "HurstFilter: 'close_fracdiff' not found, falling back to 'close'."
+                )
+
+            hurst_series = compute_hurst_exponent(hurst_input, window=self.hurst_window)
+            # Reindex to match signal index in case close_fracdiff had dropna
+            hurst_series = hurst_series.reindex(signal.index)
+
+            # NaN Hurst => pass (conservative: don't filter bars we can't evaluate)
+            hurst_passes = hurst_series.isna() | (hurst_series >= self.hurst_threshold)
+
+            # Count how many non-zero signals are being suppressed
+            rejected = (~hurst_passes & (signal != 0)).sum()
+            logger.info(
+                "HurstFilter: rejected {} signal bars "
+                "(threshold={}, window={}).",
+                rejected,
+                self.hurst_threshold,
+                self.hurst_window,
+            )
+
+            signal = signal.where(hurst_passes, other=0)
+
+        # Aplica filtro de regime (legacy: Hurst Exponent via coluna pré-computada) se habilitado
         if self.enable_regime_filter and "hurst_exponent" in df.columns:
             signal = apply_regime_filter(
                 signal,
                 df["hurst_exponent"],
-                threshold=self.hurst_threshold,
+                threshold=0.55,  # fallback para compatibilidade com código legado
             )
 
         # Aplica filtro de volume imbalance se habilitado
@@ -337,13 +427,12 @@ class MeanReversionAlpha(AlphaModel):
 
     def generate_signal(self, df: pd.DataFrame) -> pd.Series:
         """
-        Gera sinais de reversão à média sobre série estacionária.
+        Gera sinais de reversão à média (Z-score) sobre a série de preço real.
 
         Parameters
         ----------
         df : pd.DataFrame
-            Deve conter coluna ``close_fracdiff`` (Diferenciação Fracionária).
-            Se ausente, faz fallback para ``close`` com aviso.
+            Deve conter coluna ``close`` (preço real de fechamento OHLCV).
 
         Returns
         -------
@@ -352,17 +441,16 @@ class MeanReversionAlpha(AlphaModel):
 
         Notes
         -----
-        A série FracDiff é estacionária e orbita em torno de zero.
-        O Z-score detecta desvios extremos da média estacionária.
+        Reversão à média baseada em Z-score é uma heurística de trader que captura
+        distorções transitórias do preço real em relação à sua média móvel. O Z-score
+        rolling auto-normaliza a escala, tornando ``entry_threshold``/``exit_threshold``
+        dimensionalmente consistentes independentemente do nível absoluto do preço.
         """
-        if "close_fracdiff" in df.columns:
-            price_series = df["close_fracdiff"]
-        else:
-            logger.warning(
-                "MeanReversionAlpha: coluna 'close_fracdiff' ausente. "
-                "Fallback para 'close' (série não-estacionária — risco de sinais espúrios)."
+        if "close" not in df.columns:
+            raise KeyError(
+                "MeanReversionAlpha.generate_signal: coluna 'close' ausente."
             )
-            price_series = df["close"]
+        price_series = df["close"]
 
         rolling_mean = price_series.rolling(window=self.window, min_periods=self.window).mean()
         rolling_std = price_series.rolling(window=self.window, min_periods=self.window).std()

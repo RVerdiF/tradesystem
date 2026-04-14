@@ -179,3 +179,57 @@ class TestEngineBetSizing:
         call_args = mock_send.call_args
         assert call_args is not None
         assert call_args[0][2] == 2.0  # volume argument
+
+
+# ---------------------------------------------------------------------------
+# Testes — LivePipeline Buffer Guard & Artifact Versioning
+# ---------------------------------------------------------------------------
+class TestLivePipelineGuards:
+    """Testes para a guarda de buffer FFD e detecção de artifacts obsoletos."""
+
+    def _make_ohlcv(self, n_bars: int) -> pd.DataFrame:
+        """Cria DataFrame OHLCV sintético com n_bars barras."""
+        np.random.seed(42)
+        dates = pd.date_range("2024-01-01", periods=n_bars, freq="5min")
+        close = pd.Series(100 + np.cumsum(np.random.randn(n_bars) * 0.1))
+        return pd.DataFrame({
+            "open": close.shift(1).fillna(close.iloc[0]).values,
+            "high": (close + np.abs(np.random.randn(n_bars) * 0.2)).values,
+            "low": (close - np.abs(np.random.randn(n_bars) * 0.2)).values,
+            "close": close.values,
+            "volume": np.random.randint(100, 1000, size=n_bars),
+        }, index=dates)
+
+    def _make_mock_artifacts(self, optimal_d: float = 0.4) -> dict:
+        """Cria artifacts mock para LivePipeline."""
+        mock_model = MagicMock()
+        mock_model.predict_proba.return_value = np.array([[0.5, 0.5]])
+        from src.labeling.alpha import TrendFollowingAlpha
+        alpha = TrendFollowingAlpha(fast_span=5, slow_span=20)
+        return {
+            "model": mock_model,
+            "optimal_d": optimal_d,
+            "alpha": alpha,
+            "feature_columns": ["ffd"],
+            "alpha_input_series": "close",
+        }
+
+    def test_live_pipeline_insufficient_buffer(self):
+        """LivePipeline retorna neutro quando len(df) < min_bars (buffer FFD)."""
+        artifacts = self._make_mock_artifacts()
+        pipeline = me.LivePipeline(artifacts)
+        # Força buffer menor que o mínimo
+        short_df = self._make_ohlcv(n_bars=pipeline._min_bars - 1)
+        result = pipeline(short_df)
+        assert result["side"] == 0
+        assert result["meta_prob"] == 0.0
+        assert result["kelly_fraction"] == 0.0
+
+    def test_live_pipeline_stale_artifact_warns(self):
+        """LivePipeline emite warning quando artifact tem alpha_input_series != 'close'."""
+        artifacts = self._make_mock_artifacts()
+        artifacts["alpha_input_series"] = "close_fracdiff"  # artifact antigo
+        with patch("src.main_execution.logger") as mock_logger:
+            me.LivePipeline(artifacts)
+            mock_logger.warning.assert_called_once()
+            assert "alpha_input_series" in str(mock_logger.warning.call_args)

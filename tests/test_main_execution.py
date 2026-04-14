@@ -48,6 +48,7 @@ def mock_artifacts():
         "optimal_d": 0.5,
         "alpha": alpha,
         "feature_columns": ["feat1", "feat2"],
+        "alpha_input_series": "close",
     }
 
 
@@ -131,11 +132,12 @@ def test_save_and_load_model(tmp_path):
 # ---------------------------------------------------------------------------
 # 3. Testes do LivePipeline
 # ---------------------------------------------------------------------------
+@patch("src.main_execution.get_weights_ffd", return_value=np.ones(10))
 @patch("src.main_execution.compute_all_features")
 @patch("src.main_execution.frac_diff_ffd")
 @patch("src.main_execution.compute_kelly_fraction")
 def test_live_pipeline_call_success(
-    mock_kelly, mock_ffd, mock_features, mock_artifacts, sample_df
+    mock_kelly, mock_ffd, mock_features, mock_weights, mock_artifacts, sample_df
 ):
     # Setup mocks
     mock_features.return_value = pd.DataFrame(
@@ -153,8 +155,9 @@ def test_live_pipeline_call_success(
     assert result["price"] == float(sample_df["close"].iloc[-1])
 
 
+@patch("src.main_execution.get_weights_ffd", return_value=np.ones(10))
 @patch("src.main_execution.compute_all_features")
-def test_live_pipeline_insufficient_data(mock_features, mock_artifacts, sample_df):
+def test_live_pipeline_insufficient_data(mock_features, mock_weights, mock_artifacts, sample_df):
     # Features retornam DataFrame pequeno
     mock_features.return_value = pd.DataFrame(
         {"feat1": [1.0] * 5}, index=sample_df.index[:5]
@@ -168,11 +171,12 @@ def test_live_pipeline_insufficient_data(mock_features, mock_artifacts, sample_d
     assert result["kelly_fraction"] == 0.0
 
 
-def test_live_pipeline_neutral_on_exception(mock_artifacts, sample_df):
+@patch("src.main_execution.get_weights_ffd", return_value=np.ones(10))
+def test_live_pipeline_neutral_on_exception(mock_weights, mock_artifacts, sample_df):
     pipeline = LivePipeline(mock_artifacts)
     
-    # Forçar erro passando algo que não é DataFrame
-    result = pipeline(None)
+    # Forçar erro passando DataFrame vazio (menor que _min_bars → retorno neutro)
+    result = pipeline(pd.DataFrame())
     
     assert result["side"] == 0
     assert result["meta_prob"] == 0.0

@@ -132,7 +132,7 @@ def objective_phase1(trial, df, interval):
             trial.suggest_float("pt_mult", *optimization_config.pt_sl_range),
             trial.suggest_float(
                 "sl_mult",
-                max(1.5, optimization_config.pt_sl_range[0]),
+                max(1.5, float(optimization_config.pt_sl_range[0]) if hasattr(optimization_config.pt_sl_range[0], "__float__") else 1.5),
                 optimization_config.pt_sl_range[1],
             ),
         ),
@@ -148,6 +148,17 @@ def objective_phase1(trial, df, interval):
         "be_trigger": trial.suggest_float("be_trigger", *optimization_config.be_trigger_range),
         "ffd_d": trial.suggest_float("ffd_d", *optimization_config.ffd_d_range),
         "atr_period": trial.suggest_int("atr_period", *optimization_config.atr_period_range),
+        # Hurst regime filter (new)
+        "hurst_window": trial.suggest_int("hurst_window", 60, 200, step=20),
+        "hurst_threshold": trial.suggest_float("hurst_threshold", 0.50, 0.70, step=0.05),
+        # VIR (Volume Imbalance Ratio) filter parameters
+        # voi_window: rolling window (in bars) for VIR and zscore computation
+        # voi_threshold: minimum zscore in the signal direction to keep the event
+        #   - 0.5 → lenient filter, keeps most signals
+        #   - 1.0 → moderate filter (~top 16% of imbalance readings)
+        #   - 2.0 → strict filter (~top 2.5% of imbalance readings)
+        "voi_window": trial.suggest_int("voi_window", 10, 60, step=10),
+        "voi_threshold": trial.suggest_float("voi_threshold", 0.5, 2.0, step=0.25),
         # FIXADOS PARA FASE 1: Meta-Model rápido e raso
         "xgb_max_depth": 1,
         "xgb_gamma": 0.0,
@@ -166,7 +177,7 @@ def objective_phase1(trial, df, interval):
         return -1.0
 
     if results is None:
-        return -1.0
+        return -999.0
 
     # Usamos o Calmar ou Sharpe base para avaliar a qualidade pura do alpha e das labels.
     fitness = results.get("calmar_ratio", results["sharpe"])
@@ -184,19 +195,19 @@ def objective_phase2(trial, df, interval, base_params):
     params.update(
         {
             "meta_threshold": trial.suggest_float(
-                "meta_threshold", *optimization_config.meta_threshold_range
+                "meta_threshold", optimization_config.meta_threshold_range[0], optimization_config.meta_threshold_range[1]
             ),
             "xgb_max_depth": trial.suggest_int(
-                "xgb_max_depth", *optimization_config.max_depth_range
+                "xgb_max_depth", optimization_config.max_depth_range[0], optimization_config.max_depth_range[1]
             ),
-            "xgb_gamma": trial.suggest_float("xgb_gamma", *optimization_config.xgb_gamma_range),
-            "xgb_lambda": trial.suggest_float("xgb_lambda", *optimization_config.xgb_lambda_range),
-            "xgb_alpha": trial.suggest_float("xgb_alpha", *optimization_config.xgb_alpha_range),
+            "xgb_gamma": trial.suggest_float("xgb_gamma", optimization_config.xgb_gamma_range[0], optimization_config.xgb_gamma_range[1]),
+            "xgb_lambda": trial.suggest_float("xgb_lambda", optimization_config.xgb_lambda_range[0], optimization_config.xgb_lambda_range[1]),
+            "xgb_alpha": trial.suggest_float("xgb_alpha", optimization_config.xgb_alpha_range[0], optimization_config.xgb_alpha_range[1]),
             "xgb_min_child_weight": trial.suggest_float(
-                "xgb_min_child_weight", *optimization_config.xgb_min_child_weight_range
+                "xgb_min_child_weight", optimization_config.xgb_min_child_weight_range[0], optimization_config.xgb_min_child_weight_range[1]
             ),
             "scale_pos_weight": trial.suggest_float(
-                "scale_pos_weight", *optimization_config.scale_pos_weight_range
+                "scale_pos_weight", optimization_config.scale_pos_weight_range[0], optimization_config.scale_pos_weight_range[1]
             ),
         }
     )
@@ -205,10 +216,10 @@ def objective_phase2(trial, df, interval, base_params):
         results = run_pipeline(df, interval=interval, params=params)
     except Exception as e:
         logger.error(f"Erro no pipeline Fase 2 durante trial {trial.number}: {e}")
-        return -1.0
+        return -999.0
 
     if results is None:
-        return -1.0
+        return -999.0
 
     fitness = results.get("calmar_ratio", results["sharpe"])
     return apply_penalties(results, trial, fitness)

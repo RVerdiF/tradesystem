@@ -58,6 +58,7 @@ from src.data.mt5_connector import mt5_session
 from src.features.cusum_filter import adaptive_cusum_events
 from src.features.frac_diff import find_min_d, frac_diff_ffd
 from src.features.indicators import compute_all_features
+from src.features.order_flow import compute_vir, compute_vir_zscore
 from src.labeling.alpha import TrendFollowingAlpha, get_signal_events
 from src.labeling.triple_barrier import create_events, get_labels
 from src.labeling.volatility import get_volatility_targets
@@ -301,7 +302,18 @@ def run_pipeline(df: pd.DataFrame, interval: str = "1d", use_volume_bars: bool =
     # Adiciona série FracDiff para o Alpha operar sobre dados estacionários
     df = df.copy()
     df["close_fracdiff"] = features["ffd"]
-    logger.info(f"Features prontas: {features.shape}")
+
+    # Component 1 (Plan: FracDiff Signals): Log close_fracdiff injection explicitly
+    logger.info(
+        "close_fracdiff injectado em df: {} valores não-NaN de {} total",
+        df["close_fracdiff"].notna().sum(),
+        len(df),
+    )
+
+    # Component 3 (Plan: FracDiff Signals): Defensive assertion to catch NaN alignment bugs
+    assert df["close_fracdiff"].notna().all(), (
+        "close_fracdiff has NaN after reindex — check FFD computation or data alignment"
+    )
 
     # Validação anti look-ahead: compute_all_features não produz colunas _zscore (sem
     # normalização explícita), então não há superfície de vazamento aqui. Se no futuro
@@ -318,7 +330,16 @@ def run_pipeline(df: pd.DataFrame, interval: str = "1d", use_volume_bars: bool =
     fast_span = params.get("alpha_fast", labeling_config.trend_fast_span)
     slow_span = params.get("alpha_slow", labeling_config.trend_slow_span)
 
-    alpha_model = TrendFollowingAlpha(fast_span=fast_span, slow_span=slow_span)
+    # Extract Hurst filter params (default None = filter disabled)
+    hurst_window = params.get("hurst_window", 100)
+    hurst_threshold = params.get("hurst_threshold", None)
+
+    alpha_model = TrendFollowingAlpha(
+        fast_span=fast_span,
+        slow_span=slow_span,
+        hurst_window=hurst_window,
+        hurst_threshold=hurst_threshold,
+    )
     signal = alpha_model.generate_signal(df)
 
     signal_events = get_signal_events(signal)
@@ -329,6 +350,57 @@ def run_pipeline(df: pd.DataFrame, interval: str = "1d", use_volume_bars: bool =
         cusum_ts = adaptive_cusum_events(df["close"], threshold_multiplier=threshold)
         signal_events = signal_events.intersection(cusum_ts)
         logger.info("Eventos após filtro CUSUM: {}", len(signal_events))
+
+    # --- VIR (Volume Imbalance Ratio) Filter ---
+    # Applied AFTER CUSUM intersection and AFTER Hurst filter (if enabled).
+    # NOT applied inside generate_signal() to avoid double-modification of alpha.py.
+    voi_threshold = params.get("voi_threshold", None)
+    voi_window = params.get("voi_window", 20)
+    vir_filter_rate = None
+
+    if voi_threshold is not None:
+        logger.info(
+            "VIR filter enabled: voi_window={}, voi_threshold={:.2f}",
+            voi_window,
+            voi_threshold,
+        )
+
+        # Compute VIR and rolling zscore on the full df
+        vir = compute_vir(df, window=voi_window)
+        vir_zscore = compute_vir_zscore(vir, window=voi_window)
+
+        # Defensive: verify no lookahead — vir_zscore uses data up to and
+        # including bar t (bar close). We only act at bar close. No lookahead.
+        n_events_before_vir = len(signal_events)
+
+        # Get side information from alpha signal
+        event_sides = signal.loc[signal_events] if isinstance(signal_events, pd.DatetimeIndex) else signal.loc[signal_events.index]
+
+        # Reindex vir_zscore to event timestamps; missing → NaN (event not filtered out)
+        vir_at_events = vir_zscore.reindex(signal_events)
+        sides_at_events = event_sides.reindex(signal_events)
+
+        # Keep event if: (vir_zscore * side > voi_threshold) OR vir_zscore is NaN
+        # NaN is treated as "no information" → do not filter out (conservative)
+        vir_directional = vir_at_events * sides_at_events
+        keep_mask = vir_directional.isna() | (vir_directional > voi_threshold)
+
+        signal_events = signal_events[keep_mask.values]
+
+        n_events_after_vir = len(signal_events)
+        vir_removed = n_events_before_vir - n_events_after_vir
+        vir_filter_rate = (
+            vir_removed / n_events_before_vir if n_events_before_vir > 0 else 0.0
+        )
+
+        logger.info(
+            "VIR filter: removed {}/{} events (filter_rate={:.1f}%)",
+            vir_removed,
+            n_events_before_vir,
+            vir_filter_rate * 100,
+        )
+    else:
+        vir_zscore = None
 
     if len(signal_events) == 0:
         logger.error("Nenhum sinal gerado pelo Alpha Model. Tente ajustar os parâmetros.")
@@ -361,6 +433,29 @@ def run_pipeline(df: pd.DataFrame, interval: str = "1d", use_volume_bars: bool =
         return None
 
     labels_df = labels_df.dropna(subset=["label"])
+
+    # --- Component 4: Add VIR zscore feature for Meta-Model ---
+    if vir_zscore is not None:
+        # Align vir_zscore to the features index (already dropna'd from other features)
+        features["vir_zscore"] = vir_zscore.reindex(features.index)
+
+        n_vir_nonnull = features["vir_zscore"].notna().sum()
+        n_features_total = len(features)
+        logger.info(
+            "Added vir_zscore to feature matrix: {} / {} non-NaN values ({:.1f}%).",
+            n_vir_nonnull,
+            n_features_total,
+            100.0 * n_vir_nonnull / n_features_total if n_features_total > 0 else 0.0,
+        )
+
+        if n_vir_nonnull < 0.5 * n_features_total:
+            logger.warning(
+                "vir_zscore has >50% NaN in feature matrix. "
+                "Check voi_window vs. available data length."
+            )
+    else:
+        # VIR filter disabled; do not add feature (avoids NaN column in XGBoost)
+        logger.debug("vir_zscore not added to features: VIR filter disabled (voi_threshold=None).")
 
     common_idx = features.index.intersection(labels_df.index)
     X = features.loc[common_idx]
@@ -592,6 +687,16 @@ def run_pipeline(df: pd.DataFrame, interval: str = "1d", use_volume_bars: bool =
 
     logger.success("Pipeline orquestrado com sucesso!")
 
+    # --- Minimum trade count guard (after ALL filters) ---
+    n_trades_after_filters = len(trades)
+    if n_trades_after_filters < 30:
+        logger.warning(
+            "Trade count after all filters is {} (< 30). "
+            "Results will be statistically unreliable. "
+            "Consider relaxing voi_threshold, Hurst threshold, or CUSUM sensitivity.",
+            n_trades_after_filters,
+        )
+
     return {
         "sharpe": attr_results["sharpe_full_system"],
         "sharpe_alpha": attr_results["sharpe_alpha_only"],
@@ -600,6 +705,7 @@ def run_pipeline(df: pd.DataFrame, interval: str = "1d", use_volume_bars: bool =
         "calmar_ratio": calmar,
         "n_trades": len(trades),
         "filter_rate": filter_rate,
+        "vir_filter_rate": vir_filter_rate,
         "net_returns": net_returns,
         "alpha_returns": alpha_returns,
     }

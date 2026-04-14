@@ -147,20 +147,20 @@ class TestTrendFollowingAlpha:
         alpha = TrendFollowingAlpha(fast_span=10, slow_span=50)
         assert "TrendFollowing" in alpha.name
 
-    def test_uses_fracdiff_when_available(self, trending_up_df):
-        """Deve usar coluna close_fracdiff quando presente."""
+    def test_uses_close_directly(self, trending_up_df):
+        """Deve usar coluna close (preço real) para gerar sinais."""
         alpha = TrendFollowingAlpha(fast_span=5, slow_span=20)
-        signal_fracdiff = alpha.generate_signal(trending_up_df)
-        # Verifica que o sinal foi gerado (não caiu no fallback com warning)
-        assert len(signal_fracdiff) == len(trending_up_df)
+        signal = alpha.generate_signal(trending_up_df)
+        # Verifica que o sinal foi gerado com base em close
+        assert len(signal) == len(trending_up_df)
+        assert (signal.isin([-1, 0, 1])).all()
 
-    def test_fallback_to_close_without_fracdiff(self, trending_up_df):
-        """Deve fazer fallback para close se close_fracdiff estiver ausente."""
-        df_no_fracdiff = trending_up_df.drop(columns=["close_fracdiff"])
+    def test_raises_keyerror_without_close(self, trending_up_df):
+        """Deve lançar KeyError se coluna close estiver ausente."""
+        df_no_close = trending_up_df.drop(columns=["close"])
         alpha = TrendFollowingAlpha(fast_span=5, slow_span=20)
-        # Deve gerar sinal sem lançar exceção (fallback com warning)
-        signal = alpha.generate_signal(df_no_fracdiff)
-        assert len(signal) == len(df_no_fracdiff)
+        with pytest.raises(KeyError, match="close"):
+            alpha.generate_signal(df_no_close)
 
 
 class TestMeanReversionAlpha:
@@ -181,18 +181,19 @@ class TestMeanReversionAlpha:
         has_short = (signal == -1).any()
         assert has_long and has_short
 
-    def test_uses_fracdiff_when_available(self, mean_reverting_df):
-        """Deve usar coluna close_fracdiff quando presente."""
+    def test_uses_close_directly(self, mean_reverting_df):
+        """Deve usar coluna close (preço real) para gerar sinais."""
         alpha = MeanReversionAlpha(window=20, entry_threshold=1.5, exit_threshold=0.0)
         signal = alpha.generate_signal(mean_reverting_df)
         assert len(signal) == len(mean_reverting_df)
+        assert (signal.isin([-1, 0, 1])).all()
 
-    def test_fallback_to_close_without_fracdiff(self, mean_reverting_df):
-        """Deve fazer fallback para close se close_fracdiff estiver ausente."""
-        df_no_fracdiff = mean_reverting_df.drop(columns=["close_fracdiff"])
+    def test_raises_keyerror_without_close(self, mean_reverting_df):
+        """Deve lançar KeyError se coluna close estiver ausente."""
+        df_no_close = mean_reverting_df.drop(columns=["close"])
         alpha = MeanReversionAlpha(window=20, entry_threshold=1.5, exit_threshold=0.0)
-        signal = alpha.generate_signal(df_no_fracdiff)
-        assert len(signal) == len(df_no_fracdiff)
+        with pytest.raises(KeyError, match="close"):
+            alpha.generate_signal(df_no_close)
 
 
 class TestSignalEvents:
