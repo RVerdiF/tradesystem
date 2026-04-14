@@ -31,11 +31,11 @@ from src.main_backtest import fetch_mt5_data, run_pipeline
 # ---------------------------------------------------------------------------
 # Constantes de penalização (centralizadas para facilitar ajuste futuro)
 # ---------------------------------------------------------------------------
-_LIFT_DECAY_COEFFICIENT = 2.0      # used as: exp(coef * lift) with lift<0 ≡ exp(-coef*|lift|)
-_FILTER_RATE_SOFT_START = 0.70     # acima disso, penalidade quadrática inicia
-_FILTER_RATE_HARD_REJECT = 0.92    # acima disso, trial é descartado
+_LIFT_DECAY_COEFFICIENT = 2.0  # used as: exp(coef * lift) with lift<0 ≡ exp(-coef*|lift|)
+_FILTER_RATE_SOFT_START = 0.70  # acima disso, penalidade quadrática inicia
+_FILTER_RATE_HARD_REJECT = 0.92  # acima disso, trial é descartado
 _FILTER_RATE_PENALTY_RANGE = _FILTER_RATE_HARD_REJECT - _FILTER_RATE_SOFT_START  # 0.22
-_FILTER_RATE_MIN_MULTIPLIER = 0.05 # piso da penalidade quadrática
+_FILTER_RATE_MIN_MULTIPLIER = 0.05  # piso da penalidade quadrática
 
 
 def _sharpe_lift_multiplier(lift: float) -> float:
@@ -56,7 +56,7 @@ def _filter_rate_multiplier(filter_rate: float) -> float | None:
     if filter_rate > _FILTER_RATE_HARD_REJECT:
         return None  # sinaliza hard reject
     excess = (filter_rate - _FILTER_RATE_SOFT_START) / _FILTER_RATE_PENALTY_RANGE
-    multiplier = 1.0 - excess ** 2
+    multiplier = 1.0 - excess**2
     return max(_FILTER_RATE_MIN_MULTIPLIER, multiplier)
 
 
@@ -99,7 +99,9 @@ def apply_penalties(results, trial, fitness):
     fitness *= fr_mult
 
     # Generalization Gap
-    sr_train = results.get("sharpe_train", results["sharpe"])  # fallback: assume train == test (no gap)
+    sr_train = results.get(
+        "sharpe_train", results["sharpe"]
+    )  # fallback: assume train == test (no gap)
     sr_test = results["sharpe"]
     gap = sr_train - sr_test
 
@@ -112,7 +114,7 @@ def apply_penalties(results, trial, fitness):
 
     if gap > 1.0:
         logger.debug(f"Trial {trial.number}: Alto Generalization Gap (Gap={gap:.2f})")
-        fitness /= (1.0 + gap)
+        fitness /= 1.0 + gap
 
     return fitness
 
@@ -128,21 +130,30 @@ def objective_phase1(trial, df, interval):
         "alpha_slow": trial.suggest_int("alpha_slow", *optimization_config.slow_span_range),
         "pt_sl": (
             trial.suggest_float("pt_mult", *optimization_config.pt_sl_range),
-            trial.suggest_float("sl_mult", max(1.5, optimization_config.pt_sl_range[0]), optimization_config.pt_sl_range[1]),
+            trial.suggest_float(
+                "sl_mult",
+                max(1.5, optimization_config.pt_sl_range[0]),
+                optimization_config.pt_sl_range[1],
+            ),
         ),
-        "ma_dist_fast_period": trial.suggest_int("ma_dist_fast_period", *optimization_config.ma_dist_fast_range),
-        "ma_dist_slow_period": trial.suggest_int("ma_dist_slow_period", *optimization_config.ma_dist_slow_range),
-        "moments_window": trial.suggest_int("moments_window", *optimization_config.moments_window_range),
+        "ma_dist_fast_period": trial.suggest_int(
+            "ma_dist_fast_period", *optimization_config.ma_dist_fast_range
+        ),
+        "ma_dist_slow_period": trial.suggest_int(
+            "ma_dist_slow_period", *optimization_config.ma_dist_slow_range
+        ),
+        "moments_window": trial.suggest_int(
+            "moments_window", *optimization_config.moments_window_range
+        ),
         "be_trigger": trial.suggest_float("be_trigger", *optimization_config.be_trigger_range),
         "ffd_d": trial.suggest_float("ffd_d", *optimization_config.ffd_d_range),
         "atr_period": trial.suggest_int("atr_period", *optimization_config.atr_period_range),
-        
         # FIXADOS PARA FASE 1: Meta-Model rápido e raso
         "xgb_max_depth": 1,
         "xgb_gamma": 0.0,
         "xgb_lambda": 1.0,
         "xgb_alpha": 0.0,
-        "meta_threshold": 0.50
+        "meta_threshold": 0.50,
     }
 
     if params["alpha_slow"] <= params["alpha_fast"]:
@@ -167,16 +178,25 @@ def objective_phase2(trial, df, interval, base_params):
     Fase 2: Otimiza Hyperparâmetros do ML (Meta-Model).
     Recebe os parâmetros do Alpha otimizados e fixos.
     """
-    params = dict(base_params) # Copia os melhores parâmetros da Fase 1
+    params = dict(base_params)  # Copia os melhores parâmetros da Fase 1
 
     # Atualiza com as variações específicas de ML
-    params.update({
-        "meta_threshold": trial.suggest_float("meta_threshold", *optimization_config.meta_threshold_range),
-        "xgb_max_depth": trial.suggest_int("xgb_max_depth", *optimization_config.max_depth_range),
-        "xgb_gamma": trial.suggest_float("xgb_gamma", *optimization_config.xgb_gamma_range),
-        "xgb_lambda": trial.suggest_float("xgb_lambda", *optimization_config.xgb_lambda_range),
-        "xgb_alpha": trial.suggest_float("xgb_alpha", *optimization_config.xgb_alpha_range),
-    })
+    params.update(
+        {
+            "meta_threshold": trial.suggest_float(
+                "meta_threshold", *optimization_config.meta_threshold_range
+            ),
+            "xgb_max_depth": trial.suggest_int(
+                "xgb_max_depth", *optimization_config.max_depth_range
+            ),
+            "xgb_gamma": trial.suggest_float("xgb_gamma", *optimization_config.xgb_gamma_range),
+            "xgb_lambda": trial.suggest_float("xgb_lambda", *optimization_config.xgb_lambda_range),
+            "xgb_alpha": trial.suggest_float("xgb_alpha", *optimization_config.xgb_alpha_range),
+            "scale_pos_weight": trial.suggest_float(
+                "scale_pos_weight", *optimization_config.scale_pos_weight_range
+            ),
+        }
+    )
 
     try:
         results = run_pipeline(df, interval=interval, params=params)
@@ -191,7 +211,9 @@ def objective_phase2(trial, df, interval, base_params):
     return apply_penalties(results, trial, fitness)
 
 
-def run_optimization(df, interval, n_trials=None, n_trials_phase1=None, n_trials_phase2=None, symbol="default"):
+def run_optimization(
+    df, interval, n_trials=None, n_trials_phase1=None, n_trials_phase2=None, symbol="default"
+):
     """
     Configura e executa o estudo do Optuna em duas fases.
 
@@ -223,57 +245,61 @@ def run_optimization(df, interval, n_trials=None, n_trials_phase1=None, n_trials
         n_trials_phase1 = optimization_config.n_trials_phase1 if n_trials is None else n_trials
 
     if n_trials_phase2 is None:
-        n_trials_phase2 = optimization_config.n_trials_phase2 if n_trials is None else max(10, n_trials // 3)
+        n_trials_phase2 = (
+            optimization_config.n_trials_phase2 if n_trials is None else max(10, n_trials // 3)
+        )
 
     logger.info(f"--- INICIANDO FASE 1: OTIMIZAÇÃO ALPHA/LABELING ({n_trials_phase1} trials) ---")
     study_phase1 = optuna.create_study(
-        direction='maximize',
+        direction="maximize",
         sampler=optuna.samplers.TPESampler(seed=42),
-        study_name=f"TradeSystem5000_{symbol}_Phase1"  # symbol-qualified: evita colisão em storage persistente
+        study_name=f"TradeSystem5000_{symbol}_Phase1",  # symbol-qualified: evita colisão em storage persistente
     )
 
     study_phase1.optimize(
         lambda trial: objective_phase1(trial, df, interval),
         n_trials=n_trials_phase1,
         timeout=optimization_config.timeout,
-        show_progress_bar=True
+        show_progress_bar=True,
     )
 
     logger.success("FASE 1 CONCLUÍDA!")
     best_phase1_params = study_phase1.best_params
-    
+
     # Prepara PT/SL como tupla para o Phase 2
     best_phase1_params["pt_sl"] = (
-        best_phase1_params.get("pt_mult", 2.0), 
-        best_phase1_params.get("sl_mult", 2.0)
+        best_phase1_params.get("pt_mult", 2.0),
+        best_phase1_params.get("sl_mult", 2.0),
     )
 
     logger.info("Melhores Parâmetros Fase 1: {}", best_phase1_params)
 
     logger.info(f"--- INICIANDO FASE 2: OTIMIZAÇÃO META-MODEL ({n_trials_phase2} trials) ---")
     study_phase2 = optuna.create_study(
-        direction='maximize',
+        direction="maximize",
         sampler=optuna.samplers.TPESampler(seed=42),
-        study_name=f"TradeSystem5000_{symbol}_Phase2"  # symbol-qualified: evita colisão em storage persistente
+        study_name=f"TradeSystem5000_{symbol}_Phase2",  # symbol-qualified: evita colisão em storage persistente
     )
 
     study_phase2.optimize(
         lambda trial: objective_phase2(trial, df, interval, best_phase1_params),
         n_trials=n_trials_phase2,
         timeout=optimization_config.timeout,
-        show_progress_bar=True
+        show_progress_bar=True,
     )
 
     logger.success("FASE 2 CONCLUÍDA!")
-    
+
     # Merge final dos parâmetros
     final_best_params = dict(best_phase1_params)
     final_best_params.update(study_phase2.best_params)
 
     # Limpeza para serialização (remover tuplas compostas)
     params_output = dict(final_best_params)
-    if "pt_mult" in params_output: params_output.pop("pt_mult")
-    if "sl_mult" in params_output: params_output.pop("sl_mult")
+    if "pt_mult" in params_output:
+        params_output.pop("pt_mult")
+    if "sl_mult" in params_output:
+        params_output.pop("sl_mult")
 
     # Fase 4: Avaliação do DSR no resultado final (Fase 2)
     sr_values = [t.value for t in study_phase2.trials if t.value is not None and t.value != -1.0]
@@ -281,13 +307,15 @@ def run_optimization(df, interval, n_trials=None, n_trials_phase1=None, n_trials
         observed_sr=study_phase2.best_value,
         sr_values=sr_values,
         n_trials=len(study_phase2.trials),
-        n_days=len(df)
+        n_days=len(df),
     )
 
     if dsr_score >= 0.95:
         logger.success("SIGNIFICÂNCIA CONFIRMADA: O melhor Sharpe é real (DSR = {:.4f})", dsr_score)
     else:
-        logger.warning("ALERTA DE OVERFITTING: O melhor Sharpe pode ser sorte (DSR = {:.4f})", dsr_score)
+        logger.warning(
+            "ALERTA DE OVERFITTING: O melhor Sharpe pode ser sorte (DSR = {:.4f})", dsr_score
+        )
 
     return {
         "study": study_phase2,
@@ -296,8 +324,8 @@ def run_optimization(df, interval, n_trials=None, n_trials_phase1=None, n_trials
             "dsr_score": dsr_score,
             "best_sharpe": study_phase2.best_value,
             "n_trials_phase1": len(study_phase1.trials),
-            "n_trials_phase2": len(study_phase2.trials)
-        }
+            "n_trials_phase2": len(study_phase2.trials),
+        },
     }
 
 

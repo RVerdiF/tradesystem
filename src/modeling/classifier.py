@@ -11,7 +11,6 @@ O Meta-Modelo utiliza algoritmos de boosting (XGBoost) ou florestas aleatórias
 Funcionalidades:
 - **MetaClassifier**: Wrapper scikit-learn compatível para XGBoost/RandomForest.
 - Suporte a pesos de amostra (sample_weight) baseados no retorno absoluto.
-- Ajuste automático de desbalanceamento de classes (scale_pos_weight).
 
 Referências
 -----------
@@ -30,6 +29,7 @@ from sklearn.metrics import classification_report, roc_auc_score
 
 try:
     from xgboost import XGBClassifier
+
     HAS_XGB = True
 except ImportError:
     HAS_XGB = False
@@ -41,15 +41,18 @@ class MetaClassifier(BaseEstimator, ClassifierMixin):
 
     Wraps um XGBoost Classifier ou RandomForestClassifier.
 
+    NOTA: scale_pos_weight é mantido fixo em 1.0 (sem balanceamento automático).
+    O modelo deve manter viés conservador onde não operar é a escolha padrão.
+
     Parameters
     ----------
     n_estimators : int
         Número de árvores na floresta.
     max_depth : int, optional
-        Profundidade máxima. Regularização severa é importante em finanças 
+        Profundidade máxima. Regularização severa é importante em finanças
         (overfitting é o maior vilão).
     class_weight : str or dict, default="balanced"
-        Essencial já que a classe de sucesso (1) pode ser muito desbalanceada.
+        Usado apenas para Random Forest (XGBoost ignora este parâmetro).
     n_jobs : int, default=-1
         Processamento paralelo.
     """
@@ -63,6 +66,7 @@ class MetaClassifier(BaseEstimator, ClassifierMixin):
         reg_lambda: float = 1.0,
         reg_alpha: float = 0.0,
         class_weight: str | dict | None = "balanced",
+        scale_pos_weight: float = 1.0,
         n_jobs: int = -1,
         random_state: int | None = 42,
         use_xgboost: bool = True,
@@ -74,6 +78,7 @@ class MetaClassifier(BaseEstimator, ClassifierMixin):
         self.reg_lambda = reg_lambda
         self.reg_alpha = reg_alpha
         self.class_weight = class_weight
+        self.scale_pos_weight = scale_pos_weight
         self.n_jobs = n_jobs
         self.random_state = random_state
         self.use_xgboost = use_xgboost and HAS_XGB
@@ -92,14 +97,16 @@ class MetaClassifier(BaseEstimator, ClassifierMixin):
                 n_jobs=self.n_jobs,
                 random_state=self.random_state,
                 eval_metric="logloss",
-                scale_pos_weight=1,
+                scale_pos_weight=self.scale_pos_weight,
             )
         else:
             logger.info("Usando Random Forest para Meta-Model.")
             self.model = RandomForestClassifier(
                 n_estimators=self.n_estimators,
                 max_depth=self.max_depth,
-                class_weight="balanced_subsample" if self.class_weight == "balanced" else self.class_weight,
+                class_weight="balanced_subsample"
+                if self.class_weight == "balanced"
+                else self.class_weight,
                 n_jobs=self.n_jobs,
                 random_state=self.random_state,
             )
@@ -127,22 +134,19 @@ class MetaClassifier(BaseEstimator, ClassifierMixin):
         if isinstance(X, pd.DataFrame):
             nans = X.isnull().sum().sum()
             if nans > 0:
-                logger.warning("Valores nulos no X_train: {} (Verifique FracDiff/build_training_dataset)", nans)
+                logger.warning(
+                    "Valores nulos no X_train: {} (Verifique FracDiff/build_training_dataset)", nans
+                )
 
-        logger.info("Treinando MetaClassifier com {} amostras e {} features", X.shape[0], X.shape[1] if len(X.shape)>1 else 0)
+        logger.info(
+            "Treinando MetaClassifier com {} amostras e {} features",
+            X.shape[0],
+            X.shape[1] if len(X.shape) > 1 else 0,
+        )
 
-        # Tratamento de desbalanceamento para XGBoost (López de Prado)
-        if self.use_xgboost and self.class_weight == "balanced":
-            classes, counts = np.unique(y, return_counts=True)
-            if len(classes) == 2:
-                # scale_pos_weight = sum(negative) / sum(positive)
-                idx_0 = np.where(classes == 0)[0]
-                idx_1 = np.where(classes == 1)[0]
-
-                if len(idx_0) > 0 and len(idx_1) > 0:
-                    spw = counts[idx_0[0]] / counts[idx_1[0]]
-                    self.model.set_params(scale_pos_weight=spw)
-                    logger.debug("XGBoost scale_pos_weight ajustado para balanceamento: {:.4f}", spw)
+        # NOTA: scale_pos_weight removido (valor fixo em 1.0 na inicialização).
+        # O modelo deve manter seu viés natural conservador — não operar é a escolha padrão.
+        # Ver plano: scale_pos_weight_fix
 
         self.model.fit(X, y, sample_weight=sample_weight)
         self.is_fitted_ = True
@@ -152,6 +156,7 @@ class MetaClassifier(BaseEstimator, ClassifierMixin):
         try:
             if len(np.unique(y)) > 1:
                 import warnings
+
                 with warnings.catch_warnings():
                     warnings.simplefilter("ignore", category=UserWarning)
                     auc = roc_auc_score(y, train_proba)
@@ -171,7 +176,7 @@ class MetaClassifier(BaseEstimator, ClassifierMixin):
         """
         Retorna as probabilidades.
 
-        A coluna 1 é a probabilidade do trade do Alpha Model ser lucrativo, 
+        A coluna 1 é a probabilidade do trade do Alpha Model ser lucrativo,
         que será a principal entrada para o dimensionamento de posição (Bet Sizing).
         """
         if not self.is_fitted_:
@@ -202,6 +207,7 @@ class MetaClassifier(BaseEstimator, ClassifierMixin):
         try:
             if len(np.unique(y_test)) > 1:
                 import warnings
+
                 with warnings.catch_warnings():
                     warnings.simplefilter("ignore", category=UserWarning)
                     auc = roc_auc_score(y_test, y_prob)

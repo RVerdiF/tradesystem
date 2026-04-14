@@ -65,7 +65,7 @@ DEFAULT_TIMEFRAME: int = 5  # M5
 class BarSamplingConfig:
     """Parâmetros para amostragem de barras de volume e dólar."""
 
-    volume_bar_threshold: int = 1000       # ticks acumulados para barra de volume
+    volume_bar_threshold: int = 1000  # ticks acumulados para barra de volume
     dollar_bar_threshold: float = 1_000_000.0  # valor financeiro para barra de dólar
 
 
@@ -76,9 +76,9 @@ class BarSamplingConfig:
 class CleaningConfig:
     """Parâmetros de limpeza de dados."""
 
-    spike_z_threshold: float = 5.0   # Z-score para considerar spike
-    max_gap_seconds: int = 300       # lacuna máxima tolerada (5 min)
-    fill_method: str = "ffill"       # forward fill
+    spike_z_threshold: float = 5.0  # Z-score para considerar spike
+    max_gap_seconds: int = 300  # lacuna máxima tolerada (5 min)
+    fill_method: str = "ffill"  # forward fill
 
 
 # ---------------------------------------------------------------------------
@@ -88,14 +88,16 @@ class CleaningConfig:
 class RiskConfig:
     """Parâmetros de gerenciamento de risco e circuit breakers."""
 
-    max_daily_loss_pct: float = 0.02       # 2% do capital
-    max_drawdown_pct: float = 0.05         # 5% drawdown máximo
-    max_daily_profit_pct: float = 0.02     # 2% lucro máximo diário (novo)
-    cool_down_minutes: float = 5.0         # Minutos de resfriamento pós-saída (novo)
-    max_position_size: float = 200.0       # lote máximo por trade
+    max_daily_loss_pct: float = 0.02  # 2% do capital
+    max_drawdown_pct: float = 0.05  # 5% drawdown máximo
+    max_daily_profit_pct: float = 0.02  # 2% lucro máximo diário (novo)
+    cool_down_minutes: float = 5.0  # Minutos de resfriamento pós-saída (novo)
+    max_position_size: float = 200.0  # lote máximo por trade
     max_open_positions: int = 5
-    kelly_fraction: float = 0.5            # Kelly fracionário (50%)
-    min_conviction_threshold: float = 0.5  # Limiar mínimo de probabilidade do Meta-Model para operar
+    kelly_fraction: float = 0.5  # Kelly fracionário (50%)
+    min_conviction_threshold: float = (
+        0.5  # Limiar mínimo de probabilidade do Meta-Model para operar
+    )
 
     # Horários e Modalidade
     trading_start_time: str = "09:00:00"
@@ -110,14 +112,14 @@ class RiskConfig:
 class CostConfig:
     """Taxas operacionais para modelagem de custos."""
 
-    brokerage_per_contract: float = 0.0    # corretagem por contrato/ação
-    emoluments_fixed: float = 0.25         # emolumentos fixos B3 (por minicontrato WIN)
-    emoluments_pct: float = 0.00005        # emolumentos B3 (ações)
-    settlement_pct: float = 0.0000275      # liquidação (ações)
-    iss_pct: float = 0.05                  # ISS sobre corretagem
-    slippage_ticks: float = 1.0            # ticks de slippage por ordem para futuros
-    slippage_bps: float = 2.0              # base slippage para ações
-    
+    brokerage_per_contract: float = 0.0  # corretagem por contrato/ação
+    emoluments_fixed: float = 0.25  # emolumentos fixos B3 (por minicontrato WIN)
+    emoluments_pct: float = 0.00005  # emolumentos B3 (ações)
+    settlement_pct: float = 0.0000275  # liquidação (ações)
+    iss_pct: float = 0.05  # ISS sobre corretagem
+    slippage_ticks: float = 1.0  # ticks de slippage por ordem para futuros
+    slippage_bps: float = 2.0  # base slippage para ações
+
     # Configurações de ativos
     tick_sizes: dict[str, float] = field(default_factory=lambda: {"WIN": 5.0, "WDO": 0.5})
     asset_multipliers: dict[str, float] = field(default_factory=lambda: {"WIN": 0.2, "WDO": 10.0})
@@ -149,13 +151,13 @@ class FeatureConfig:
     """Parâmetros de Feature Engineering (Fase 2)."""
 
     # Diferenciação Fracionária (FFD)
-    ffd_d: float = 0.4              # d inicial para FFD
-    ffd_threshold: float = 1e-4     # corte de pesos (Ajustado p/ 1 ano)
-    ffd_adf_pvalue: float = 0.05    # p-value alvo do teste ADF
+    ffd_d: float = 0.4  # d inicial para FFD
+    ffd_threshold: float = 1e-4  # corte de pesos (Ajustado p/ 1 ano)
+    ffd_adf_pvalue: float = 0.05  # p-value alvo do teste ADF
 
     # CUSUM
     cusum_threshold_pct: float = 0.0435  # % de desvio para trigger (Otimizado PETR4.SA)
-    cusum_ewm_span: int = 50          # span do EWMA para threshold adaptativo
+    cusum_ewm_span: int = 50  # span do EWMA para threshold adaptativo
 
     # Indicadores — Momentum (Fase True Test)
     ma_dist_fast_period: int = 9
@@ -168,6 +170,7 @@ class FeatureConfig:
     # Normalização
     zscore_window: int = 50
 
+
 # ---------------------------------------------------------------------------
 # Labeling (Fase 3 — Alpha + Tripla Barreira)
 # ---------------------------------------------------------------------------
@@ -176,22 +179,22 @@ class LabelingConfig:
     """Parâmetros para rotulagem e alpha models (Fase 3)."""
 
     # Alpha — Trend Following
-    trend_fast_span: int = 11        # EMA rápida (períodos) (Otimizado PETR4.SA)
-    trend_slow_span: int = 58        # EMA lenta (períodos) (Otimizado PETR4.SA)
+    trend_fast_span: int = 11  # EMA rápida (períodos) (Otimizado PETR4.SA)
+    trend_slow_span: int = 58  # EMA lenta (períodos) (Otimizado PETR4.SA)
 
     # Alpha — Mean Reversion
-    mean_rev_window: int = 20        # Janela do Z-score
-    mean_rev_entry: float = 2.0      # Z-score de entrada (|z| > entry → sinal)
-    mean_rev_exit: float = 0.0       # Z-score de saída
+    mean_rev_window: int = 20  # Janela do Z-score
+    mean_rev_entry: float = 2.0  # Z-score de entrada (|z| > entry → sinal)
+    mean_rev_exit: float = 0.0  # Z-score de saída
 
     # Volatilidade dinâmica
-    vol_span: int = 20               # Span EWMA para volatilidade dos retornos
+    vol_span: int = 20  # Span EWMA para volatilidade dos retornos
 
     # Tripla Barreira
     pt_sl_ratio: tuple[float, float] = (2.77, 2.98)  # (profit_take, stop_loss) (Otimizado PETR4.SA)
-    be_trigger: float = 0.0          # Gatilho de breakeven (0.0 = desativado)
-    max_holding_periods: int = 10    # Barreira vertical (barras máximas)
-    min_return: float = 0.0          # Retorno mínimo para considerar label +1
+    be_trigger: float = 0.0  # Gatilho de breakeven (0.0 = desativado)
+    max_holding_periods: int = 10  # Barreira vertical (barras máximas)
+    min_return: float = 0.0  # Retorno mínimo para considerar label +1
 
 
 # ---------------------------------------------------------------------------
@@ -203,15 +206,15 @@ class MLConfig:
 
     # Validação Cruzada
     cv_splits: int = 5
-    embargo_pct: float = 0.03        # 5% — excede max_holding_periods e rompe autocorrelação
-    xgb_max_depth: int = 4           # Produção (reduzido de 8)
-    xgb_gamma: float = 0.0           # Desativado (evita árvores vazias em amostras pequenas)
+    embargo_pct: float = 0.03  # 5% — excede max_holding_periods e rompe autocorrelação
+    xgb_max_depth: int = 4  # Produção (reduzido de 8)
+    xgb_gamma: float = 0.0  # Desativado (evita árvores vazias em amostras pequenas)
     xgb_min_child_weight: float = 2.0  # Peso mínimo reduzido (permitir splits em amostras menores)
-    xgb_lambda: float = 1.0          # L2 Regularization
-    xgb_alpha: float = 0.0           # L1 Regularization
+    xgb_lambda: float = 1.0  # L2 Regularization
+    xgb_alpha: float = 0.0  # L1 Regularization
 
     # Bet Sizing
-    max_leverage: int = 100          # Alavancagem máxima (lotes)
+    max_leverage: int = 100  # Alavancagem máxima (lotes)
 
 
 # ---------------------------------------------------------------------------
@@ -223,10 +226,10 @@ class OptimizationConfig:
 
     # Ranges de busca fundamentais (Top 10 - "Faxina Real")
     cusum_range: tuple[float, float] = (0.001, 0.003)
-    pt_sl_range: tuple[float, float] = (1.0, 3.0)      # SL floor=1.5 em tuner.py
+    pt_sl_range: tuple[float, float] = (1.0, 3.0)  # SL floor=1.5 em tuner.py
     meta_threshold_range: tuple[float, float] = (0.55, 0.70)
     max_depth_range: tuple[int, int] = (1, 2)
-    
+
     # Primary Model (Alpha)
     fast_span_range: tuple[int, int] = (9, 50)
     slow_span_range: tuple[int, int] = (50, 200)
@@ -245,10 +248,16 @@ class OptimizationConfig:
     atr_period_range: tuple[int, int] = (7, 21)
 
     # Parâmetros de execução
-    n_trials_phase1: int = 150   # Trials para otimização de Alpha/Features
-    n_trials_phase2: int = 50    # Trials para otimização do Meta-Model
+    n_trials_phase1: int = 150  # Trials para otimização de Alpha/Features
+    n_trials_phase2: int = 50  # Trials para otimização do Meta-Model
     min_trades: int = 30
     timeout: int = 5400  # 1.5 horas
+
+    # Meta-Model hyperparameters for Phase 2
+    scale_pos_weight_range: tuple[float, float] = (
+        1.0,
+        2.5,
+    )  # Conservative range as suggested in plan
 
 
 # ---------------------------------------------------------------------------
@@ -258,11 +267,11 @@ class OptimizationConfig:
 class ExecutionConfig:
     """Parâmetros do motor de execução."""
 
-    mode: str = "live"              # 'paper' ou 'live'
-    poll_interval: float = 0.5       # Segundos entre leitura de ticks
-    max_slippage_ticks: int = 5      # Desvio máximo aceito em envio a mercado
-    magic_number: int = 5000         # Identificador das ordens do sistema
-    reconciliation_interval: int = 60# Segundos entre reconciliações posição real vs esperada
+    mode: str = "live"  # 'paper' ou 'live'
+    poll_interval: float = 0.5  # Segundos entre leitura de ticks
+    max_slippage_ticks: int = 5  # Desvio máximo aceito em envio a mercado
+    magic_number: int = 5000  # Identificador das ordens do sistema
+    reconciliation_interval: int = 60  # Segundos entre reconciliações posição real vs esperada
 
 
 # ---------------------------------------------------------------------------
@@ -279,5 +288,3 @@ labeling_config = LabelingConfig()
 ml_config = MLConfig()
 optimization_config = OptimizationConfig()
 execution_config = ExecutionConfig()
-
-
