@@ -123,8 +123,6 @@ def compute_vir(df: pd.DataFrame, window: int = 20) -> pd.Series:
     rolling_sell = sell_vol.rolling(window=window, min_periods=1).sum()
     rolling_total = vol.rolling(window=window, min_periods=1).sum()
 
-    # --- VIR: normalised imbalance ---
-    # Where total volume is zero (e.g., auction bars), return NaN
     vir = (rolling_buy - rolling_sell) / rolling_total.replace(0, np.nan)
 
     vir.name = "vir"
