@@ -71,13 +71,36 @@ def test_audit_orders_query_filtering(temp_audit):
     """Verifica filtros de símbolo e timestamp em query_orders."""
     audit, _ = temp_audit
     
-    audit.log_order(101, "PETR4", "buy", 100, 30.0)
-    audit.log_order(102, "VALE3", "sell", 200, 80.0)
+    t0 = datetime.now() - timedelta(minutes=10)
+    t1 = datetime.now()
+    t2 = datetime.now() + timedelta(minutes=10)
     
+    with patch("src.execution.audit.datetime") as mock_dt:
+        mock_dt.now.return_value = t0
+        audit.log_order(101, "PETR4", "buy", 100, 30.0)
+
+        mock_dt.now.return_value = t1
+        audit.log_order(102, "VALE3", "sell", 200, 80.0)
+
+        mock_dt.now.return_value = t2
+        audit.log_order(103, "PETR4", "sell", 150, 31.0)
+
+    # Filtro por símbolo
     res = audit.query_orders(symbol="VALE3")
     assert len(res) == 1
     assert res[0]["ticket"] == 102
     assert res[0]["volume"] == 200
+
+    # Filtro por intervalo de tempo (t1 em diante)
+    recent = audit.query_orders(start=t1.isoformat())
+    assert len(recent) == 2
+    assert recent[0]["ticket"] == 103 # t2 (DESC)
+    assert recent[1]["ticket"] == 102 # t1
+
+    # Filtro por intervalo (apenas t1)
+    only_t1 = audit.query_orders(start=t1.isoformat(), end=t1.isoformat())
+    assert len(only_t1) == 1
+    assert only_t1[0]["ticket"] == 102
 
 
 def test_audit_errors_query_filtering(temp_audit):
