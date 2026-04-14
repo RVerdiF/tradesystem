@@ -96,7 +96,7 @@ class AsyncTradingEngine:
             # apenas candles matematicamente fechados sejam usados — evita
             # repainting e sinais fantasmas.
             if execution_config.mode == "live":
-                rates = mt5.copy_rates_from_pos(symbol, mt5.TIMEFRAME_M5, 1, 500)
+                rates = mt5.copy_rates_from_pos(symbol, mt5.TIMEFRAME_M5, 1, execution_config.live_bars)
                 if rates is None or len(rates) == 0:
                     return
                 df_snapshot = pd.DataFrame(rates)

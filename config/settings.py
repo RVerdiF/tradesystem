@@ -283,6 +283,7 @@ class ExecutionConfig:
     max_slippage_ticks: int = 5  # Desvio máximo aceito em envio a mercado
     magic_number: int = 5000  # Identificador das ordens do sistema
     reconciliation_interval: int = 60  # Segundos entre reconciliações posição real vs esperada
+    live_bars: int = 1000  # Barras buscadas do MT5 por ciclo (deve exceder min_bars do pipeline)
 
 
 # ---------------------------------------------------------------------------
