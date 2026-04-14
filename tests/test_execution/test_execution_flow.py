@@ -41,7 +41,7 @@ class TestExecutionFlow:
         with patch("src.main_execution.compute_all_features", return_value=df):
             with patch("src.main_execution.find_min_d", return_value=0.5):
                 with patch("src.main_execution.frac_diff_ffd", return_value=df["close"]):
-                    with patch("src.main_execution.TrendFollowingAlpha") as mock_alpha_cls:
+                    with patch("src.main_execution.CompositeAlpha") as mock_alpha_cls:
                         mock_alpha = MagicMock()
                         mock_alpha_cls.return_value = mock_alpha
                         # Ensure signal has transitions so get_signal_events is not empty

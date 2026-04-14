@@ -59,7 +59,7 @@ from src.features.cusum_filter import adaptive_cusum_events
 from src.features.frac_diff import find_min_d, frac_diff_ffd
 from src.features.indicators import compute_all_features
 from src.features.order_flow import compute_vir, compute_vir_zscore
-from src.labeling.alpha import TrendFollowingAlpha, get_signal_events
+from src.labeling.alpha import CompositeAlpha, get_signal_events
 from src.labeling.triple_barrier import create_events, get_labels
 from src.labeling.volatility import get_volatility_targets
 from src.modeling.classifier import MetaClassifier
@@ -307,6 +307,11 @@ def run_pipeline(df: pd.DataFrame, interval: str = "1d", use_volume_bars: bool =
     df = df.copy()
     df["close_fracdiff"] = features["ffd"]
 
+    # Injeta features no df para uso no CompositeAlpha
+    for col in features.columns:
+        if col not in df.columns:
+            df[col] = features[col]
+
     # Component 1 (Plan: FracDiff Signals): Log close_fracdiff injection explicitly
     logger.info(
         "close_fracdiff injectado em df: {} valores não-NaN de {} total",
@@ -334,7 +339,7 @@ def run_pipeline(df: pd.DataFrame, interval: str = "1d", use_volume_bars: bool =
     fast_span = params.get("alpha_fast", labeling_config.trend_fast_span)
     slow_span = params.get("alpha_slow", labeling_config.trend_slow_span)
 
-    alpha_model = TrendFollowingAlpha(
+    alpha_model = CompositeAlpha(
         fast_span=fast_span,
         slow_span=slow_span,
     )

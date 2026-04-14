@@ -104,11 +104,11 @@ def test_meta_classifier_evaluate_single_class(dataset):
 
 def test_meta_classifier_xgboost_imbalance_treatment(dataset):
     """
-    Verifica que o XGBoost NÃO ajusta scale_pos_weight dinamicamente quando não especificado.
-    O modelo deve manter viés conservador com scale_pos_weight fixo quando não otimizado.
+    Verifica que o XGBoost ajusta scale_pos_weight dinamicamente no método fit()
+    para lidar corretamente com datasets desbalanceados.
     """
     X, _ = dataset
-    # Create imbalanced dataset
+    # Create imbalanced dataset (90 neg, 10 pos -> ratio 9.0)
     y = pd.Series(np.concatenate([np.zeros(90), np.ones(10)]))
 
     clf = MetaClassifier(n_estimators=10, max_depth=3, class_weight="balanced", use_xgboost=True)
@@ -119,8 +119,11 @@ def test_meta_classifier_xgboost_imbalance_treatment(dataset):
         with patch.object(clf.model, "predict_proba", return_value=np.zeros((100, 2))):
             with patch.object(clf.model, "set_params") as mock_set_params:
                 clf.fit(X, y)
-                # scale_pos_weight NÃO deve ser ajustado dinamicamente
-                mock_set_params.assert_not_called()
+                # scale_pos_weight DEVE ser ajustado dinamicamente para n_neg / n_pos
+                mock_set_params.assert_called_once()
+                args, kwargs = mock_set_params.call_args
+                assert "scale_pos_weight" in kwargs
+                assert np.isclose(kwargs["scale_pos_weight"], 9.0)
 
 
 def test_meta_classifier_custom_scale_pos_weight():

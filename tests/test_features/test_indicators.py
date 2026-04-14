@@ -17,7 +17,6 @@ from src.features.indicators import (
     order_flow_imbalance,
     roc,
     rolling_volatility,
-    vpin,
     moving_average_distance,
     garman_klass_volatility,
     rolling_moments,
@@ -198,10 +197,6 @@ class TestMicrostructure:
         result = order_flow_imbalance(ohlcv_df["volume"], ohlcv_df["close"])
         assert isinstance(result, pd.Series)
         assert len(result) == len(ohlcv_df)
-
-    def test_vpin_range(self, ohlcv_df):
-        result = vpin(ohlcv_df["volume"], ohlcv_df["close"]).dropna()
-        assert (result >= 0).all() and (result <= 1).all()
 
 
 # ---------------------------------------------------------------------------

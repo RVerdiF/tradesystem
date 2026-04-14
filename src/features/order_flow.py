@@ -175,3 +175,81 @@ def compute_vir_zscore(vir_series: pd.Series, window: int = 20) -> pd.Series:
         zscore = zscore.replace([np.inf, -np.inf], np.nan)
 
     return zscore
+
+
+def calculate_vpin(df: pd.DataFrame, bucket_size: int, window: int) -> pd.Series:
+    """
+    Calculate Volume-Synchronized Probability of Informed Trading (VPIN).
+
+    This function applies the strict Tick Rule to determine buy/sell volume aggression,
+    buckets the data into intervals of constant volume (Volume Clock), computes
+    the imbalance in each bucket, and then calculates the rolling VPIN. Finally,
+    it maps the VPIN values back to the original OHLCV index using forward-fill.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        DataFrame containing 'close' and either 'real_volume' or 'volume'.
+    bucket_size : int
+        The volume size for each bucket (Volume Clock).
+    window : int
+        The rolling window (in number of buckets) for calculating VPIN.
+
+    Returns
+    -------
+    pd.Series
+        The calculated VPIN series mapped back to the original dataframe index.
+    """
+    # Create a copy to avoid SettingWithCopyWarning
+    temp_df = df.copy()
+
+    # --- Volume column selection ---
+    if "real_volume" in temp_df.columns and temp_df["real_volume"].sum() > 0:
+        temp_df["vol"] = temp_df["real_volume"]
+    elif "volume" in temp_df.columns:
+        temp_df["vol"] = temp_df["volume"]
+        if "real_volume" in temp_df.columns:
+            logger.warning(
+                "calculate_vpin: real_volume is all zeros. "
+                "Falling back to tick_volume. VPIN computed from tick counts, NOT contract volume."
+            )
+    else:
+        raise KeyError("calculate_vpin: df must contain column 'volume' or 'real_volume'.")
+
+    # 1. Strict Tick Rule for classification
+    temp_df["price_diff"] = temp_df["close"].diff()
+    temp_df["tick_sign"] = np.sign(temp_df["price_diff"])
+    temp_df["tick_sign"] = temp_df["tick_sign"].replace(0, np.nan).ffill().fillna(0)
+
+    # Allocate volume based on maintained direction
+    temp_df["buy_vol"] = np.where(temp_df["tick_sign"] > 0, temp_df["vol"], 0)
+    temp_df["sell_vol"] = np.where(temp_df["tick_sign"] < 0, temp_df["vol"], 0)
+
+    # 2. Group by Volume Buckets
+    temp_df["cum_vol"] = temp_df["vol"].cumsum()
+    # Subtract a tiny amount to make exact multiples of bucket_size fall into the previous bucket
+    # e.g., cum_vol=300 with bucket_size=300 should be bucket 0, not 1
+    #       cum_vol=100 -> bucket 0
+    #       cum_vol=400 -> bucket 1
+    temp_df["bucket"] = ((temp_df["cum_vol"] - 1e-9) // bucket_size).astype(int)
+
+    buckets = temp_df.groupby("bucket").agg({
+        "buy_vol": "sum",
+        "sell_vol": "sum"
+    })
+
+    # 3. Imbalance and VPIN calculation
+    buckets["imbalance"] = (buckets["buy_vol"] - buckets["sell_vol"]).abs()
+    buckets["vpin"] = buckets["imbalance"].rolling(window=window).mean() / bucket_size
+
+    # Shift to prevent look-ahead bias: Bucket N gets VPIN computed up to Bucket N-1
+    buckets["vpin_shifted"] = buckets["vpin"].shift(1)
+
+    # Map VPIN back to the original DataFrame using the bucket index
+    temp_df["vpin"] = temp_df["bucket"].map(buckets["vpin_shifted"])
+
+    # Forward-fill and keep NaNs for the initial warm-up period
+    vpin_series = temp_df["vpin"].ffill()
+    vpin_series.name = "vpin"
+
+    return vpin_series

@@ -58,7 +58,7 @@ def mock_artifacts():
 @patch("src.main_execution.compute_all_features")
 @patch("src.main_execution.find_min_d")
 @patch("src.main_execution.frac_diff_ffd")
-@patch("src.main_execution.TrendFollowingAlpha")
+@patch("src.main_execution.CompositeAlpha")
 @patch("src.main_execution.get_signal_events")
 @patch("src.main_execution.adaptive_cusum_events")
 @patch("src.main_execution.get_volatility_targets")

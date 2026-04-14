@@ -394,55 +394,7 @@ def order_flow_imbalance(volume: pd.Series, close: pd.Series) -> pd.Series:
     return ofi
 
 
-def vpin(
-    volume: pd.Series,
-    close: pd.Series,
-    n_buckets: int = 50,
-    is_volume_clock: bool = False
-) -> pd.Series:
-    """
-    Volume-Synchronized Probability of Informed Trading (VPIN estimado).
-
-    Estima a proporção de volume informado vs. total usando a classificação
-    por tick rule e bucketing por volume.
-
-    Parameters
-    ----------
-    volume : pd.Series
-        Série de volume.
-    close : pd.Series
-        Série de preços.
-    n_buckets : int
-        Número de buckets para a estimativa rolling.
-    is_volume_clock : bool
-        Indica se a série está no volume clock. Se não estiver, loga um warning.
-
-    Returns
-    -------
-    pd.Series
-        VPIN em [0, 1]. Valores altos indicam mais informação assimétrica.
-    """
-    if not is_volume_clock:
-        logger.warning(
-            "CRÍTICO: VPIN calculado fora do Volume Clock. O resultado será "
-            "uma heurística aproximada (VIR) suscetível ao ruído HFT, e não o "
-            "VPIN de Easley, López de Prado e O'Hara."
-        )
-
-    direction = np.sign(close.diff()).replace(0, np.nan).ffill().fillna(0)
-
-    buy_volume = volume.where(direction > 0, 0.0)
-    sell_volume = volume.where(direction < 0, 0.0)
-
-    # VPIN = |buy - sell| / total em janela rolling
-    buy_rolling = buy_volume.rolling(window=n_buckets, min_periods=max(1, n_buckets // 4)).sum()
-    sell_rolling = sell_volume.rolling(window=n_buckets, min_periods=max(1, n_buckets // 4)).sum()
-    total_rolling = volume.rolling(window=n_buckets, min_periods=max(1, n_buckets // 4)).sum()
-
-    result = (buy_rolling - sell_rolling).abs() / total_rolling.replace(0, np.nan)
-    result.name = "vpin"
-    return result
-
+from src.features.order_flow import calculate_vpin
 
 def volume_imbalance(
     volume: pd.Series,
@@ -582,7 +534,17 @@ def compute_all_features(
     # Microestrutura
     if "volume" in df.columns:
         features["ofi"] = order_flow_imbalance(df["volume"], df["close"])
-        features["vpin"] = vpin(df["volume"], df["close"], is_volume_clock=is_volume_clock)
+
+        # Calculate true VPIN using volume clock bucketing
+        bucket_size = getattr(config, "vpin_bucket_size", 5000)
+        window = getattr(config, "vpin_window", 50)
+
+        try:
+            features["vpin"] = calculate_vpin(df, bucket_size=bucket_size, window=window)
+        except Exception as e:
+            logger.error("Failed to compute true VPIN: {}", e)
+            features["vpin"] = np.nan
+
         features["volume_imbalance"] = volume_imbalance(df["volume"], df["close"])
         features["volume_imbalance_zscore"] = volume_imbalance_zscore(df["volume"], df["close"])
 

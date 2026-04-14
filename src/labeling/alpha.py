@@ -200,6 +200,101 @@ class TrendFollowingAlpha(AlphaModel):
 
 
 # ---------------------------------------------------------------------------
+# Composite Alpha
+# ---------------------------------------------------------------------------
+class CompositeAlpha(AlphaModel):
+    """
+    Composite Alpha combining Trend Following (EMAs), Hurst Exponent regime filter,
+    and Volume Imbalance Z-Score filter.
+
+    Signal generation requires simultaneous agreement:
+    1. EMA fast > EMA slow (for long) or EMA fast < EMA slow (for short).
+    2. Hurst Exponent > hurst_threshold (default 0.55 indicating trending regime).
+    3. Volume Imbalance Z-Score (volume_imbalance_zscore) > vir_zscore_threshold (for long) or < -vir_zscore_threshold (for short).
+
+    Parameters
+    ----------
+    fast_span : int, optional
+        Fast EMA span. Default: config.
+    slow_span : int, optional
+        Slow EMA span. Default: config.
+    hurst_threshold : float, optional
+        Minimum Hurst Exponent required. Default: config.
+    vir_zscore_threshold : float, optional
+        Minimum absolute Volume Imbalance Z-Score required. Default: config.
+    """
+
+    def __init__(
+        self,
+        fast_span: int | None = None,
+        slow_span: int | None = None,
+        hurst_threshold: float | None = None,
+        vir_zscore_threshold: float | None = None,
+    ) -> None:
+        self.fast_span = fast_span or labeling_config.trend_fast_span
+        self.slow_span = slow_span or labeling_config.trend_slow_span
+        self.hurst_threshold = hurst_threshold or feature_config.hurst_threshold
+        self.vir_zscore_threshold = (
+            vir_zscore_threshold if vir_zscore_threshold is not None else feature_config.vol_imbalance_z_threshold
+        )
+
+    @property
+    def name(self) -> str:
+        return (
+            f"CompositeAlpha(fast={self.fast_span}, slow={self.slow_span}, "
+            f"hurst>{self.hurst_threshold}, |vir_z|>{self.vir_zscore_threshold})"
+        )
+
+    def generate_signal(self, df: pd.DataFrame) -> pd.Series:
+        """
+        Generates trading signals based on the composite rules.
+
+        Parameters
+        ----------
+        df : pd.DataFrame
+            Must contain 'close', 'hurst_exponent', and 'volume_imbalance_zscore' columns.
+
+        Returns
+        -------
+        pd.Series
+            Series of {-1, 0, +1} signals.
+        """
+        required_cols = ["close", "hurst_exponent", "volume_imbalance_zscore"]
+        for col in required_cols:
+            if col not in df.columns:
+                raise KeyError(f"CompositeAlpha.generate_signal: column '{col}' missing.")
+
+        price_series = df["close"]
+        ema_fast = price_series.ewm(span=self.fast_span, adjust=False).mean()
+        ema_slow = price_series.ewm(span=self.slow_span, adjust=False).mean()
+
+        signal = pd.Series(0, index=price_series.index, dtype=np.int8, name="signal")
+
+        # Long conditions
+        long_cond = (
+            (ema_fast > ema_slow)
+            & (df["hurst_exponent"] > self.hurst_threshold)
+            & (df["volume_imbalance_zscore"] > self.vir_zscore_threshold)
+        )
+
+        # Short conditions
+        short_cond = (
+            (ema_fast < ema_slow)
+            & (df["hurst_exponent"] > self.hurst_threshold)
+            & (df["volume_imbalance_zscore"] < -self.vir_zscore_threshold)
+        )
+
+        signal[long_cond] = 1
+        signal[short_cond] = -1
+
+        # Warm-up: set to NaN until EMAs are stable
+        warmup = max(self.fast_span, self.slow_span)
+        signal.iloc[:warmup] = 0
+
+        return signal
+
+
+# ---------------------------------------------------------------------------
 # Mean Reversion — Z-score
 # ---------------------------------------------------------------------------
 class MeanReversionAlpha(AlphaModel):
