@@ -180,6 +180,17 @@ class TestEngineBetSizing:
         assert call_args is not None
         assert call_args[0][2] == 2.0  # volume argument
 
+    def test_engine_stop(self):
+        """Testa se a chamada para stop() interrompe a flag de execução do engine."""
+        engine = self._make_engine({})
+        engine.is_running = True
+
+        with patch("src.execution.engine.logger") as mock_logger:
+            engine.stop()
+
+        assert engine.is_running is False
+        mock_logger.warning.assert_called_once_with("Sinal de parada recebido. Motor sendo deligado...")
+
 
 # ---------------------------------------------------------------------------
 # Testes — LivePipeline Buffer Guard & Artifact Versioning

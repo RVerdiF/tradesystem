@@ -27,7 +27,7 @@ def test_objective_phase1_function(sample_df, mock_results):
     trial = MagicMock()
     
     trial.suggest_float.return_value = 0.5
-    trial.suggest_int.side_effect = [10, 30, 9, 21, 40, 14, 20] # alpha_fast, alpha_slow, ma_fast, ma_slow, moments, atr, voi_window
+    trial.suggest_int.side_effect = [10, 30, 9, 21, 40, 14, 100, 20] # alpha_fast, alpha_slow, ma_dist_fast, ma_dist_slow, moments, atr, hurst_window, voi_window
 
     with patch("src.optimization.tuner.run_pipeline", return_value=mock_results):
         score = objective_phase1(trial, sample_df, "1h")
@@ -37,7 +37,7 @@ def test_objective_phase1_invalid_params(sample_df):
     """Test that objective_phase1 returns -1.0 for invalid alpha spans (slow <= fast)."""
     trial = MagicMock()
     trial.suggest_float.return_value = 0.02
-    trial.suggest_int.side_effect = [30, 10, 9, 21, 40, 14, 20] # fast=30, slow=10
+    trial.suggest_int.side_effect = [30, 10, 9, 21, 40, 14, 100, 20] # fast=30, slow=10
     
     score = objective_phase1(trial, sample_df, "1h")
     assert score == -1.0
@@ -58,7 +58,7 @@ def test_objective_low_trades(sample_df, mock_results):
     """Test that objectives penalize Sharpe if trades < min_trades."""
     trial = MagicMock()
     trial.suggest_float.return_value = 0.5
-    trial.suggest_int.side_effect = [10, 30, 9, 21, 40, 14, 20]
+    trial.suggest_int.side_effect = [10, 30, 9, 21, 40, 14, 100, 20]
     
     mock_results["n_trades"] = 10 # below default 30
     

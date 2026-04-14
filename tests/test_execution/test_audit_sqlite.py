@@ -131,3 +131,25 @@ def test_audit_empty_results(temp_audit):
     assert audit.query_signals() == []
     assert audit.query_orders() == []
     assert audit.query_errors() == []
+
+def test_audit_log_order(temp_audit):
+    """Verifica se log_order salva a ordem corretamente e se invoca o logger.success."""
+    audit, _ = temp_audit
+
+    with patch("src.execution.audit.logger") as mock_logger:
+        audit.log_order(999, "WEGE3", "buy", 500, 35.5, comment="Test order")
+
+        # Verify db insert
+        res = audit.query_orders(symbol="WEGE3")
+        assert len(res) == 1
+        assert res[0]["ticket"] == 999
+        assert res[0]["action"] == "buy"
+        assert res[0]["volume"] == 500
+        assert res[0]["price"] == 35.5
+        assert res[0]["comment"] == "Test order"
+
+        # Verify logger.success
+        mock_logger.success.assert_called_once_with(
+            "ORDEM ENVIADA: [{}] {} {} | Vol: {} | Preço: {}",
+            999, "BUY", "WEGE3", 500, 35.5
+        )

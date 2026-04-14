@@ -10,7 +10,7 @@ Testa isoladamente:
 from __future__ import annotations
 
 import sqlite3
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 
 import pytest
 
@@ -253,3 +253,54 @@ class TestOrderManager:
         assert success is True
 
         om.close_positions("WIN")  # Nao falha sem MT5 ligado se for paper
+
+    def test_get_net_position_paper_mode(self):
+        """get_net_position deve retornar 0.0 se não estiver em modo 'live'."""
+        om = OrderManager()
+        with patch("src.execution.order_manager.execution_config") as mock_cfg:
+            mock_cfg.mode = "paper"
+            assert om.get_net_position("WIN") == 0.0
+
+    def test_get_net_position_empty(self):
+        """get_net_position deve retornar 0.0 se mt5.positions_get retornar None ou vazio."""
+        om = OrderManager()
+        with patch("src.execution.order_manager.execution_config") as mock_cfg:
+            mock_cfg.mode = "live"
+            with patch("src.execution.order_manager.mt5.positions_get", return_value=None):
+                assert om.get_net_position("WIN") == 0.0
+            with patch("src.execution.order_manager.mt5.positions_get", return_value=[]):
+                assert om.get_net_position("WIN") == 0.0
+
+    def test_get_net_position_calculates_correctly(self):
+        """get_net_position deve somar volumes long/short que pertencem ao magic_number do sistema."""
+        om = OrderManager()
+        magic = om.magic_number
+
+        # Cria mocks de posições MT5
+        pos1 = MagicMock()
+        pos1.magic = magic
+        pos1.type = 0  # mt5.ORDER_TYPE_BUY
+        pos1.volume = 2.0
+
+        pos2 = MagicMock()
+        pos2.magic = magic
+        pos2.type = 1  # mt5.ORDER_TYPE_SELL
+        pos2.volume = 1.0
+
+        pos3 = MagicMock()
+        pos3.magic = 999999  # Outro robô
+        pos3.type = 0
+        pos3.volume = 5.0
+
+        # Como as constantes de MT5 mockado são mock objects, a comparação de tipo no código
+        # será `pos.type == mt5.ORDER_TYPE_BUY`. Precisamos configurar os mocks das constantes MT5
+        import MetaTrader5 as mt5
+        pos1.type = mt5.ORDER_TYPE_BUY
+        pos2.type = mt5.ORDER_TYPE_SELL
+        pos3.type = mt5.ORDER_TYPE_BUY
+
+        with patch("src.execution.order_manager.execution_config") as mock_cfg:
+            mock_cfg.mode = "live"
+            with patch("src.execution.order_manager.mt5.positions_get", return_value=[pos1, pos2, pos3]):
+                # Long 2.0, Short 1.0 -> Net = 1.0
+                assert om.get_net_position("WIN") == 1.0
