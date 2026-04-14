@@ -74,7 +74,7 @@ def test_audit_orders_query_filtering(temp_audit):
     t0 = datetime.now() - timedelta(minutes=10)
     t1 = datetime.now()
     t2 = datetime.now() + timedelta(minutes=10)
-
+    
     with patch("src.execution.audit.datetime") as mock_dt:
         mock_dt.now.return_value = t0
         audit.log_order(101, "PETR4", "buy", 100, 30.0)
@@ -84,7 +84,8 @@ def test_audit_orders_query_filtering(temp_audit):
 
         mock_dt.now.return_value = t2
         audit.log_order(103, "PETR4", "sell", 150, 31.0)
-    
+
+    # Filtro por símbolo
     res = audit.query_orders(symbol="VALE3")
     assert len(res) == 1
     assert res[0]["ticket"] == 102

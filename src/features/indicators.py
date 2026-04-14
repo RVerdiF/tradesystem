@@ -223,12 +223,16 @@ def rescaled_range_analysis(
     rs_values = []
     lag_values = []
 
+    # Otimização: Extrai os valores para array numpy fora do loop
+    # para evitar o overhead de slicing do Pandas .iloc em loop aninhado.
+    log_ret_values = log_ret.values
+
     for lag in range(10, max_lag + 1, 5):  # step=5 para eficiência
-        if lag > len(log_ret):
+        if lag > len(log_ret_values):
             break
 
         # Divide a série em sub-séries de tamanho 'lag'
-        n_sub = len(log_ret) // lag
+        n_sub = len(log_ret_values) // lag
         if n_sub < 2:
             continue
 
@@ -236,7 +240,7 @@ def rescaled_range_analysis(
         valid_chunks = 0
 
         for j in range(n_sub):
-            chunk = log_ret.iloc[j * lag : (j + 1) * lag].values
+            chunk = log_ret_values[j * lag : (j + 1) * lag]
             mean_chunk = np.mean(chunk)
             cum_dev = np.cumsum(chunk - mean_chunk)
 
