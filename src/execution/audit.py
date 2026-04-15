@@ -1,5 +1,4 @@
-"""
-Auditoria e Registro Operacional — TradeSystem5000.
+"""Auditoria e Registro Operacional — TradeSystem5000.
 
 Este módulo implementa a camada de persistência para auditoria do sistema,
 registrando sinais, ordens e erros em um banco de dados SQLite estruturado.
@@ -31,14 +30,14 @@ init_db()
 
 
 class AuditLogger:
-    """
-    Sistema de auditoria para persistir logs operacionais em SQLite.
+    """Sistema de auditoria para persistir logs operacionais em SQLite.
 
     A API pública (``log_signal``, ``log_order``, ``log_error``) é idêntica
     à versão anterior baseada em JSONL, garantindo zero impacto nos chamadores.
     """
 
     def __init__(self) -> None:
+        """Inicializa a classe."""
         # Sem estado de arquivo — conexões são abertas por chamada
         pass
 
@@ -154,8 +153,7 @@ class AuditLogger:
         start: str | None = None,
         end: str | None = None,
     ) -> list[dict[str, Any]]:
-        """
-        Retorna sinais registrados, com filtros opcionais.
+        """Retorna sinais registrados, com filtros opcionais.
 
         Parameters
         ----------
@@ -165,6 +163,7 @@ class AuditLogger:
             ISO timestamp mínimo (inclusive).
         end : str, optional
             ISO timestamp máximo (inclusive).
+
         """
         query = "SELECT * FROM audit_signals WHERE 1=1"
         params: list[Any] = []
@@ -190,8 +189,7 @@ class AuditLogger:
         start: str | None = None,
         end: str | None = None,
     ) -> list[dict[str, Any]]:
-        """
-        Retorna ordens registradas, com filtros opcionais.
+        """Retorna ordens registradas, com filtros opcionais.
 
         Parameters
         ----------
@@ -201,6 +199,7 @@ class AuditLogger:
             ISO timestamp mínimo (inclusive).
         end : str, optional
             ISO timestamp máximo (inclusive).
+
         """
         query = "SELECT * FROM audit_orders WHERE 1=1"
         params: list[Any] = []
@@ -225,8 +224,7 @@ class AuditLogger:
         component: str | None = None,
         critical_only: bool = False,
     ) -> list[dict[str, Any]]:
-        """
-        Retorna erros registrados, com filtros opcionais.
+        """Retorna erros registrados, com filtros opcionais.
 
         Parameters
         ----------
@@ -234,6 +232,7 @@ class AuditLogger:
             Filtra por componente (ex: 'RiskManager').
         critical_only : bool
             Se True, retorna apenas erros críticos.
+
         """
         query = "SELECT * FROM audit_errors WHERE 1=1"
         params: list[Any] = []

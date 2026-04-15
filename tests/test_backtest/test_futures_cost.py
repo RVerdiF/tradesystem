@@ -2,8 +2,7 @@ import pytest
 from src.backtest.cost_model import BrazilianCostModel, SlippageModel
 
 def test_futures_win_costs_verification():
-    """
-    Verificação de modelagem de custos para Futuros B3.
+    """Verificação de modelagem de custos para Futuros B3.
     Rodar uma simulação de 1 trade de compra e venda de 1 minicontrato (WIN) 
     com preço cravado em 130.000 pontos.
     Validar via asserção se o custo final simulado equivale exatamente 

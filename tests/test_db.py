@@ -1,5 +1,4 @@
-"""
-Testes para src.db (Camada SQLite).
+"""Testes para src.db (Camada SQLite).
 
 Verifica:
 - get_connection (conexão válida, modo WAL)

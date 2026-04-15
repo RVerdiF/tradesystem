@@ -1,5 +1,4 @@
-"""
-Filtro CUSUM para Amostragem Baseada em Eventos — TradeSystem5000.
+"""Filtro CUSUM para Amostragem Baseada em Eventos — TradeSystem5000.
 
 Este módulo implementa o filtro de Soma Cumulativa (CUSUM) simétrico, utilizado
 para detectar mudanças estruturais significativas na média de uma série
@@ -37,8 +36,7 @@ def cusum_events(
     close: pd.Series,
     threshold: float | None = None,
 ) -> pd.DatetimeIndex:
-    """
-    Aplica filtro CUSUM simétrico e retorna timestamps de eventos.
+    """Aplica filtro CUSUM simétrico e retorna timestamps de eventos.
 
     Um evento é registrado quando a mudança cumulativa (positiva ou negativa)
     ultrapassa o ``threshold``. Após cada evento, os acumuladores são resetados.
@@ -55,6 +53,7 @@ def cusum_events(
     -------
     pd.DatetimeIndex
         Timestamps onde eventos foram detectados.
+
     """
     if threshold is None:
         # Threshold baseado em percentual da volatilidade dos retornos
@@ -88,8 +87,7 @@ def adaptive_cusum_events(
     ewm_span: int | None = None,
     threshold_multiplier: float | None = None,
 ) -> pd.DatetimeIndex:
-    """
-    CUSUM com threshold adaptativo baseado em volatilidade EWMA.
+    """CUSUM com threshold adaptativo baseado em volatilidade EWMA.
 
     O threshold varia ao longo do tempo conforme a volatilidade local,
     capturando mais eventos em períodos tranquilos e menos em períodos
@@ -108,6 +106,7 @@ def adaptive_cusum_events(
     -------
     pd.DatetimeIndex
         Timestamps de eventos detectados.
+
     """
     if ewm_span is None:
         ewm_span = feature_config.cusum_ewm_span

@@ -1,5 +1,4 @@
-"""
-Testes unitários para a Barreira Tripla Dinâmica (Breakeven).
+"""Testes unitários para a Barreira Tripla Dinâmica (Breakeven).
 """
 
 from __future__ import annotations
@@ -11,8 +10,7 @@ from src.labeling.triple_barrier import create_events, get_labels
 
 
 def test_breakeven_activation():
-    """
-    Testa se o breakeven é ativado corretamente.
+    """Testa se o breakeven é ativado corretamente.
     Cenário: Preço sobe até atingir o trigger e depois cai até a entrada.
     Entry é na barra T+1 (open_prices[start_loc+1]).
     """

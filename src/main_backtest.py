@@ -1,5 +1,4 @@
-"""
-Orquestrador de Backtest — TradeSystem5000.
+"""Orquestrador de Backtest — TradeSystem5000.
 
 Este módulo integra todas as fases da metodologia AFML (Advances in Financial Machine Learning):
 1.  **Dados**: Extração de fontes como MT5 ou Yahoo Finance.
@@ -67,8 +66,7 @@ from src.modeling.feature_evaluation import evaluate_features_mda, evaluate_feat
 
 
 def generate_synthetic_data(n_days: int = 1000) -> pd.DataFrame:
-    """
-    Gera dados sintéticos de preços OHLCV (Random Walk) para demonstração.
+    """Gera dados sintéticos de preços OHLCV (Random Walk) para demonstração.
 
     Parameters
     ----------
@@ -79,6 +77,7 @@ def generate_synthetic_data(n_days: int = 1000) -> pd.DataFrame:
     -------
     pd.DataFrame
         DataFrame com colunas [open, high, low, close, volume] e DateTimeIndex.
+
     """
     np.random.seed(42)
     dates = pd.date_range(end=pd.Timestamp.today(), periods=n_days, freq="D")
@@ -106,8 +105,7 @@ def generate_synthetic_data(n_days: int = 1000) -> pd.DataFrame:
     return df
 
 def fetch_yfinance_data(symbol: str = "PETR4.SA", years: float = 5, interval: str = "1d") -> pd.DataFrame:
-    """
-    Baixa dados históricos do Yahoo Finance com suporte a diferentes granularidades.
+    """Baixa dados históricos do Yahoo Finance com suporte a diferentes granularidades.
 
     Ajusta automaticamente o período de lookback para respeitar os limites da API
     do Yahoo Finance para dados intraday.
@@ -125,6 +123,7 @@ def fetch_yfinance_data(symbol: str = "PETR4.SA", years: float = 5, interval: st
     -------
     pd.DataFrame
         DataFrame OHLCV limpo.
+
     """
     try:
         import yfinance as yf
@@ -175,8 +174,7 @@ def fetch_yfinance_data(symbol: str = "PETR4.SA", years: float = 5, interval: st
     return df
 
 def fetch_mt5_data(symbol: str = "PETR4", years: float = 5, interval: str = "1h", n_bars: int = 5000) -> pd.DataFrame:
-    """
-    Baixa dados históricos do MetaTrader 5 usando os módulos de dados internos.
+    """Baixa dados históricos do MetaTrader 5 usando os módulos de dados internos.
 
     Parameters
     ----------
@@ -193,6 +191,7 @@ def fetch_mt5_data(symbol: str = "PETR4", years: float = 5, interval: str = "1h"
     -------
     pd.DataFrame
         DataFrame OHLCV com volumes normalizados.
+
     """
     logger.info(f"Baixando dados do MT5 para {symbol} (Intervalo: {interval})...")
 
@@ -216,8 +215,7 @@ def fetch_mt5_data(symbol: str = "PETR4", years: float = 5, interval: str = "1h"
         sys.exit(1)
 
 def run_pipeline(df: pd.DataFrame, interval: str = "1d", use_volume_bars: bool = False, params: dict | None = None) -> dict:
-    """
-    Executa o core do pipeline de backtest dado um DataFrame OHLCV.
+    """Executa o core do pipeline de backtest dado um DataFrame OHLCV.
 
     Implementa a sequência completa de processamento AFML: Amostragem -> Features ->
     FFD -> Labeling -> Meta-Labeling -> Avaliação.
@@ -237,8 +235,8 @@ def run_pipeline(df: pd.DataFrame, interval: str = "1d", use_volume_bars: bool =
     -------
     dict
         Dicionário contendo os resultados de performance, atribuição e dados processados.
-    """
 
+    """
     if params is None:
         params = {}
 
@@ -714,6 +712,10 @@ def run_pipeline(df: pd.DataFrame, interval: str = "1d", use_volume_bars: bool =
     }
 
 def main():
+    """Ponto de entrada de execução CLI do subsistema simulado do Backtest AFML.
+
+    Inicia e configura os extratores locais dependentes da chamada do argparser.
+    """
     parser = argparse.ArgumentParser(description="TradeSystem5000 Backtest Orchestrator")
     parser.add_argument("--mode", choices=["synthetic", "yfinance", "mt5"], default="mt5",
                         help="Modo de dados. Padrão: mt5.")

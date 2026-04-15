@@ -1,5 +1,4 @@
-"""
-Combinatorial Purged Cross-Validation (CPCV) — TradeSystem5000.
+"""Combinatorial Purged Cross-Validation (CPCV) — TradeSystem5000.
 
 O CPCV gera múltiplos caminhos de backtest combinatórios a partir de N grupos.
 Diferente do K-Fold tradicional, ele permite que múltiplos blocos de teste
@@ -31,8 +30,7 @@ from src.modeling.purge_embargo import apply_embargo, get_train_times
 # Combinatorial Purged Cross-Validation
 # ---------------------------------------------------------------------------
 class CombinatorialPurgedCV:
-    """
-    Combinatorial Purged Cross-Validation.
+    """Combinatorial Purged Cross-Validation.
 
     Divide a série em ``n_groups`` blocos ordenados no tempo e gera
     todos os caminhos onde ``n_test_groups`` blocos consecutivos formam
@@ -48,6 +46,7 @@ class CombinatorialPurgedCV:
         Série t0 (index) → t1 (values) com os tempos dos eventos.
     pct_embargo : float
         Fração de embargo pós-teste.
+
     """
 
     def __init__(
@@ -57,6 +56,7 @@ class CombinatorialPurgedCV:
         samples_info: pd.Series | None = None,
         pct_embargo: float = 0.01,
     ) -> None:
+        """Inicializa."""
         self.n_groups = n_groups
         self.n_test_groups = n_test_groups
         self.samples_info = samples_info
@@ -77,19 +77,17 @@ class CombinatorialPurgedCV:
         X: pd.DataFrame | np.ndarray,
         y: pd.Series | np.ndarray | None = None,
     ) -> list[tuple[np.ndarray, np.ndarray]]:
-        """
-        Gera todos os splits combinatórios com purga e embargo.
+        """Gera split.
 
         Parameters
         ----------
-        X : pd.DataFrame ou np.ndarray
-            Features (usado apenas para determinar tamanho).
-        y : ignored
+        X : pd.DataFrame | np.ndarray
+            Features.
+        y : pd.Series | np.ndarray, optional
+            Target.
+        groups : np.ndarray, optional
+            Groups.
 
-        Returns
-        -------
-        list[tuple[np.ndarray, np.ndarray]]
-            Lista de (train_indices, test_indices) para cada combinação.
         """
         n_samples = X.shape[0] if hasattr(X, "shape") else len(X)
         indices = np.arange(n_samples)
@@ -146,8 +144,7 @@ class CombinatorialPurgedCV:
         self,
         predictions: dict[int, pd.Series],
     ) -> pd.DataFrame:
-        """
-        Reconstrói os caminhos de backtest a partir das previsões por fold.
+        """Reconstrói os caminhos de backtest a partir das previsões por fold.
 
         Parameters
         ----------
@@ -158,6 +155,7 @@ class CombinatorialPurgedCV:
         -------
         pd.DataFrame
             DataFrame com colunas = caminhos e valores = retornos previstos.
+
         """
         paths = {}
         for combo_idx, preds in predictions.items():

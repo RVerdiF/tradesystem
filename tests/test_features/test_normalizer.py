@@ -1,5 +1,4 @@
-"""
-Testes para o módulo de normalização temporal (normalizer.py).
+"""Testes para o módulo de normalização temporal (normalizer.py).
 
 Verifica propriedades estatísticas (Z-score, rank), normalização em lote,
 e validação anti look-ahead bias.

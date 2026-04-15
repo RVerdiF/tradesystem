@@ -1,5 +1,4 @@
-"""
-Testes para o módulo de amostragem de barras alternativas (bar_sampler.py).
+"""Testes para o módulo de amostragem de barras alternativas (bar_sampler.py).
 
 Testa barras de volume, barras de dólar e barras de tick com dados sintéticos,
 verificando propriedades esperadas como totalização de volume e OHLC correto.

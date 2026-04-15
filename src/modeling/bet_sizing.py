@@ -1,5 +1,4 @@
-"""
-Dimensionamento de Apostas (Bet Sizing) — TradeSystem5000.
+"""Dimensionamento de Apostas (Bet Sizing) — TradeSystem5000.
 
 Este módulo implementa estratégias de dimensionamento de posição baseadas na
 probabilidade de sucesso (saída do Meta-Modelo) e no critério de Kelly.
@@ -33,8 +32,7 @@ def compute_kelly_fraction(
     odds: float | pd.Series | np.ndarray = 1.0,
     fraction: float | None = None,
 ) -> pd.Series | float:
-    """
-    Calcula a fração da banca a ser arriscada segundo o critério de Kelly.
+    """Calcula a fração da banca a ser arriscada segundo o critério de Kelly.
 
     A fórmula base de Kelly é: f* = p - (q / odds)
     onde:
@@ -61,6 +59,7 @@ def compute_kelly_fraction(
     -------
     f_kelly : float, np.ndarray ou pd.Series
         Fração sugerida a ser apostada, limitada no intervalo [0, 1].
+
     """
     if fraction is None:
         fraction = risk_config.kelly_fraction
@@ -90,8 +89,7 @@ def discretize_bet(
     max_position: int | None = None,
     step_size: int = 1,
 ) -> pd.Series:
-    """
-    Converte a fração contínua de Kelly em tamanho discreto de posição (lotes).
+    """Discretiza a fração contínua de Kelly em tamanho numérico estático de posição (lotes).
 
     Na prática de trading, não podemos negociar 0.32 contratos futuros. 
     Este utilitário discretiza a saída contínua para um número inteiro 
@@ -111,6 +109,7 @@ def discretize_bet(
     -------
     pd.Series
         Tamanho da posição em lotes (sempre inteiro e  >= 0).
+
     """
     if max_position is None:
         max_position = ml_config.max_leverage
@@ -144,8 +143,7 @@ def apply_conviction_threshold(
     prob_win: pd.Series | np.ndarray | float,
     threshold: float | None = None,
 ) -> pd.Series | np.ndarray | float:
-    """
-    Zera a probabilidade de entradas abaixo do limiar de convicção.
+    """Zera a probabilidade de entradas abaixo do limiar de convicção.
 
     Opera ANTES do cálculo do Kelly. Uma probabilidade zerada produz um
     Kelly negativo que é clipado para 0, resultando em posição zerada.
@@ -164,6 +162,7 @@ def apply_conviction_threshold(
     Returns
     -------
     prob_filtered : mesma estrutura de prob_win, com zeros onde abaixo do threshold.
+
     """
     if threshold is None:
         threshold = risk_config.min_conviction_threshold

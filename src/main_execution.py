@@ -1,5 +1,4 @@
-"""
-Execução em Tempo Real (Live/Paper) — TradeSystem5000.
+"""Execução em Tempo Real (Live/Paper) — TradeSystem5000.
 
 Este módulo orquestra o ciclo de vida da execução em tempo real, integrando
 o MetaTrader 5 (MT5) com a inteligência do Meta-Modelo (AFML).
@@ -90,8 +89,7 @@ from src.optimization.params_store import (
 # 1. Treinamento do modelo
 # ---------------------------------------------------------------------------
 def train_model(df: pd.DataFrame, interval: str = "1h", params: dict | None = None) -> dict:
-    """
-    Treina o Meta-Modelo usando o pipeline AFML para execução em tempo real.
+    """Treina o Meta-Modelo usando o pipeline AFML para execução em tempo real.
 
     Realiza o processamento completo: cálculo de features, FFD, geração de eventos
     via Alpha e CUSUM, meta-labeling e ajuste do classificador XGBoost.
@@ -113,6 +111,7 @@ def train_model(df: pd.DataFrame, interval: str = "1h", params: dict | None = No
         - "optimal_d": Valor de d usado na Diferenciação Fracionária.
         - "alpha": Instância do modelo de Alpha.
         - "feature_columns": Lista de nomes das features utilizadas.
+
     """
     logger.info("=== Treinamento do Meta-Modelo para Execução ===")
 
@@ -239,14 +238,21 @@ def load_model(path: Path) -> dict:
 # 3. Pipeline callable para o Engine
 # ---------------------------------------------------------------------------
 class LivePipeline:
-    """
-    Encapsula todo o pipeline de decisão num objeto callable.
+    """Encapsula todo o pipeline de decisão num objeto callable.
 
     O AsyncTradingEngine chama `pipeline(df_snapshot)` a cada ciclo.
     Retorna um dict com side, meta_prob, kelly_fraction e price.
     """
 
     def __init__(self, artifacts: dict) -> None:
+        """Instancia a modelagem de pipeline com variáveis derivadas das dependências injetadas.
+
+        Parameters
+        ----------
+        artifacts : dict
+            Modelos já treinados e serializados que provêm da calibração institucional local.
+
+        """
         self.model: MetaClassifier = artifacts["model"]
         self.optimal_d: float = artifacts["optimal_d"]
         self.alpha: CompositeAlpha = artifacts["alpha"]
@@ -268,9 +274,18 @@ class LivePipeline:
             )
 
     def __call__(self, df: pd.DataFrame) -> dict:
-        """
-        Recebe um snapshot histórico (ex: últimas 500 barras) e retorna
-        a decisão de trading.
+        """Recebe um snapshot histórico e retorna a decisão de trading.
+
+        Parameters
+        ----------
+        df : pd.DataFrame
+            Snapshot da corretora com os registros de preço e volume intradiários recentes.
+
+        Returns
+        -------
+        dict
+            Dicionário com a direção e dimensionamento das apostas após calibração do pipeline de predições.
+
         """
         if len(df) < self._min_bars:
             logger.error(
@@ -428,6 +443,11 @@ async def run(
 
 
 def main():
+    """Interage no loop assíncrono final gerenciando os limites operacionais.
+
+    A inicialização lê instâncias em persistência parametrizada local caso as encontre, ou,
+    exige calibrações dinâmicas sobre reamostragem pré-determinada on-the-fly.
+    """
     parser = argparse.ArgumentParser(
         description="TradeSystem5000 — Execução Live / Paper Trading"
     )

@@ -1,5 +1,4 @@
-"""
-Diferenciação Fracionária (FFD) — TradeSystem5000.
+"""Diferenciação Fracionária (FFD) — TradeSystem5000.
 
 Este módulo implementa a técnica de Diferenciação Fracionária (FracDiff) com
 janela de largura fixa (Fixed-Width Window). O objetivo é tornar a série
@@ -32,8 +31,7 @@ from config.settings import feature_config
 # Pesos FFD
 # ---------------------------------------------------------------------------
 def get_weights_ffd(d: float, threshold: float = 1e-5) -> np.ndarray:
-    """
-    Calcula os pesos da diferenciação fracionária com janela fixa (FFD).
+    """Calcula os pesos da diferenciação fracionária com janela fixa (FFD).
 
     Os pesos são expandidos até que ``|w_k| < threshold``.
 
@@ -48,6 +46,7 @@ def get_weights_ffd(d: float, threshold: float = 1e-5) -> np.ndarray:
     -------
     np.ndarray
         Array de pesos (do mais recente ao mais antigo).
+
     """
     weights = [1.0]
     k = 1
@@ -72,8 +71,7 @@ def frac_diff_ffd(
     d: float | None = None,
     threshold: float | None = None,
 ) -> pd.Series:
-    """
-    Aplica diferenciação fracionária FFD a uma série temporal.
+    """Aplica diferenciação fracionária FFD a uma série temporal.
 
     Usa convolução point-in-time (sem look-ahead). Os primeiros
     ``len(weights) - 1`` valores são descartados (NaN).
@@ -91,6 +89,7 @@ def frac_diff_ffd(
     -------
     pd.Series
         Série diferenciada fracionariamente, com mesmo índice.
+
     """
     if d is None:
         d = feature_config.ffd_d
@@ -143,8 +142,7 @@ def find_min_d(
     threshold: float | None = None,
     adf_pvalue: float | None = None,
 ) -> float:
-    """
-    Encontra o menor ``d`` que torna a série estacionária (teste ADF).
+    """Encontra o menor ``d`` que torna a série estacionária (teste ADF).
 
     Varre valores de ``d`` em ordem crescente e retorna o primeiro
     cuja série diferenciada tem p-value ADF ≤ ``adf_pvalue``.
@@ -165,6 +163,7 @@ def find_min_d(
     float
         Menor ``d`` que atinge estacionaridade. Retorna 1.0 se nenhum ``d``
         fracionário for suficiente.
+
     """
     if d_range is None:
         d_range = np.arange(0.05, 1.05, 0.05)

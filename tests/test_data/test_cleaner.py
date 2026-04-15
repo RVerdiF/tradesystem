@@ -1,5 +1,4 @@
-"""
-Testes para o módulo de limpeza de dados (cleaner.py).
+"""Testes para o módulo de limpeza de dados (cleaner.py).
 
 Testa remoção de spikes, preenchimento de lacunas e validação OHLC
 com dados sintéticos controlados.

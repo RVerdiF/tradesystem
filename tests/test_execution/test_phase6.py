@@ -1,5 +1,4 @@
-"""
-Testes para a Fase 6 — Paper Trading e Implantação.
+"""Testes para a Fase 6 — Paper Trading e Implantação.
 
 Testa isoladamente:
 - AuditLogger (persistência correta em SQLite)
@@ -26,8 +25,7 @@ from src.db import _ALL_DDL
 
 @pytest.fixture()
 def isolated_audit(tmp_path):
-    """
-    Cria um AuditLogger com banco SQLite temporário isolado por teste.
+    """Cria um AuditLogger com banco SQLite temporário isolado por teste.
     Patcha get_connection para apontar ao banco temp em vez do real.
     """
     db_file = tmp_path / "test_audit.db"

@@ -214,18 +214,18 @@ class TestCoolDown:
         assert "PETR4" not in rm._cool_down_until
 
     def test_validate_order_halted(self):
-        """testa validate_order quando não pode operar"""
+        """Testa validate_order quando não pode operar"""
         rm = RiskManager(start_balance=100000.0)
         rm.is_halted = True
         assert rm.validate_order(1.0, 1.0, 5.0) is False
 
     def test_validate_order_max_position(self):
-        """testa validate_order acima do máximo"""
+        """Testa validate_order acima do máximo"""
         rm = RiskManager(start_balance=100000.0)
         assert rm.validate_order(1.0, 5.0, 5.0) is False
 
     def test_validate_order_valid(self):
-        """testa validate_order valido"""
+        """Testa validate_order valido"""
         rm = RiskManager(start_balance=100000.0)
         assert rm.validate_order(1.0, 1.0, 5.0) is True
 
