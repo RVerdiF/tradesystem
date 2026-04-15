@@ -94,17 +94,17 @@ def generate_synthetic_data(n_days: int = 1000) -> pd.DataFrame:
 
     volume = np.random.lognormal(mean=10, sigma=1, size=n_days)
 
-    df = pd.DataFrame({
-        "open": open_price,
-        "high": high,
-        "low": low,
-        "close": close,
-        "volume": volume
-    }, index=dates)
+    df = pd.DataFrame(
+        {"open": open_price, "high": high, "low": low, "close": close, "volume": volume},
+        index=dates,
+    )
 
     return df
 
-def fetch_yfinance_data(symbol: str = "PETR4.SA", years: float = 5, interval: str = "1d") -> pd.DataFrame:
+
+def fetch_yfinance_data(
+    symbol: str = "PETR4.SA", years: float = 5, interval: str = "1d"
+) -> pd.DataFrame:
     """Baixa dados históricos do Yahoo Finance com suporte a diferentes granularidades.
 
     Ajusta automaticamente o período de lookback para respeitar os limites da API
@@ -145,7 +145,9 @@ def fetch_yfinance_data(symbol: str = "PETR4.SA", years: float = 5, interval: st
         max_d = 6 if interval == "1m" else 59
         days = min(requested_days, max_d)
         if requested_days > max_d:
-            logger.warning(f"Intervalo {interval} limitado a {max_d+1} dias no Yahoo Finance. Usando {days} dias.")
+            logger.warning(
+                f"Intervalo {interval} limitado a {max_d + 1} dias no Yahoo Finance. Usando {days} dias."
+            )
     else:
         days = requested_days
 
@@ -161,19 +163,18 @@ def fetch_yfinance_data(symbol: str = "PETR4.SA", years: float = 5, interval: st
     if isinstance(df.columns, pd.MultiIndex):
         df.columns = df.columns.get_level_values(0)
 
-    df = df.rename(columns={
-        "Open": "open",
-        "High": "high",
-        "Low": "low",
-        "Close": "close",
-        "Volume": "volume"
-    })
+    df = df.rename(
+        columns={"Open": "open", "High": "high", "Low": "low", "Close": "close", "Volume": "volume"}
+    )
 
     df = df[["open", "high", "low", "close", "volume"]].dropna()
     logger.success(f"Dados baixados: {len(df)} barras ({interval}).")
     return df
 
-def fetch_mt5_data(symbol: str = "PETR4", years: float = 5, interval: str = "1h", n_bars: int = 5000) -> pd.DataFrame:
+
+def fetch_mt5_data(
+    symbol: str = "PETR4", years: float = 5, interval: str = "1h", n_bars: int = 5000
+) -> pd.DataFrame:
     """Baixa dados históricos do MetaTrader 5 usando os módulos de dados internos.
 
     Parameters
@@ -198,7 +199,7 @@ def fetch_mt5_data(symbol: str = "PETR4", years: float = 5, interval: str = "1h"
     tf = INTERVAL_TO_TF.get(interval, 60)
 
     try:
-        with mt5_session() as conn:
+        with mt5_session():
             df = extract_ohlc(symbol=symbol, timeframe=tf, n_bars=n_bars)
 
         if df.empty:
@@ -207,14 +208,24 @@ def fetch_mt5_data(symbol: str = "PETR4", years: float = 5, interval: str = "1h"
 
         # O extractor já retorna time como index e colunas em minúsculas
         # Usa tick_volume como volume (comum no backtest MT5)
-        df = df[["open", "high", "low", "close", "tick_volume"]].rename(columns={"tick_volume": "volume"}).dropna()
+        df = (
+            df[["open", "high", "low", "close", "tick_volume"]]
+            .rename(columns={"tick_volume": "volume"})
+            .dropna()
+        )
         logger.success(f"Dados do MT5 baixados: {len(df)} barras ({interval}).")
         return df
     except Exception as e:
         logger.error(f"Erro ao extrair dados do MT5: {e}")
         sys.exit(1)
 
-def run_pipeline(df: pd.DataFrame, interval: str = "1d", use_volume_bars: bool = False, params: dict | None = None) -> dict:
+
+def run_pipeline(
+    df: pd.DataFrame,
+    interval: str = "1d",
+    use_volume_bars: bool = False,
+    params: dict | None = None,
+) -> dict:
     """Executa o core do pipeline de backtest dado um DataFrame OHLCV.
 
     Implementa a sequência completa de processamento AFML: Amostragem -> Features ->
@@ -251,17 +262,17 @@ def run_pipeline(df: pd.DataFrame, interval: str = "1d", use_volume_bars: bool =
         logger.info("--- Fase 1.2: Aplicando Amostragem de Barras de Volume ---")
         # Tratamos OHLCV como "ticks" para o sampler
         ticks_pseudo = df.rename(columns={"close": "last"})
-        df = volume_bars(ticks_pseudo, threshold=None) # Usa default da config
+        df = volume_bars(ticks_pseudo, threshold=None)  # Usa default da config
         interval = "volume"
 
     # Mapeamento de períodos por ano para métricas anualizadas (SR, etc.)
     periods_map = {
         "1d": 252,
-        "1h": 252 * 7,      # Aproximação pregão B3
+        "1h": 252 * 7,  # Aproximação pregão B3
         "60m": 252 * 7,
         "15m": 252 * 7 * 4,
         "5m": 252 * 7 * 12,
-        "volume": 252 * 7 * 6 # Estimativa para volume bars
+        "volume": 252 * 7 * 6,  # Estimativa para volume bars
     }
     ppy = periods_map.get(interval, 252)
 
@@ -288,11 +299,7 @@ def run_pipeline(df: pd.DataFrame, interval: str = "1d", use_volume_bars: bool =
     else:
         dynamic_config = feature_config
 
-    features = compute_all_features(
-        df,
-        config=dynamic_config,
-        is_volume_clock=use_volume_bars
-    )
+    features = compute_all_features(df, config=dynamic_config, is_volume_clock=use_volume_bars)
 
     # Fase 3.1: Otimização de Diferenciação Fracionária
     if "ffd_d" in params:
@@ -343,9 +350,15 @@ def run_pipeline(df: pd.DataFrame, interval: str = "1d", use_volume_bars: bool =
     short_fast_span = params.get("short_alpha_fast", labeling_config.short_fast_span)
     short_slow_span = params.get("short_alpha_slow", labeling_config.short_slow_span)
     long_hurst_threshold = params.get("long_hurst_threshold", feature_config.long_hurst_threshold)
-    short_hurst_threshold = params.get("short_hurst_threshold", feature_config.short_hurst_threshold)
-    long_voi_threshold = params.get("long_voi_threshold", feature_config.long_vol_imbalance_z_threshold)
-    short_voi_threshold = params.get("short_voi_threshold", feature_config.short_vol_imbalance_z_threshold)
+    short_hurst_threshold = params.get(
+        "short_hurst_threshold", feature_config.short_hurst_threshold
+    )
+    long_voi_threshold = params.get(
+        "long_voi_threshold", feature_config.long_vol_imbalance_z_threshold
+    )
+    short_voi_threshold = params.get(
+        "short_voi_threshold", feature_config.short_vol_imbalance_z_threshold
+    )
 
     alpha_model = CompositeAlpha(
         long_fast_span=long_fast_span,
@@ -391,7 +404,11 @@ def run_pipeline(df: pd.DataFrame, interval: str = "1d", use_volume_bars: bool =
         n_events_before_vir = len(signal_events)
 
         # Get side information from alpha signal
-        event_sides = signal.loc[signal_events] if isinstance(signal_events, pd.DatetimeIndex) else signal.loc[signal_events.index]
+        event_sides = (
+            signal.loc[signal_events]
+            if isinstance(signal_events, pd.DatetimeIndex)
+            else signal.loc[signal_events.index]
+        )
 
         # Reindex vir_zscore to event timestamps; missing → NaN (event not filtered out)
         vir_at_events = vir_zscore.reindex(signal_events)
@@ -406,9 +423,7 @@ def run_pipeline(df: pd.DataFrame, interval: str = "1d", use_volume_bars: bool =
 
         n_events_after_vir = len(signal_events)
         vir_removed = n_events_before_vir - n_events_after_vir
-        vir_filter_rate = (
-            vir_removed / n_events_before_vir if n_events_before_vir > 0 else 0.0
-        )
+        vir_filter_rate = vir_removed / n_events_before_vir if n_events_before_vir > 0 else 0.0
 
         logger.info(
             "VIR filter: removed {}/{} events (filter_rate={:.1f}%)",
@@ -434,7 +449,7 @@ def run_pipeline(df: pd.DataFrame, interval: str = "1d", use_volume_bars: bool =
         target_vol=target_vol,
         side=signal.loc[target_vol.index],
         max_holding=20,
-        pt_sl=pt_sl
+        pt_sl=pt_sl,
     )
 
     labels_df = get_labels(
@@ -509,7 +524,11 @@ def run_pipeline(df: pd.DataFrame, interval: str = "1d", use_volume_bars: bool =
     global_pos_rate = y_meta.mean()
     logger.info(
         "Meta-Model dataset: {} amostras | {:.1f}% positivos ({} de {}) | min_child_weight={:.1f}",
-        len(y_meta), global_pos_rate * 100, int(y_meta.sum()), len(y_meta), min_child_weight,
+        len(y_meta),
+        global_pos_rate * 100,
+        int(y_meta.sum()),
+        len(y_meta),
+        min_child_weight,
     )
     if global_pos_rate < 0.10 or global_pos_rate > 0.90:
         n_pos = int(y_meta.sum())
@@ -521,8 +540,12 @@ def run_pipeline(df: pd.DataFrame, interval: str = "1d", use_volume_bars: bool =
             "scale_pos_weight ideal ≈ {:.1f} (neg/pos = {}/{}). "
             "meta_threshold funcional ≈ {:.2f}–{:.2f} (baseado na taxa de positivos). "
             "Verifique também se max_holding da Triple Barrier é compatível com o horizonte do Alpha.",
-            global_pos_rate * 100, ideal_spw, n_neg, n_pos,
-            ideal_threshold * 0.5, ideal_threshold * 1.5,
+            global_pos_rate * 100,
+            ideal_spw,
+            n_neg,
+            n_pos,
+            ideal_threshold * 0.5,
+            ideal_threshold * 1.5,
         )
     avg_fold_size = len(y_meta) * (1 - 1 / 6)  # estimativa grosseira do fold de treino no CPCV 6/2
     hessian_per_sample = 0.25  # p*(1-p) com p≈0.5 no início
@@ -531,11 +554,14 @@ def run_pipeline(df: pd.DataFrame, interval: str = "1d", use_volume_bars: bool =
         logger.warning(
             "min_child_weight={:.1f} exige ~{:.0f} amostras por nó — alto para folds de ~{:.0f} amostras. "
             "O XGBoost pode não conseguir criar splits (AUC→0.5). Considere reduzir min_child_weight.",
-            min_child_weight, min_samples_needed, avg_fold_size,
+            min_child_weight,
+            min_samples_needed,
+            avg_fold_size,
         )
 
     for i, (train_idx, test_idx) in enumerate(splits):
-        if len(train_idx) < 10: continue
+        if len(train_idx) < 10:
+            continue
 
         X_train, y_train = X.iloc[train_idx], y_meta.iloc[train_idx]
         X_test, y_test = X.iloc[test_idx], y_meta.iloc[test_idx]
@@ -546,7 +572,10 @@ def run_pipeline(df: pd.DataFrame, interval: str = "1d", use_volume_bars: bool =
             logger.warning(
                 "Fold {}: desbalanceamento extremo no treino — {:.1f}% positivos ({} de {}). "
                 "Considere revisar o Alpha ou os parâmetros da Triple Barrier.",
-                i + 1, pos_rate * 100, int(y_train.sum()), len(y_train),
+                i + 1,
+                pos_rate * 100,
+                int(y_train.sum()),
+                len(y_train),
             )
 
         model = MetaClassifier(
@@ -556,7 +585,7 @@ def run_pipeline(df: pd.DataFrame, interval: str = "1d", use_volume_bars: bool =
             min_child_weight=min_child_weight,
             reg_lambda=reg_lambda,
             reg_alpha=reg_alpha,
-            use_xgboost=True
+            use_xgboost=True,
         )
 
         weights = np.abs(labels_df.loc[X_train.index, "ret"])
@@ -571,15 +600,20 @@ def run_pipeline(df: pd.DataFrame, interval: str = "1d", use_volume_bars: bool =
         train_preds = train_probs > meta_threshold
         train_labels = labels_df.loc[X_train.index].copy()
 
-        train_trades = pd.DataFrame({
-            "ret": train_labels["ret"],
-            "side": train_labels["side"],
-            "meta_label": train_preds.astype(int),
-            "bet_size": train_probs
-        }, index=X_train.index)
+        train_trades = pd.DataFrame(
+            {
+                "ret": train_labels["ret"],
+                "side": train_labels["side"],
+                "meta_label": train_preds.astype(int),
+                "bet_size": train_probs,
+            },
+            index=X_train.index,
+        )
 
         train_attr = trade_level_attribution(train_trades)
-        train_sr = attribution_analysis(train_attr["net_return"], train_attr["alpha_contribution"], periods_per_year=ppy)["sharpe_full_system"]
+        train_sr = attribution_analysis(
+            train_attr["net_return"], train_attr["alpha_contribution"], periods_per_year=ppy
+        )["sharpe_full_system"]
         all_train_sharpes.append(train_sr)
 
         probs = model.predict_proba(X_test)[:, 1]
@@ -588,7 +622,9 @@ def run_pipeline(df: pd.DataFrame, interval: str = "1d", use_volume_bars: bool =
         # Log AUC treino vs. teste por fold
         if len(np.unique(y_test)) > 1:
             import warnings
+
             from sklearn.metrics import roc_auc_score as _auc
+
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")
                 fold_train_auc = _auc(y_train, model.predict_proba(X_train)[:, 1])
@@ -599,17 +635,25 @@ def run_pipeline(df: pd.DataFrame, interval: str = "1d", use_volume_bars: bool =
                 logger.warning(
                     "Fold {}: AUC treino={:.3f} | AUC teste={:.3f} | UNDERFITTING — modelo não discrimina. "
                     "Verifique min_child_weight vs. tamanho do fold e desbalanceamento de classes.",
-                    i + 1, fold_train_auc, fold_test_auc,
+                    i + 1,
+                    fold_train_auc,
+                    fold_test_auc,
                 )
             elif gap > 0.15:
                 logger.warning(
                     "Fold {}: AUC treino={:.3f} | AUC teste={:.3f} | gap={:.3f} — possível overfitting",
-                    i + 1, fold_train_auc, fold_test_auc, gap,
+                    i + 1,
+                    fold_train_auc,
+                    fold_test_auc,
+                    gap,
                 )
             else:
                 logger.info(
                     "Fold {}: AUC treino={:.3f} | AUC teste={:.3f} | gap={:.3f}",
-                    i + 1, fold_train_auc, fold_test_auc, gap,
+                    i + 1,
+                    fold_train_auc,
+                    fold_test_auc,
+                    gap,
                 )
 
         all_test_preds.append(pd.Series(preds, index=X_test.index))
@@ -651,7 +695,7 @@ def run_pipeline(df: pd.DataFrame, interval: str = "1d", use_volume_bars: bool =
             min_child_weight=min_child_weight,
             reg_lambda=reg_lambda,
             reg_alpha=reg_alpha,
-            use_xgboost=True
+            use_xgboost=True,
         )
         full_weights = np.abs(labels_df.loc[X.index, "ret"])
         fw_mean = full_weights.mean()
@@ -669,19 +713,22 @@ def run_pipeline(df: pd.DataFrame, interval: str = "1d", use_volume_bars: bool =
 
     test_labels = labels_df.loc[y_test_all.index].copy()
 
-    trades = pd.DataFrame({
-        "ret": test_labels["ret"],
-        "side": test_labels["side"],
-        "meta_label": y_pred_all.astype(int),
-        "bet_size": y_prob_all,
-        # Custo round-trip baseado em CostConfig: slippage (entrada + saída) + corretagem por contrato.
-        # slippage_bps / 10_000 converte bps para fração; ×2 = round trip.
-        # brokerage_per_contract em R$ dividido pelo preço em pontos (proxy de fração de contrato).
-        "cost": (
-            2 * cost_config.slippage_bps / 10_000
-            + 2 * cost_config.brokerage_per_contract / df.loc[y_test_all.index, "close"]
-        )
-    }, index=y_test_all.index)
+    trades = pd.DataFrame(
+        {
+            "ret": test_labels["ret"],
+            "side": test_labels["side"],
+            "meta_label": y_pred_all.astype(int),
+            "bet_size": y_prob_all,
+            # Custo round-trip baseado em CostConfig: slippage (entrada + saída) + corretagem por contrato.
+            # slippage_bps / 10_000 converte bps para fração; ×2 = round trip.
+            # brokerage_per_contract em R$ dividido pelo preço em pontos (proxy de fração de contrato).
+            "cost": (
+                2 * cost_config.slippage_bps / 10_000
+                + 2 * cost_config.brokerage_per_contract / df.loc[y_test_all.index, "close"]
+            ),
+        },
+        index=y_test_all.index,
+    )
 
     trade_attr = trade_level_attribution(trades)
 
@@ -690,17 +737,22 @@ def run_pipeline(df: pd.DataFrame, interval: str = "1d", use_volume_bars: bool =
 
     logger.info(">>> Performance Final (OOS - Out-of-Sample) <<<")
     from src.backtest.metrics import calmar_ratio
-    perf = performance_report(net_returns, periods_per_year=ppy)
+
+    performance_report(net_returns, periods_per_year=ppy)
     calmar = calmar_ratio(net_returns, periods_per_year=ppy)
 
     logger.info(">>> Análise de Atribuição (Sharpe Lift) <<<")
     attr_results = attribution_analysis(net_returns, alpha_returns, periods_per_year=ppy)
-    summary = attribution_summary(trade_attr)
+    attribution_summary(trade_attr)
 
     if attr_results["sharpe_lift_meta"] > 0:
-        logger.success(f"Meta-Model agregou valor! Sharpe Lift: {attr_results['sharpe_lift_meta']:.2f}")
+        logger.success(
+            f"Meta-Model agregou valor! Sharpe Lift: {attr_results['sharpe_lift_meta']:.2f}"
+        )
     else:
-        logger.warning(f"Meta-Model não superou o Alpha. Sharpe Lift: {attr_results['sharpe_lift_meta']:.2f}")
+        logger.warning(
+            f"Meta-Model não superou o Alpha. Sharpe Lift: {attr_results['sharpe_lift_meta']:.2f}"
+        )
 
     logger.success("Pipeline orquestrado com sucesso!")
 
@@ -727,20 +779,39 @@ def run_pipeline(df: pd.DataFrame, interval: str = "1d", use_volume_bars: bool =
         "alpha_returns": alpha_returns,
     }
 
+
 def main():
     """Ponto de entrada de execução CLI do subsistema simulado do Backtest AFML.
 
     Inicia e configura os extratores locais dependentes da chamada do argparser.
     """
     parser = argparse.ArgumentParser(description="TradeSystem5000 Backtest Orchestrator")
-    parser.add_argument("--mode", choices=["synthetic", "yfinance", "mt5"], default="mt5",
-                        help="Modo de dados. Padrão: mt5.")
-    parser.add_argument("--symbol", type=str, default="PETR4.SA", help="Ativo (ex: PETR4.SA). (Sufixo .SA ignorado no MT5)")
-    parser.add_argument("--years", type=float, default=2, help="Anos de história (limite 2 p/ 1h em yfinance).")
+    parser.add_argument(
+        "--mode",
+        choices=["synthetic", "yfinance", "mt5"],
+        default="mt5",
+        help="Modo de dados. Padrão: mt5.",
+    )
+    parser.add_argument(
+        "--symbol",
+        type=str,
+        default="PETR4.SA",
+        help="Ativo (ex: PETR4.SA). (Sufixo .SA ignorado no MT5)",
+    )
+    parser.add_argument(
+        "--years", type=float, default=2, help="Anos de história (limite 2 p/ 1h em yfinance)."
+    )
     parser.add_argument("--n-bars", type=int, default=5000, help="Quantidade de barras para MT5.")
-    parser.add_argument("--interval", type=str, choices=["1d", "1h", "15m", "5m", "1m"], default="1h",
-                        help="Intervalo das barras (ex: 1d, 1h).")
-    parser.add_argument("--volume-bars", action="store_true", help="Usa amostragem de barras de volume (Fase 1.2).")
+    parser.add_argument(
+        "--interval",
+        type=str,
+        choices=["1d", "1h", "15m", "5m", "1m"],
+        default="1h",
+        help="Intervalo das barras (ex: 1d, 1h).",
+    )
+    parser.add_argument(
+        "--volume-bars", action="store_true", help="Usa amostragem de barras de volume (Fase 1.2)."
+    )
 
     args = parser.parse_args()
 
@@ -749,21 +820,28 @@ def main():
         df = generate_synthetic_data(n_days=2000)
     elif args.mode == "yfinance":
         if args.volume_bars and args.interval == "1h":
-            logger.info("Volume Bars solicitado: Alterando intervalo yfinance para 5m para melhor precisão.")
+            logger.info(
+                "Volume Bars solicitado: Alterando intervalo yfinance para 5m para melhor precisão."
+            )
             args.interval = "5m"
             args.years = min(args.years, 0.16)
 
-        logger.info(f"Iniciando Modo YFINANCE (Ativo: {args.symbol}, Intervalo: {args.interval})...")
+        logger.info(
+            f"Iniciando Modo YFINANCE (Ativo: {args.symbol}, Intervalo: {args.interval})..."
+        )
         df = fetch_yfinance_data(symbol=args.symbol, years=args.years, interval=args.interval)
     elif args.mode == "mt5":
         symbol = args.symbol.replace(".SA", "")
         logger.info(f"Iniciando Modo MT5 (Ativo: {symbol}, Intervalo: {args.interval})...")
-        df = fetch_mt5_data(symbol=symbol, years=args.years, interval=args.interval, n_bars=args.n_bars)
+        df = fetch_mt5_data(
+            symbol=symbol, years=args.years, interval=args.interval, n_bars=args.n_bars
+        )
     else:
         logger.error("Modo inválido.")
         sys.exit(1)
 
     run_pipeline(df, interval=args.interval, use_volume_bars=args.volume_bars)
+
 
 if __name__ == "__main__":
     main()

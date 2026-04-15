@@ -91,8 +91,8 @@ def discretize_bet(
 ) -> pd.Series:
     """Discretiza a fração contínua de Kelly em tamanho numérico estático de posição (lotes).
 
-    Na prática de trading, não podemos negociar 0.32 contratos futuros. 
-    Este utilitário discretiza a saída contínua para um número inteiro 
+    Na prática de trading, não podemos negociar 0.32 contratos futuros.
+    Este utilitário discretiza a saída contínua para um número inteiro
     de contratos, respeitando o limite máximo definido na configuração.
 
     Parameters
@@ -134,10 +134,11 @@ def discretize_bet(
             "Discretized Pos: Max sugerido={}, Média={:.2f}, Bets ignorados={}",
             max_pos_reached,
             avg_pos,
-            (discrete_pos == 0).sum()
+            (discrete_pos == 0).sum(),
         )
 
     return discrete_pos
+
 
 def apply_conviction_threshold(
     prob_win: pd.Series | np.ndarray | float,
