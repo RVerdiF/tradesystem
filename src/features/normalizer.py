@@ -46,18 +46,10 @@ ROLLING_NORMALIZED_COLS = [
 
 # Colunas brutas que NUNCA devem ser normalizadas.
 # Inclui OHLCV raw e campos auxiliares de tempo.
-_BLOCKLIST_RAW_COLS = frozenset(
-    [
-        "open",
-        "high",
-        "low",
-        "close",
-        "volume",
-        "time",
-        "tick_volume",
-        "real_volume",
-    ]
-)
+_BLOCKLIST_RAW_COLS = frozenset([
+    "open", "high", "low", "close", "volume",
+    "time", "tick_volume", "real_volume",
+])
 
 
 # ---------------------------------------------------------------------------

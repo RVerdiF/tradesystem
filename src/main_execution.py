@@ -37,6 +37,7 @@ Referências
 López de Prado, M. (2018). Advances in Financial Machine Learning. John Wiley & Sons.
 """
 
+
 from __future__ import annotations
 
 import argparse
@@ -133,15 +134,9 @@ def train_model(df: pd.DataFrame, interval: str = "1h", params: dict | None = No
     short_fast_span = params.get("short_alpha_fast", labeling_config.short_fast_span)
     short_slow_span = params.get("short_alpha_slow", labeling_config.short_slow_span)
     long_hurst_threshold = params.get("long_hurst_threshold", feature_config.long_hurst_threshold)
-    short_hurst_threshold = params.get(
-        "short_hurst_threshold", feature_config.short_hurst_threshold
-    )
-    long_voi_threshold = params.get(
-        "long_voi_threshold", feature_config.long_vol_imbalance_z_threshold
-    )
-    short_voi_threshold = params.get(
-        "short_voi_threshold", feature_config.short_vol_imbalance_z_threshold
-    )
+    short_hurst_threshold = params.get("short_hurst_threshold", feature_config.short_hurst_threshold)
+    long_voi_threshold = params.get("long_voi_threshold", feature_config.long_vol_imbalance_z_threshold)
+    short_voi_threshold = params.get("short_voi_threshold", feature_config.short_vol_imbalance_z_threshold)
 
     # --- Alpha ---
     alpha = CompositeAlpha(
@@ -308,9 +303,7 @@ class LivePipeline:
             logger.error(
                 "LivePipeline: buffer insuficiente (len(df)={}, mínimo={} = kernel_ffd({}) + 50). "
                 "Retornando sinal neutro para evitar distorção de borda FFD.",
-                len(df),
-                self._min_bars,
-                self._ffd_kernel_len,
+                len(df), self._min_bars, self._ffd_kernel_len,
             )
             return self._neutral()
 
@@ -405,19 +398,13 @@ def fetch_training_data(symbol: str, years: float, interval: str) -> pd.DataFram
     if isinstance(df.columns, pd.MultiIndex):
         df.columns = df.columns.get_level_values(0)
 
-    df = df.rename(
-        columns={
-            "Open": "open",
-            "High": "high",
-            "Low": "low",
-            "Close": "close",
-            "Volume": "volume",
-        }
-    )
+    df = df.rename(columns={
+        "Open": "open", "High": "high", "Low": "low",
+        "Close": "close", "Volume": "volume",
+    })
     df = df[["open", "high", "low", "close", "volume"]].dropna()
     logger.success(f"Dados de treino: {len(df)} barras ({interval})")
     return df
-
 
 def fetch_mt5_training_data(symbol: str, interval: str, n_bars: int) -> pd.DataFrame:
     """Baixa dados do MT5 para treinar o modelo."""
@@ -425,7 +412,7 @@ def fetch_mt5_training_data(symbol: str, interval: str, n_bars: int) -> pd.DataF
     logger.info(f"Baixando {n_bars} barras ({interval}) do MT5 para {symbol}...")
 
     try:
-        with mt5_session():
+        with mt5_session() as conn:
             df = extract_ohlc(symbol=symbol, timeframe=tf, n_bars=n_bars)
 
         if df.empty:
@@ -434,11 +421,7 @@ def fetch_mt5_training_data(symbol: str, interval: str, n_bars: int) -> pd.DataF
 
         # O extractor já retorna time como index e colunas em minúsculas
         # Usa tick_volume como volume
-        df = (
-            df[["open", "high", "low", "close", "tick_volume"]]
-            .rename(columns={"tick_volume": "volume"})
-            .dropna()
-        )
+        df = df[["open", "high", "low", "close", "tick_volume"]].rename(columns={"tick_volume": "volume"}).dropna()
         logger.success(f"Dados de treino MT5: {len(df)} barras ({interval})")
         return df
     except Exception as e:
@@ -449,10 +432,18 @@ def fetch_mt5_training_data(symbol: str, interval: str, n_bars: int) -> pd.DataF
 # ---------------------------------------------------------------------------
 # 5. Main
 # ---------------------------------------------------------------------------
-async def run(pipeline: LivePipeline, symbols: list[str], max_position: float, trade_type: str):
+async def run(
+    pipeline: LivePipeline,
+    symbols: list[str],
+    max_position: float,
+    trade_type: str
+):
     """Inicia o motor assíncrono."""
     engine = AsyncTradingEngine(
-        model_pipeline=pipeline, symbols=symbols, max_position=max_position, trade_type=trade_type
+        model_pipeline=pipeline,
+        symbols=symbols,
+        max_position=max_position,
+        trade_type=trade_type
     )
     try:
         await engine.run_forever()
@@ -469,61 +460,45 @@ def main():
     A inicialização lê instâncias em persistência parametrizada local caso as encontre, ou,
     exige calibrações dinâmicas sobre reamostragem pré-determinada on-the-fly.
     """
-    parser = argparse.ArgumentParser(description="TradeSystem5000 — Execução Live / Paper Trading")
+    parser = argparse.ArgumentParser(
+        description="TradeSystem5000 — Execução Live / Paper Trading"
+    )
     parser.add_argument(
-        "--symbol",
-        type=str,
-        default="PETR4.SA",
+        "--symbol", type=str, default="PETR4.SA",
         help="Ativo a ser monitorado (padrão: PETR4.SA, .SA ignorado no MT5)",
     )
     parser.add_argument(
-        "--data-source",
-        type=str,
-        default="mt5",
-        choices=["mt5", "yfinance"],
+        "--data-source", type=str, default="mt5", choices=["mt5", "yfinance"],
         help="Fonte de dados para treino (padrão: mt5)",
     )
     parser.add_argument(
-        "--interval",
-        type=str,
-        default="1h",
+        "--interval", type=str, default="1h",
         choices=["1d", "1h", "15m", "5m", "1m"],
         help="Intervalo das barras para treino (padrão: 1h)",
     )
     parser.add_argument(
-        "--years",
-        type=float,
-        default=2,
+        "--years", type=float, default=2,
         help="Anos de histórico para treino (padrão: 2 para yfinance)",
     )
     parser.add_argument(
-        "--n-bars",
-        type=int,
-        default=5000,
+        "--n-bars", type=int, default=5000,
         help="Quantidade de barras para treino (padrão: 5000 para mt5)",
     )
     parser.add_argument(
-        "--max-position",
-        type=float,
-        default=200.0,
+        "--max-position", type=float, default=200.0,
         help="Posição máxima em lotes (padrão: 200.0)",
     )
     parser.add_argument(
-        "--trade-type",
-        type=str,
-        default="day_trade",
+        "--trade-type", type=str, default="day_trade",
         choices=["day_trade", "swing_trade"],
         help="Modalidade de trading (padrão: day_trade)",
     )
     parser.add_argument(
-        "--load-model",
-        type=str,
-        default=None,
+        "--load-model", type=str, default=None,
         help="Caminho para carregar modelo pré-treinado (.pkl).",
     )
     parser.add_argument(
-        "--force-optimize",
-        action="store_true",
+        "--force-optimize", action="store_true",
         help="Força re-otimização dos hiperparâmetros (ignora arquivo JSON existente).",
     )
 
@@ -542,7 +517,6 @@ def main():
     # --- Inicializa MT5 se modo live ---
     if execution_config.mode == "live":
         import MetaTrader5 as mt5
-
         if not mt5.initialize():
             logger.critical(f"Falha ao inicializar MT5: {mt5.last_error()}")
             sys.exit(1)
@@ -560,11 +534,12 @@ def main():
             df_opt = fetch_training_data(args.symbol, args.years, args.interval)
 
         from src.optimization.tuner import run_optimization
-
         opt_results = run_optimization(df_opt, interval=args.interval)
 
         save_optimized_params(
-            symbol=args.symbol, params=opt_results["params"], metadata=opt_results["metadata"]
+            symbol=args.symbol,
+            params=opt_results["params"],
+            metadata=opt_results["metadata"]
         )
         logger.success("Parâmetros otimizados e salvos com sucesso!")
 
@@ -592,14 +567,12 @@ def main():
     pipeline = LivePipeline(artifacts)
 
     # --- Execução ---
-    asyncio.run(
-        run(
-            pipeline=pipeline,
-            symbols=[args.symbol],
-            max_position=args.max_position,
-            trade_type=args.trade_type,
-        )
-    )
+    asyncio.run(run(
+        pipeline=pipeline,
+        symbols=[args.symbol],
+        max_position=args.max_position,
+        trade_type=args.trade_type
+    ))
 
 
 if __name__ == "__main__":

@@ -123,9 +123,7 @@ def trade_level_attribution(
 
     # Contribuição do sizing
     if "bet_size" in result.columns:
-        result["sized_return"] = (
-            result.get("alpha_contribution", result["ret"]) * result["bet_size"]
-        )
+        result["sized_return"] = result.get("alpha_contribution", result["ret"]) * result["bet_size"]
     else:
         result["sized_return"] = result.get("alpha_contribution", result["ret"])
 
@@ -148,7 +146,9 @@ def trade_level_attribution(
             mask = mask & (result["bet_size"] > 0)
 
         result["net_return"] = np.where(
-            mask, result["sized_return"] - result["cost"], result["sized_return"]
+            mask,
+            result["sized_return"] - result["cost"],
+            result["sized_return"]
         )
     else:
         result["net_return"] = result["sized_return"]
@@ -156,9 +156,7 @@ def trade_level_attribution(
     logger.info(
         "Trade attribution: {} trades | Média alpha (com custos)={:.4f} | Média líquida={:.4f}",
         len(result),
-        result["alpha_contribution"].mean()
-        if "alpha_contribution" in result.columns
-        else result["ret"].mean(),
+        result["alpha_contribution"].mean() if "alpha_contribution" in result.columns else result["ret"].mean(),
         result["net_return"].mean(),
     )
 

@@ -48,7 +48,7 @@ class RiskManager:
         start_balance: float | None = None,
         trade_type: str = risk_config.trade_type,
         start_time: str = risk_config.trading_start_time,
-        end_time: str = risk_config.trading_end_time,
+        end_time: str = risk_config.trading_end_time
     ) -> None:
         """Inicializa o RiskManager.
 
@@ -109,9 +109,7 @@ class RiskManager:
             self.last_trading_day = today
             self._cool_down_until.clear()  # Descarta cool-down do dia anterior
             self._set_state(STATE_ACTIVE, "")
-            logger.info(
-                "Novo dia de trading. Saldo inicial resetado para: {:.2f}", self.start_balance
-            )
+            logger.info("Novo dia de trading. Saldo inicial resetado para: {:.2f}", self.start_balance)
 
         if self.start_balance is None:
             self.start_balance = balance
@@ -139,18 +137,12 @@ class RiskManager:
         if self.system_state == STATE_OUTSIDE_WINDOW:
             return  # Window-based closes don't warrant a cool-down; daily reset handles cleanup
 
-        cool_down_until = datetime.datetime.now() + datetime.timedelta(
-            minutes=self.cool_down_minutes
-        )
+        cool_down_until = datetime.datetime.now() + datetime.timedelta(minutes=self.cool_down_minutes)
         self._cool_down_until[symbol] = cool_down_until
-
+        
         reason = f"COOL_DOWN (until {cool_down_until.strftime('%H:%M:%S')} for {symbol})"
-        audit.log_error(
-            "RiskManager", reason, critical=False
-        )  # Persiste no SQLite para análise pós-trade
-        logger.info(
-            "Cool-down ativado para {} até: {}", symbol, cool_down_until.strftime("%H:%M:%S")
-        )
+        audit.log_error("RiskManager", reason, critical=False)  # Persiste no SQLite para análise pós-trade
+        logger.info("Cool-down ativado para {} até: {}", symbol, cool_down_until.strftime('%H:%M:%S'))
 
     def can_trade(self, symbol: str = "GLOBAL") -> bool:
         """Retorna True se o sistema e o ativo estiverem livres para enviar ordens."""
@@ -161,22 +153,14 @@ class RiskManager:
         if symbol in self._cool_down_until:
             if datetime.datetime.now() >= self._cool_down_until[symbol]:
                 del self._cool_down_until[symbol]
-                logger.info(
-                    "Cool-down expirado para {}. Sistema reativado para este ativo.", symbol
-                )
+                logger.info("Cool-down expirado para {}. Sistema reativado para este ativo.", symbol)
             else:
-                logger.warning(
-                    "TRADING BLOCKED FOR {}: COOL_DOWN until {}",
-                    symbol,
-                    self._cool_down_until[symbol].strftime("%H:%M:%S"),
-                )
+                logger.warning("TRADING BLOCKED FOR {}: COOL_DOWN until {}", symbol, self._cool_down_until[symbol].strftime('%H:%M:%S'))
                 return False
 
         return True
 
-    def validate_order(
-        self, current_exposure: float, new_volume: float, max_exposure: float
-    ) -> bool:
+    def validate_order(self, current_exposure: float, new_volume: float, max_exposure: float) -> bool:
         """Verifica exposição máxima por ativo/conta antes de enviar uma ordem."""
         if self.is_halted:
             return False
@@ -221,7 +205,8 @@ class RiskManager:
         now = datetime.datetime.now().time()
         if now < self.start_time or now > self.end_time:
             self._set_state(
-                STATE_OUTSIDE_WINDOW, f"OUTSIDE TRADING WINDOW ({now.strftime('%H:%M:%S')})"
+                STATE_OUTSIDE_WINDOW,
+                f"OUTSIDE TRADING WINDOW ({now.strftime('%H:%M:%S')})"
             )
             return
         elif self.system_state == STATE_OUTSIDE_WINDOW:

@@ -77,13 +77,12 @@ class AuditLogger:
         if meta_label == 1 and kelly_fraction > 0:
             logger.info(
                 "SINAL APROVADO: {} | Side: {} | P: {} | f*: {:.2f}",
-                symbol,
-                alpha_side,
-                price,
-                kelly_fraction,
+                symbol, alpha_side, price, kelly_fraction,
             )
         elif alpha_side != 0:
-            logger.debug("SINAL REJEITADO (Meta=0 ou f=0): {} | Side: {}", symbol, alpha_side)
+            logger.debug(
+                "SINAL REJEITADO (Meta=0 ou f=0): {} | Side: {}", symbol, alpha_side
+            )
 
     def log_order(
         self,
@@ -117,14 +116,12 @@ class AuditLogger:
 
         logger.success(
             "ORDEM ENVIADA: [{}] {} {} | Vol: {} | Preço: {}",
-            ticket,
-            action.upper(),
-            symbol,
-            volume,
-            price,
+            ticket, action.upper(), symbol, volume, price,
         )
 
-    def log_error(self, component: str, error_msg: str, critical: bool = False) -> None:
+    def log_error(
+        self, component: str, error_msg: str, critical: bool = False
+    ) -> None:
         """Audita erros operacionais do sistema."""
         with get_connection() as conn:
             conn.execute(

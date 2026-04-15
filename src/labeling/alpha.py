@@ -262,14 +262,10 @@ class CompositeAlpha(AlphaModel):
         self.long_hurst_threshold = long_hurst_threshold or feature_config.long_hurst_threshold
         self.short_hurst_threshold = short_hurst_threshold or feature_config.short_hurst_threshold
         self.long_vir_zscore_threshold = (
-            long_vir_zscore_threshold
-            if long_vir_zscore_threshold is not None
-            else feature_config.long_vol_imbalance_z_threshold
+            long_vir_zscore_threshold if long_vir_zscore_threshold is not None else feature_config.long_vol_imbalance_z_threshold
         )
         self.short_vir_zscore_threshold = (
-            short_vir_zscore_threshold
-            if short_vir_zscore_threshold is not None
-            else feature_config.short_vol_imbalance_z_threshold
+            short_vir_zscore_threshold if short_vir_zscore_threshold is not None else feature_config.short_vol_imbalance_z_threshold
         )
 
     @property
@@ -284,9 +280,6 @@ class CompositeAlpha(AlphaModel):
 
     def generate_signal(self, df: pd.DataFrame) -> pd.Series:
         """Gera sinais de trading baseados nas regras compostas.
-
-        A lógica foi invertida para usar o Volume Imbalance como trigger principal
-        e a EMA ou Hurst como filtro de contexto macro, aumentando a reatividade para scalping.
 
         Parameters
         ----------
@@ -306,135 +299,35 @@ class CompositeAlpha(AlphaModel):
 
         price_series = df["close"]
 
-        # Só precisamos da EMA lenta como filtro de estado/tendência
+        long_ema_fast = price_series.ewm(span=self.long_fast_span, adjust=False).mean()
         long_ema_slow = price_series.ewm(span=self.long_slow_span, adjust=False).mean()
+
+        short_ema_fast = price_series.ewm(span=self.short_fast_span, adjust=False).mean()
         short_ema_slow = price_series.ewm(span=self.short_slow_span, adjust=False).mean()
 
         signal = pd.Series(0, index=price_series.index, dtype=np.int8, name="signal")
 
-        # Long conditions:
-        # Trigger: VIR_Z > long_vir_zscore_threshold
-        # Filtro: (close > long_ema_slow OR hurst_exponent > long_hurst_threshold)
-        long_cond = (df["volume_imbalance_zscore"] > self.long_vir_zscore_threshold) & (
-            (price_series > long_ema_slow) | (df["hurst_exponent"] > self.long_hurst_threshold)
+        # Long conditions
+        long_cond = (
+            (long_ema_fast > long_ema_slow)
+            & (df["hurst_exponent"] > self.long_hurst_threshold)
+            & (df["volume_imbalance_zscore"] > self.long_vir_zscore_threshold)
         )
 
-        # Short conditions:
-        # Trigger: VIR_Z < -short_vir_zscore_threshold
-        # Filtro: (close < short_ema_slow OR hurst_exponent > short_hurst_threshold)
-        short_cond = (df["volume_imbalance_zscore"] < -self.short_vir_zscore_threshold) & (
-            (price_series < short_ema_slow) | (df["hurst_exponent"] > self.short_hurst_threshold)
+        # Short conditions
+        short_cond = (
+            (short_ema_fast < short_ema_slow)
+            & (df["hurst_exponent"] > self.short_hurst_threshold)
+            & (df["volume_imbalance_zscore"] < -self.short_vir_zscore_threshold)
         )
 
         signal[long_cond] = 1
         signal[short_cond] = -1
 
-        # Warm-up: set to 0 until EMAs are stable for both sides
-        warmup = max(self.long_slow_span, self.short_slow_span)
+        # Warm-up: set to NaN until EMAs are stable for both sides
+        warmup = max(self.long_fast_span, self.long_slow_span, self.short_fast_span, self.short_slow_span)
         signal.iloc[:warmup] = 0
 
-        return signal
-
-
-# ---------------------------------------------------------------------------
-# Microstructure Reversion (FracDiff + VIR)
-# ---------------------------------------------------------------------------
-class MicrostructureReversionAlpha(AlphaModel):
-    """Alpha baseado em reversão à média utilizando a série estacionária e order flow.
-
-    Sinal:
-    - +1 (compra) quando o preço estacionário atinge um Z-score baixo (sobrevendido)
-      E o volume imbalance indica exaustão vendedora (ex: > exhaustion_threshold).
-    - -1 (venda) quando o preço estacionário atinge um Z-score alto (sobrecomprado)
-      E o volume imbalance indica exaustão compradora (ex: < -exhaustion_threshold).
-
-    Parameters
-    ----------
-    window : int, optional
-        Janela da média/desvio do preço. Default: config.
-    reversion_zscore_threshold : float, optional
-        Z-score mínimo da série estacionária para habilitar a reversão. Default: 2.0.
-    exhaustion_threshold : float, optional
-        Volume Imbalance limite para confirmar a exaustão. Default: 0.0 (fluxo inverte).
-
-    """
-
-    def __init__(
-        self,
-        window: int | None = None,
-        reversion_zscore_threshold: float = 2.0,
-        exhaustion_threshold: float = 0.0,
-    ) -> None:
-        """Inicializa MicrostructureReversionAlpha."""
-        self.window = window or labeling_config.mean_rev_window
-        self.reversion_zscore_threshold = reversion_zscore_threshold
-        self.exhaustion_threshold = exhaustion_threshold
-
-    @property
-    def name(self) -> str:
-        """Retorna o nome."""
-        return (
-            f"MicrostructureReversion(w={self.window}, "
-            f"z_thresh={self.reversion_zscore_threshold}, "
-            f"exh_thresh={self.exhaustion_threshold})"
-        )
-
-    def generate_signal(self, df: pd.DataFrame) -> pd.Series:
-        """Gera sinais de reversão apostando contra a exaustão do order flow.
-
-        Parameters
-        ----------
-        df : pd.DataFrame
-            Deve conter colunas 'close_fracdiff' (série estacionária) e 'volume_imbalance_zscore'.
-
-        Returns
-        -------
-        pd.Series
-            +1 (compra), -1 (venda), ou 0 (neutro).
-
-        """
-        required_cols = ["close_fracdiff", "volume_imbalance_zscore"]
-        for col in required_cols:
-            if col not in df.columns:
-                raise KeyError(
-                    f"MicrostructureReversionAlpha.generate_signal: coluna '{col}' ausente."
-                )
-
-        price_series = df["close_fracdiff"]
-        vir_z = df["volume_imbalance_zscore"]
-
-        rolling_mean = price_series.rolling(window=self.window, min_periods=self.window).mean()
-        rolling_std = price_series.rolling(window=self.window, min_periods=self.window).std()
-        rolling_std = rolling_std.replace(0, np.nan)
-
-        zscore = (price_series - rolling_mean) / rolling_std
-
-        signal = pd.Series(0, index=price_series.index, dtype=np.int8, name="signal")
-
-        # Long Reversion: Preço sobrevendido (caiu muito) E fluxo vendedor exauriu (VIR > exhaustion)
-        long_cond = (zscore < -self.reversion_zscore_threshold) & (
-            vir_z > self.exhaustion_threshold
-        )
-
-        # Short Reversion: Preço sobrecomprado (subiu muito) E fluxo comprador exauriu (VIR < -exhaustion)
-        short_cond = (zscore > self.reversion_zscore_threshold) & (
-            vir_z < -self.exhaustion_threshold
-        )
-
-        signal[long_cond] = 1
-        signal[short_cond] = -1
-
-        signal.iloc[: self.window] = 0
-
-        n_long = (signal == 1).sum()
-        n_short = (signal == -1).sum()
-        logger.info(
-            "{} — sinais: {} long, {} short, {} neutro",
-            self.name,
-            n_long,
-            n_short,
-            (signal == 0).sum(),
-        )
         return signal
 
 
@@ -543,7 +436,7 @@ class MeanReversionAlpha(AlphaModel):
             if position == 0:
                 # Sem posição: entra se Z-score suficiente
                 if z < -self.entry_threshold:
-                    position = 1  # compra (preço abaixo da média)
+                    position = 1   # compra (preço abaixo da média)
                 elif z > self.entry_threshold:
                     position = -1  # venda (preço acima da média)
             elif position == 1:

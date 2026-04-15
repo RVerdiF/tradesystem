@@ -135,34 +135,17 @@ def objective_phase1(trial, df, interval):
     """
     params = {
         "cusum_threshold": trial.suggest_float("cusum_threshold", *optimization_config.cusum_range),
-        "long_alpha_fast": trial.suggest_int(
-            "long_alpha_fast", *optimization_config.long_fast_span_range
-        ),
-        "long_alpha_slow": trial.suggest_int(
-            "long_alpha_slow", *optimization_config.long_slow_span_range
-        ),
-        "short_alpha_fast": trial.suggest_int(
-            "short_alpha_fast", *optimization_config.short_fast_span_range
-        ),
-        "short_alpha_slow": trial.suggest_int(
-            "short_alpha_slow", *optimization_config.short_slow_span_range
-        ),
-        "long_hurst_threshold": trial.suggest_float(
-            "long_hurst_threshold", *optimization_config.long_hurst_threshold_range
-        ),
-        "short_hurst_threshold": trial.suggest_float(
-            "short_hurst_threshold", *optimization_config.short_hurst_threshold_range
-        ),
+        "long_alpha_fast": trial.suggest_int("long_alpha_fast", *optimization_config.long_fast_span_range),
+        "long_alpha_slow": trial.suggest_int("long_alpha_slow", *optimization_config.long_slow_span_range),
+        "short_alpha_fast": trial.suggest_int("short_alpha_fast", *optimization_config.short_fast_span_range),
+        "short_alpha_slow": trial.suggest_int("short_alpha_slow", *optimization_config.short_slow_span_range),
+        "long_hurst_threshold": trial.suggest_float("long_hurst_threshold", *optimization_config.long_hurst_threshold_range),
+        "short_hurst_threshold": trial.suggest_float("short_hurst_threshold", *optimization_config.short_hurst_threshold_range),
         "pt_sl": (
             trial.suggest_float("pt_mult", *optimization_config.pt_sl_range),
             trial.suggest_float(
                 "sl_mult",
-                max(
-                    1.5,
-                    float(optimization_config.pt_sl_range[0])
-                    if hasattr(optimization_config.pt_sl_range[0], "__float__")
-                    else 1.5,
-                ),
+                max(1.5, float(optimization_config.pt_sl_range[0]) if hasattr(optimization_config.pt_sl_range[0], "__float__") else 1.5),
                 optimization_config.pt_sl_range[1],
             ),
         ),
@@ -185,12 +168,8 @@ def objective_phase1(trial, df, interval):
         #   - 1.0 → moderate filter (~top 16% of imbalance readings)
         #   - 2.0 → strict filter (~top 2.5% of imbalance readings)
         "voi_window": trial.suggest_int("voi_window", 10, 60, step=10),
-        "long_voi_threshold": trial.suggest_float(
-            "long_voi_threshold", *optimization_config.long_vir_threshold_range
-        ),
-        "short_voi_threshold": trial.suggest_float(
-            "short_voi_threshold", *optimization_config.short_vir_threshold_range
-        ),
+        "long_voi_threshold": trial.suggest_float("long_voi_threshold", *optimization_config.long_vir_threshold_range),
+        "short_voi_threshold": trial.suggest_float("short_voi_threshold", *optimization_config.short_vir_threshold_range),
         # FIXADOS PARA FASE 1: Meta-Model rápido e raso
         "xgb_max_depth": 1,
         "xgb_gamma": 0.0,
@@ -199,10 +178,7 @@ def objective_phase1(trial, df, interval):
         "meta_threshold": 0.50,
     }
 
-    if (
-        params["long_alpha_slow"] <= params["long_alpha_fast"]
-        or params["short_alpha_slow"] <= params["short_alpha_fast"]
-    ):
+    if params["long_alpha_slow"] <= params["long_alpha_fast"] or params["short_alpha_slow"] <= params["short_alpha_fast"]:
         return -1.0
 
     try:
@@ -247,39 +223,19 @@ def objective_phase2(trial, df, interval, base_params):
     params.update(
         {
             "meta_threshold": trial.suggest_float(
-                "meta_threshold",
-                optimization_config.meta_threshold_range[0],
-                optimization_config.meta_threshold_range[1],
+                "meta_threshold", optimization_config.meta_threshold_range[0], optimization_config.meta_threshold_range[1]
             ),
             "xgb_max_depth": trial.suggest_int(
-                "xgb_max_depth",
-                optimization_config.max_depth_range[0],
-                optimization_config.max_depth_range[1],
+                "xgb_max_depth", optimization_config.max_depth_range[0], optimization_config.max_depth_range[1]
             ),
-            "xgb_gamma": trial.suggest_float(
-                "xgb_gamma",
-                optimization_config.xgb_gamma_range[0],
-                optimization_config.xgb_gamma_range[1],
-            ),
-            "xgb_lambda": trial.suggest_float(
-                "xgb_lambda",
-                optimization_config.xgb_lambda_range[0],
-                optimization_config.xgb_lambda_range[1],
-            ),
-            "xgb_alpha": trial.suggest_float(
-                "xgb_alpha",
-                optimization_config.xgb_alpha_range[0],
-                optimization_config.xgb_alpha_range[1],
-            ),
+            "xgb_gamma": trial.suggest_float("xgb_gamma", optimization_config.xgb_gamma_range[0], optimization_config.xgb_gamma_range[1]),
+            "xgb_lambda": trial.suggest_float("xgb_lambda", optimization_config.xgb_lambda_range[0], optimization_config.xgb_lambda_range[1]),
+            "xgb_alpha": trial.suggest_float("xgb_alpha", optimization_config.xgb_alpha_range[0], optimization_config.xgb_alpha_range[1]),
             "xgb_min_child_weight": trial.suggest_float(
-                "xgb_min_child_weight",
-                optimization_config.xgb_min_child_weight_range[0],
-                optimization_config.xgb_min_child_weight_range[1],
+                "xgb_min_child_weight", optimization_config.xgb_min_child_weight_range[0], optimization_config.xgb_min_child_weight_range[1]
             ),
             "scale_pos_weight": trial.suggest_float(
-                "scale_pos_weight",
-                optimization_config.scale_pos_weight_range[0],
-                optimization_config.scale_pos_weight_range[1],
+                "scale_pos_weight", optimization_config.scale_pos_weight_range[0], optimization_config.scale_pos_weight_range[1]
             ),
         }
     )
