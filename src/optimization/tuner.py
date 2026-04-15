@@ -178,13 +178,6 @@ def objective_phase1(trial, df, interval):
         "be_trigger": trial.suggest_float("be_trigger", *optimization_config.be_trigger_range),
         "ffd_d": trial.suggest_float("ffd_d", *optimization_config.ffd_d_range),
         "atr_period": trial.suggest_int("atr_period", *optimization_config.atr_period_range),
-        # VIR (Volume Imbalance Ratio) filter parameters
-        # voi_window: rolling window (in bars) for VIR and zscore computation
-        # voi_threshold: minimum zscore in the signal direction to keep the event
-        #   - 0.5 → lenient filter, keeps most signals
-        #   - 1.0 → moderate filter (~top 16% of imbalance readings)
-        #   - 2.0 → strict filter (~top 2.5% of imbalance readings)
-        "voi_window": trial.suggest_int("voi_window", 10, 60, step=10),
         "long_voi_threshold": trial.suggest_float(
             "long_voi_threshold", *optimization_config.long_vir_threshold_range
         ),
