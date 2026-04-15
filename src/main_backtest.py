@@ -57,7 +57,6 @@ from src.data.mt5_connector import mt5_session
 from src.features.cusum_filter import adaptive_cusum_events
 from src.features.frac_diff import find_min_d, frac_diff_ffd
 from src.features.indicators import compute_all_features
-from src.features.order_flow import compute_vir, compute_vir_zscore
 from src.labeling.alpha import CompositeAlpha, get_signal_events
 from src.labeling.triple_barrier import create_events, get_labels
 from src.labeling.volatility import get_volatility_targets
@@ -381,58 +380,8 @@ def run_pipeline(
         signal_events = signal_events.intersection(cusum_ts)
         logger.info("Eventos após filtro CUSUM: {}", len(signal_events))
 
-    # --- VIR (Volume Imbalance Ratio) Filter ---
-    # Applied AFTER CUSUM intersection and AFTER Hurst filter (if enabled).
-    # NOT applied inside generate_signal() to avoid double-modification of alpha.py.
-    voi_threshold = params.get("voi_threshold", None)
-    voi_window = params.get("voi_window", 20)
-    vir_filter_rate = None
-
-    if voi_threshold is not None:
-        logger.info(
-            "VIR filter enabled: voi_window={}, voi_threshold={:.2f}",
-            voi_window,
-            voi_threshold,
-        )
-
-        # Compute VIR and rolling zscore on the full df
-        vir = compute_vir(df, window=voi_window)
-        vir_zscore = compute_vir_zscore(vir, window=voi_window)
-
-        # Defensive: verify no lookahead — vir_zscore uses data up to and
-        # including bar t (bar close). We only act at bar close. No lookahead.
-        n_events_before_vir = len(signal_events)
-
-        # Get side information from alpha signal
-        event_sides = (
-            signal.loc[signal_events]
-            if isinstance(signal_events, pd.DatetimeIndex)
-            else signal.loc[signal_events.index]
-        )
-
-        # Reindex vir_zscore to event timestamps; missing → NaN (event not filtered out)
-        vir_at_events = vir_zscore.reindex(signal_events)
-        sides_at_events = event_sides.reindex(signal_events)
-
-        # Keep event if: (vir_zscore * side > voi_threshold) OR vir_zscore is NaN
-        # NaN is treated as "no information" → do not filter out (conservative)
-        vir_directional = vir_at_events * sides_at_events
-        keep_mask = vir_directional.isna() | (vir_directional > voi_threshold)
-
-        signal_events = signal_events[keep_mask.values]
-
-        n_events_after_vir = len(signal_events)
-        vir_removed = n_events_before_vir - n_events_after_vir
-        vir_filter_rate = vir_removed / n_events_before_vir if n_events_before_vir > 0 else 0.0
-
-        logger.info(
-            "VIR filter: removed {}/{} events (filter_rate={:.1f}%)",
-            vir_removed,
-            n_events_before_vir,
-            vir_filter_rate * 100,
-        )
-    else:
-        vir_zscore = None
+    vir_filter_rate = 0.0
+    vir_zscore = None
 
     if len(signal_events) == 0:
         logger.error("Nenhum sinal gerado pelo Alpha Model. Tente ajustar os parâmetros.")
