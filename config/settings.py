@@ -84,7 +84,7 @@ class RiskConfig:
     cool_down_minutes: float = 5.0  # Minutos de resfriamento pós-saída (novo)
     kelly_fraction: float = 0.5  # Kelly fracionário (50%)
     min_conviction_threshold: float = (
-        0.5  # Limiar mínimo de probabilidade do Meta-Model para operar
+        0.65  # Limiar mínimo de probabilidade do Meta-Model para operar
     )
 
     # Horários e Modalidade
@@ -228,25 +228,23 @@ class OptimizationConfig:
 
     # Composite Alpha (Decoupled Ranges)
     long_fast_span_range: tuple[int, int] = (9, 50)
-    long_slow_span_range: tuple[int, int] = (50, 200)
+    long_slow_span_range: tuple[int, int] = (20, 100)
     short_fast_span_range: tuple[int, int] = (9, 50)
-    short_slow_span_range: tuple[int, int] = (50, 200)
+    short_slow_span_range: tuple[int, int] = (20, 100)
     long_hurst_threshold_range: tuple[float, float] = (0.50, 0.70)
     short_hurst_threshold_range: tuple[float, float] = (0.50, 0.70)
     long_vir_threshold_range: tuple[float, float] = (0.5, 2.0)
     short_vir_threshold_range: tuple[float, float] = (0.5, 2.0)
 
-    # Novas Features (Busca restrita)
     ma_dist_fast_range: tuple[int, int] = (7, 15)
     ma_dist_slow_range: tuple[int, int] = (20, 40)
     moments_window_range: tuple[int, int] = (20, 100)
 
-    # Parâmetros anteriormente travados (agora otimizados)
     be_trigger_range: tuple[float, float] = (0.0, 0.5)
     xgb_gamma_range: tuple[float, float] = (0.0, 2.0)
     xgb_lambda_range: tuple[float, float] = (1.0, 5.0)
     xgb_alpha_range: tuple[float, float] = (0.0, 2.0)
-    xgb_min_child_weight_range: tuple[float, float] = (1.0, 20.0)  # piso 1 permite aprender em folds pequenos (~50 amostras); teto 20 mantém regularização
+    xgb_min_child_weight_range: tuple[float, float] = (1.0, 20.0) 
     ffd_d_range: tuple[float, float] = (0.1, 0.9)
     atr_period_range: tuple[int, int] = (7, 21)
 
