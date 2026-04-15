@@ -27,7 +27,8 @@ def test_objective_phase1_function(sample_df, mock_results):
     trial = MagicMock()
     
     trial.suggest_float.return_value = 0.5
-    trial.suggest_int.side_effect = [10, 30, 9, 21, 40, 14, 100, 20] # alpha_fast, alpha_slow, ma_dist_fast, ma_dist_slow, moments, atr, hurst_window, voi_window
+    # long_alpha_fast, long_alpha_slow, short_alpha_fast, short_alpha_slow, ma_dist_fast, ma_dist_slow, moments, atr, voi_window
+    trial.suggest_int.side_effect = [10, 30, 10, 30, 9, 21, 40, 14, 20]
 
     with patch("src.optimization.tuner.run_pipeline", return_value=mock_results):
         score = objective_phase1(trial, sample_df, "1h")
@@ -37,7 +38,8 @@ def test_objective_phase1_invalid_params(sample_df):
     """Test that objective_phase1 returns -1.0 for invalid alpha spans (slow <= fast)."""
     trial = MagicMock()
     trial.suggest_float.return_value = 0.02
-    trial.suggest_int.side_effect = [30, 10, 9, 21, 40, 14, 100, 20] # fast=30, slow=10
+    # long_alpha_fast=30, long_alpha_slow=10
+    trial.suggest_int.side_effect = [30, 10, 10, 30, 9, 21, 40, 14, 20]
     
     score = objective_phase1(trial, sample_df, "1h")
     assert score == -1.0
@@ -58,7 +60,7 @@ def test_objective_low_trades(sample_df, mock_results):
     """Test that objectives penalize Sharpe if trades < min_trades."""
     trial = MagicMock()
     trial.suggest_float.return_value = 0.5
-    trial.suggest_int.side_effect = [10, 30, 9, 21, 40, 14, 100, 20]
+    trial.suggest_int.side_effect = [10, 30, 10, 30, 9, 21, 40, 14, 20]
     
     mock_results["n_trades"] = 10 # below default 30
     
@@ -82,6 +84,14 @@ def test_run_optimization_integration(sample_df, mock_results):
             mock_config.cusum_range = (0.01, 0.05)
             mock_config.fast_span_range = (5, 20)
             mock_config.slow_span_range = (20, 60)
+            mock_config.long_fast_span_range = (5, 20)
+            mock_config.long_slow_span_range = (20, 60)
+            mock_config.short_fast_span_range = (5, 20)
+            mock_config.short_slow_span_range = (20, 60)
+            mock_config.long_hurst_threshold_range = (0.5, 0.7)
+            mock_config.short_hurst_threshold_range = (0.5, 0.7)
+            mock_config.long_vir_threshold_range = (0.5, 2.0)
+            mock_config.short_vir_threshold_range = (0.5, 2.0)
             mock_config.pt_sl_range = (1.0, 3.0)
             mock_config.max_depth_range = (2, 4)
             mock_config.meta_threshold_range = (0.6, 0.75)

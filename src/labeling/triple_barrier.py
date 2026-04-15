@@ -41,6 +41,7 @@ from loguru import logger
 from numba import njit
 
 from config.settings import labeling_config
+from src.backtest.cost_model import BrazilianCostModel, SlippageModel
 
 
 # ---------------------------------------------------------------------------
@@ -112,10 +113,51 @@ def create_events(
 
     events = events.dropna(subset=["trgt"])
 
+    # Microstructural Friction Filter
+    cost_model = BrazilianCostModel()
+    slip_model = SlippageModel()
+
+    # 1 standard lot
+    quantity = 1
+    pt_mult = pt_sl[0]
+
+    valid_events = []
+
+    for idx in events.index:
+        try:
+            # We use the close price at the time of the event
+            price = close.loc[idx]
+        except KeyError:
+            continue
+
+        # Round-trip cost (entry + exit)
+        tc = cost_model.trade_cost(price, quantity, n_operations=2)
+        sl = slip_model.estimate(price, quantity) * 2  # Approximate round trip slippage
+
+        total_monetary_cost = tc + sl
+
+        # Calculate minimum required percentage return
+        # Since it's for 1 unit, cost relative to contract value
+        # Adjusting the formula for futures or standard stock:
+        # return = (total_cost / (price * quantity * cost_model.multiplier))
+        # We can just use the absolute profit required.
+        contract_value = price * quantity * cost_model.multiplier
+        if contract_value > 0:
+            min_cost_return = total_monetary_cost / contract_value
+        else:
+            min_cost_return = 0
+
+        trgt = events.loc[idx, "trgt"]
+
+        if (trgt * pt_mult) > min_cost_return:
+            valid_events.append(idx)
+
+    events = events.loc[valid_events]
+
     events.attrs["pt_sl"] = pt_sl
 
     logger.info(
-        "Eventos criados: {} | pt_sl={} | max_holding={} barras",
+        "Eventos criados: {} (filtrados por fricção) | pt_sl={} | max_holding={} barras",
         len(events),
         pt_sl,
         max_holding,
