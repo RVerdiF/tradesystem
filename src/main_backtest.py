@@ -235,12 +235,12 @@ def run_pipeline(df: pd.DataFrame, interval: str = "1d", use_volume_bars: bool =
     -------
     dict
         Dicionário contendo os resultados de performance, atribuição e dados processados.
+
     """
     if len(df) == 0:
         logger.error("DataFrame vazio. Abortando run_pipeline.")
         return None
 
-    """
     if params is None:
         params = {}
 
@@ -588,7 +588,6 @@ def run_pipeline(df: pd.DataFrame, interval: str = "1d", use_volume_bars: bool =
         # Log AUC treino vs. teste por fold
         if len(np.unique(y_test)) > 1:
             import warnings
-
             from sklearn.metrics import roc_auc_score as _auc
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")

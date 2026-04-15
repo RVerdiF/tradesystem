@@ -240,6 +240,7 @@ class CompositeAlpha(AlphaModel):
         Minimum Volume Imbalance Z-Score required for long. Default: config.
     short_vir_zscore_threshold : float, optional
         Minimum Volume Imbalance Z-Score required for short. Default: config.
+
     """
 
     def __init__(
@@ -253,6 +254,7 @@ class CompositeAlpha(AlphaModel):
         long_vir_zscore_threshold: float | None = None,
         short_vir_zscore_threshold: float | None = None,
     ) -> None:
+        """Inicializa composito."""
         self.long_fast_span = long_fast_span or labeling_config.long_fast_span
         self.long_slow_span = long_slow_span or labeling_config.long_slow_span
         self.short_fast_span = short_fast_span or labeling_config.short_fast_span
@@ -277,8 +279,7 @@ class CompositeAlpha(AlphaModel):
         )
 
     def generate_signal(self, df: pd.DataFrame) -> pd.Series:
-        """
-        Generates trading signals based on the decoupled composite rules.
+        """Gera sinais de trading baseados nas regras compostas.
 
         Parameters
         ----------
@@ -334,8 +335,7 @@ class CompositeAlpha(AlphaModel):
 # Mean Reversion — Z-score
 # ---------------------------------------------------------------------------
 class MeanReversionAlpha(AlphaModel):
-    """
-    Alpha baseado em reversão à média via Z-score, aplicado sobre série fracionária estacionária.
+    """Alpha baseado em reversão à média via Z-score, aplicado sobre série fracionária estacionária.
 
     Sinal:
     - +1 (compra) quando Z-score < -entry (preço muito abaixo da média)
@@ -390,8 +390,7 @@ class MeanReversionAlpha(AlphaModel):
         )
 
     def generate_signal(self, df: pd.DataFrame) -> pd.Series:
-        """
-        Gera sinais de reversão à média (Z-score) sobre a série fracionariamente diferenciada.
+        """Gera sinais de reversão à média (Z-score) sobre a série fracionariamente diferenciada.
 
         Parameters
         ----------
@@ -408,6 +407,7 @@ class MeanReversionAlpha(AlphaModel):
         De acordo com AFML, técnicas estatísticas como o Z-score pressupõem estacionariedade.
         Operar sobre séries brutas de preço introduz heterocedasticidade. Usamos `close_fracdiff`
         para manter a validade matemática do limite de reversão.
+
         """
         if "close_fracdiff" not in df.columns:
             raise KeyError(
