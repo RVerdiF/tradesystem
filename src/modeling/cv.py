@@ -34,7 +34,7 @@ from src.modeling.purge_embargo import apply_embargo, get_train_times
 class PurgedKFold(_BaseKFold):
     """K-Fold Cross Validation com Purga e Embargo para séries temporais.
 
-    Garante que as observações de treinamento não se sobreponham 
+    Garante que as observações de treinamento não se sobreponham
     (no tempo) com o conjunto de teste (purga) e que haja uma lacuna
     após o conjunto de teste para evitar autocorrelação (embargo).
 
@@ -183,5 +183,7 @@ def cv_score(
     )
 
     df_scores = pd.DataFrame(scores)
-    logger.info("CV médio: {:.4f} ± {:.4f}", df_scores["test_score"].mean(), df_scores["test_score"].std())
+    logger.info(
+        "CV médio: {:.4f} ± {:.4f}", df_scores["test_score"].mean(), df_scores["test_score"].std()
+    )
     return df_scores

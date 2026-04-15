@@ -29,6 +29,7 @@ Referências
 -----------
 López de Prado, M. (2018). Advances in Financial Machine Learning. John Wiley & Sons.
 """
+
 import argparse
 
 from loguru import logger
@@ -42,11 +43,34 @@ def main():
     """Instancia o CLI para sintonia paramétrica operando otimização baseada nas estratégias de Meta-label."""
     parser = argparse.ArgumentParser(description="Script Genérico de Otimização TradeSystem5000")
     parser.add_argument("--symbol", type=str, required=True, help="Ativo para otimizar (ex: PETR4)")
-    parser.add_argument("--n-bars", type=int, default=10000, help="Número de barras para extrair (padrão: 10000)")
-    parser.add_argument("--interval", type=str, default="1h", choices=["1m", "5m", "15m", "30m", "1h", "1d"], help="Intervalo (padrão: 1h)")
-    parser.add_argument("--n-trials", type=int, default=None, help="Número de tentativas de otimização globais (opcional)")
-    parser.add_argument("--n-trials-phase1", type=int, default=None, help="Número específico de tentativas da Fase 1")
-    parser.add_argument("--n-trials-phase2", type=int, default=None, help="Número específico de tentativas da Fase 2")
+    parser.add_argument(
+        "--n-bars", type=int, default=10000, help="Número de barras para extrair (padrão: 10000)"
+    )
+    parser.add_argument(
+        "--interval",
+        type=str,
+        default="1h",
+        choices=["1m", "5m", "15m", "30m", "1h", "1d"],
+        help="Intervalo (padrão: 1h)",
+    )
+    parser.add_argument(
+        "--n-trials",
+        type=int,
+        default=None,
+        help="Número de tentativas de otimização globais (opcional)",
+    )
+    parser.add_argument(
+        "--n-trials-phase1",
+        type=int,
+        default=None,
+        help="Número específico de tentativas da Fase 1",
+    )
+    parser.add_argument(
+        "--n-trials-phase2",
+        type=int,
+        default=None,
+        help="Número específico de tentativas da Fase 2",
+    )
 
     args = parser.parse_args()
 
@@ -61,30 +85,26 @@ def main():
 
         # Executa a otimização em duas fases
         opt_results = run_optimization(
-            df, 
-            interval=args.interval, 
+            df,
+            interval=args.interval,
             n_trials=args.n_trials,
             n_trials_phase1=getattr(args, "n_trials_phase1", None),
-            n_trials_phase2=getattr(args, "n_trials_phase2", None)
+            n_trials_phase2=getattr(args, "n_trials_phase2", None),
         )
         best_params = opt_results["params"]
         metadata = opt_results["metadata"]
 
         # Opcionalmente podemos salvar os parâmetros utilizando nossa store
-        save_optimized_params(
-            symbol=symbol,
-            params=best_params,
-            metadata=metadata
-        )
+        save_optimized_params(symbol=symbol, params=best_params, metadata=metadata)
 
         # Fase Final: Re-executa o pipeline para obter métricas de desempenho completas (OOS)
         logger.info("Gerando relatório de desempenho final...")
         oos_results = run_pipeline(df, interval=args.interval, params=best_params)
 
         if oos_results:
-            print("\n" + "="*50)
+            print("\n" + "=" * 50)
             print("        RESULTADOS DA MELHOR CONFIGURAÇÃO")
-            print("="*50)
+            print("=" * 50)
             print(f"Ativo:              {symbol}")
             print(f"Sharpe (Sistema):    {oos_results['sharpe']:.4f}")
             print(f"Sharpe (Alpha):     {oos_results['sharpe_alpha']:.4f}")
@@ -93,18 +113,21 @@ def main():
             print(f"Total de Trades:     {oos_results['n_trades']}")
             print(f"Score DSR:          {metadata['dsr_score']:.4f}")
 
-            sig_status = "CONFIRMADO" if metadata['dsr_score'] >= 0.95 else "FALHOU (Possível Overfit)"
+            sig_status = (
+                "CONFIRMADO" if metadata["dsr_score"] >= 0.95 else "FALHOU (Possível Overfit)"
+            )
             print(f"Significância:      {sig_status}")
 
             print("\nParâmetros Otimizados:")
             for key, value in best_params.items():
                 print(f"  - {key}: {value}")
-            print("="*50 + "\n")
+            print("=" * 50 + "\n")
         else:
             logger.error("Não foi possível gerar métricas de desempenho final.")
 
     except Exception as e:
         logger.error(f"Erro durante a execução da otimização: {e}")
+
 
 if __name__ == "__main__":
     main()
