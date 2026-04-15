@@ -1,0 +1,53 @@
+<<<<<<< SEARCH
+from __future__ import annotations
+
+import numpy as np
+import pandas as pd
+from loguru import logger
+
+from config.settings import feature_config
+=======
+from __future__ import annotations
+
+import numpy as np
+import pandas as pd
+from loguru import logger
+from numba import njit
+
+from config.settings import feature_config
+from src.features.order_flow import calculate_vpin
+>>>>>>> REPLACE
+<<<<<<< SEARCH
+    return pd.DataFrame({"skew": skew, "kurt": kurt}, index=close.index)
+
+
+from numba import njit
+
+# ===========================================================================
+# Regime Detection (Hurst Exponent)
+=======
+    return pd.DataFrame({"skew": skew, "kurt": kurt}, index=close.index)
+
+
+# ===========================================================================
+# Regime Detection (Hurst Exponent)
+>>>>>>> REPLACE
+<<<<<<< SEARCH
+    ofi.name = "ofi"
+    return ofi
+
+
+from src.features.order_flow import calculate_vpin
+
+def volume_imbalance(
+    volume: pd.Series,
+    close: pd.Series,
+=======
+    ofi.name = "ofi"
+    return ofi
+
+
+def volume_imbalance(
+    volume: pd.Series,
+    close: pd.Series,
+>>>>>>> REPLACE
