@@ -1,5 +1,4 @@
-"""
-Método da Tripla Barreira — TradeSystem5000.
+"""Método da Tripla Barreira — TradeSystem5000.
 
 Este módulo implementa a técnica de rotulagem de Tripla Barreira, que avalia
 o resultado de um sinal através de três limites simultâneos:
@@ -55,8 +54,7 @@ def create_events(
     pt_sl: tuple[float, float] | None = None,
     max_holding: int | None = None,
 ) -> pd.DataFrame:
-    """
-    Monta o DataFrame de eventos para aplicação da Tripla Barreira.
+    """Monta o DataFrame de eventos para aplicação da Tripla Barreira.
 
     Parameters
     ----------
@@ -80,6 +78,7 @@ def create_events(
     pd.DataFrame
         Colunas: ``t1`` (barreira vertical), ``trgt`` (volatilidade alvo),
         ``side`` (direção).
+
     """
     if pt_sl is None:
         pt_sl = labeling_config.pt_sl_ratio
@@ -177,8 +176,7 @@ def apply_triple_barrier(
     high_prices: pd.Series | None = None,
     low_prices: pd.Series | None = None,
 ) -> pd.DataFrame:
-    """
-    Aplica o método da Tripla Barreira (semântica v2 — intrabar High/Low).
+    """Aplica o método da Tripla Barreira (semântica v2 — intrabar High/Low).
 
     Para cada evento, verifica qual barreira é atingida primeiro:
     - Superior (PT): side-adjusted max(ret_hi, ret_lo) >= pt * trgt
@@ -213,6 +211,7 @@ def apply_triple_barrier(
     pd.DataFrame
         Colunas: ``t1`` (timestamp da barreira), ``ret`` (side-adjusted),
         ``trgt``, ``side``, ``barrier_type``.
+
     """
     if pt_sl is None:
         pt_sl = events.attrs.get("pt_sl", labeling_config.pt_sl_ratio)
@@ -329,8 +328,7 @@ def _find_dynamic_touch(
     lower: float,
     be_trigger: float = 0.0,
 ) -> tuple[int, float, int]:
-    """
-    Versão com Breakeven — semântica v2.
+    """Versão com Breakeven — semântica v2.
 
     Ordem de avaliação dentro de cada barra (crítico):
       1. Ativação de BE (se `be_trigger > 0` e sa_max atingiu upper*be_trigger).
@@ -343,6 +341,7 @@ def _find_dynamic_touch(
     -------
     (index_do_toque, retorno_side_adjusted, tipo_barreira)
     tipo_barreira: 0=pt, 1=sl, 2=vertical
+
     """
     breakeven_active = False
 
@@ -388,8 +387,7 @@ def get_labels(
     high_prices: pd.Series | None = None,
     low_prices: pd.Series | None = None,
 ) -> pd.DataFrame:
-    """
-    Pipeline completo: aplica tripla barreira e gera labels.
+    """Pipeline completo: aplica tripla barreira e gera labels.
 
     Labels:
     - +1: Take Profit atingido (trade lucrativo)
@@ -421,6 +419,7 @@ def get_labels(
     -------
     pd.DataFrame
         Colunas: ``t1``, ``ret``, ``label``, ``side``, ``barrier_type``.
+
     """
     if min_return is None:
         min_return = labeling_config.min_return

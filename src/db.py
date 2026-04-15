@@ -1,5 +1,4 @@
-"""
-Camada de Persistência SQLite — TradeSystem5000.
+"""Camada de Persistência SQLite — TradeSystem5000.
 
 Fornece uma interface thread-safe para armazenamento de parâmetros otimizados,
 sinais de auditoria, ordens e erros operacionais.
@@ -93,8 +92,7 @@ _ALL_DDL = [
 # ---------------------------------------------------------------------------
 
 def get_connection(db_path: Path | None = None) -> sqlite3.Connection:
-    """
-    Abre e retorna uma nova conexão SQLite com WAL-mode habilitado.
+    """Abre e retorna uma nova conexão SQLite com WAL-mode habilitado.
 
     Cada chamador é responsável por fechar a conexão ou utilizá-la via contexto (with).
     O modo WAL (Write-Ahead Logging) permite leituras concorrentes sem bloquear escritas,
@@ -110,6 +108,7 @@ def get_connection(db_path: Path | None = None) -> sqlite3.Connection:
     -------
     sqlite3.Connection
         Objeto de conexão configurado com ``row_factory = sqlite3.Row`` e WAL-mode.
+
     """
     if db_path is None:
         db_path = DB_PATH
@@ -129,8 +128,7 @@ def get_connection(db_path: Path | None = None) -> sqlite3.Connection:
 
 
 def init_db(db_path: Path | None = None) -> None:
-    """
-    Inicializa o esquema do banco de dados criando as tabelas necessárias.
+    """Inicializa o esquema do banco de dados criando as tabelas necessárias.
 
     Esta função é idempotente; se as tabelas já existirem, nenhuma alteração será feita.
     Deve ser chamada no início da execução do sistema ou durante o setup.
@@ -143,6 +141,7 @@ def init_db(db_path: Path | None = None) -> None:
     Returns
     -------
     None
+
     """
     conn = get_connection(db_path)
     try:

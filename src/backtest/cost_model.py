@@ -1,5 +1,4 @@
-"""
-Modelagem de Custos Reais (B3) — TradeSystem5000.
+"""Modelagem de Custos Reais (B3) — TradeSystem5000.
 
 Este módulo implementa modelos de custos operacionais específicos para o
 mercado brasileiro (B3) e estimativas de slippage.
@@ -27,8 +26,7 @@ from config.settings import cost_config
 # Modelo de Custos B3
 # ---------------------------------------------------------------------------
 class BrazilianCostModel:
-    """
-    Modela os custos operacionais do mercado brasileiro (B3).
+    """Modela os custos operacionais do mercado brasileiro (B3).
 
     Parameters
     ----------
@@ -42,6 +40,7 @@ class BrazilianCostModel:
         ISS sobre a corretagem.
     symbol : str
         Ativo negociado. Define a regra de custos (ações vs futuros).
+
     """
 
     def __init__(
@@ -52,6 +51,7 @@ class BrazilianCostModel:
         iss_pct: float | None = None,
         symbol: str = "WIN",
     ) -> None:
+        """Inicializa BaseCostModel."""
         self.brokerage = brokerage if brokerage is not None else cost_config.brokerage_per_contract
         self.emoluments_pct = emoluments_pct if emoluments_pct is not None else cost_config.emoluments_pct
         self.settlement_pct = settlement_pct if settlement_pct is not None else cost_config.settlement_pct
@@ -71,9 +71,7 @@ class BrazilianCostModel:
         quantity: int,
         n_operations: int = 2,
     ) -> float:
-        """
-        Calcula o custo total de um round-trip (entrada + saída).
-        """
+        """Calcula o custo total de um round-trip (entrada + saída)."""
         if quantity == 0:
             return 0.0
 
@@ -111,11 +109,10 @@ class BrazilianCostModel:
 # Modelo de Slippage
 # ---------------------------------------------------------------------------
 class SlippageModel:
-    """
-    Estima o slippage (impacto de mercado) baseado no spread e volume.
-    """
+    """Estima o slippage (impacto de mercado) baseado no spread e volume."""
 
     def __init__(self, base_slippage_bps: float | None = None, symbol: str = "WIN") -> None:
+        """Inicializa o SlippageModel."""
         self.symbol = symbol
         self.base_slippage_bps = (
             base_slippage_bps if base_slippage_bps is not None
@@ -190,9 +187,7 @@ def total_cost(
     avg_volume: float = 1_000_000,
     symbol: str = "WIN",
 ) -> pd.DataFrame:
-    """
-    Calcula custo total (corretagem + taxas + slippage) para uma série de trades.
-    """
+    """Calcula custo total (corretagem + taxas + slippage) para uma série de trades."""
     cost_model = BrazilianCostModel(symbol=symbol)
     slip_model = SlippageModel(symbol=symbol)
 

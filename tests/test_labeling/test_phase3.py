@@ -1,5 +1,4 @@
-"""
-Testes para a Fase 3 — Alpha, Volatilidade, Tripla Barreira e Meta-Labeling.
+"""Testes para a Fase 3 — Alpha, Volatilidade, Tripla Barreira e Meta-Labeling.
 
 Usa dados sintéticos com comportamentos conhecidos para validar que:
 - Alpha gera sinais corretos
@@ -76,8 +75,7 @@ def mean_reverting_df():
 
 @pytest.fixture
 def simple_up_down_df():
-    """
-    Série com padrão simples: sobe 10 barras, desce 10 barras.
+    """Série com padrão simples: sobe 10 barras, desce 10 barras.
     Ideal para testar TP/SL/Vertical de forma controlada.
     """
     n = 100

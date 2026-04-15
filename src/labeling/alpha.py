@@ -1,5 +1,4 @@
-"""
-Módulo Alpha (Sinal Direcional Primário) — TradeSystem5000.
+"""Módulo Alpha (Sinal Direcional Primário) — TradeSystem5000.
 
 Este módulo define a interface e implementações para o modelo de Alpha,
 responsável por gerar a aposta direcional primária do sistema {-1, 0, +1}.
@@ -31,8 +30,7 @@ from config.settings import feature_config, labeling_config
 # Hurst Exponent Utility
 # ---------------------------------------------------------------------------
 def compute_hurst_exponent(series: pd.Series, window: int = 100) -> pd.Series:
-    """
-    Compute the rolling Hurst Exponent using the Rescaled Range (R/S) method.
+    """Compute the rolling Hurst Exponent using the Rescaled Range (R/S) method.
 
     H > 0.5  =>  trending / persistent series
     H == 0.5 =>  random walk
@@ -52,6 +50,7 @@ def compute_hurst_exponent(series: pd.Series, window: int = 100) -> pd.Series:
     pd.Series
         Rolling Hurst exponent, aligned to the input index.
         NaN for the first (window - 1) observations and wherever std == 0.
+
     """
     if window < 60:
         raise ValueError(
@@ -82,8 +81,7 @@ class AlphaModel(ABC):
 
     @abstractmethod
     def generate_signal(self, df: pd.DataFrame) -> pd.Series:
-        """
-        Gera sinais de trading a partir dos dados.
+        """Gera sinais de trading a partir dos dados.
 
         Parameters
         ----------
@@ -95,6 +93,7 @@ class AlphaModel(ABC):
         pd.Series
             Série com valores em {-1, 0, +1}.
             +1 = compra, -1 = venda, 0 = neutro.
+
         """
         ...
 
@@ -109,8 +108,7 @@ class AlphaModel(ABC):
 # Trend Following — Cruzamento de EMAs
 # ---------------------------------------------------------------------------
 class TrendFollowingAlpha(AlphaModel):
-    """
-    Alpha baseado em seguimento de tendência (cruzamento de EMAs).
+    """Alpha baseado em seguimento de tendência (cruzamento de EMAs).
 
     Sinal (Modo Normal):
     - +1 quando EMA rápida > EMA lenta (tendência de alta)
@@ -128,6 +126,7 @@ class TrendFollowingAlpha(AlphaModel):
         Span da EMA lenta. Default: config.
     reversion_mode : bool, optional
         Se True, inverte o sinal (opera contra a tendência). Default: True (conforme Plano de Reversão).
+
     """
 
     def __init__(
@@ -136,18 +135,30 @@ class TrendFollowingAlpha(AlphaModel):
         slow_span: int | None = None,
         reversion_mode: bool = True,
     ) -> None:
+        """Inicializa a classe TrendFollowingAlpha.
+
+        Parameters
+        ----------
+        fast_span : int | None, optional
+            A janela ou vida útil em dias da média móvel rápida.
+        slow_span : int | None, optional
+            A janela de longo termo ou média de arrasto base da tendência longa.
+        reversion_mode : bool, optional
+            Se ativado, inverte a lógica operando short caso rápida fique acima da lenta e vise reversão à média.
+
+        """
         self.fast_span = fast_span or labeling_config.trend_fast_span
         self.slow_span = slow_span or labeling_config.trend_slow_span
         self.reversion_mode = reversion_mode
 
     @property
     def name(self) -> str:
+        """Retorna o nome."""
         mode_str = "Reversion" if self.reversion_mode else "Trend"
         return f"TrendFollowing[{mode_str}](fast={self.fast_span}, slow={self.slow_span})"
 
     def generate_signal(self, df: pd.DataFrame) -> pd.Series:
-        """
-        Gera sinais de cruzamento de EMA sobre a série de preço real (não-estacionária).
+        """Gera sinais de cruzamento de EMA sobre a série de preço real (não-estacionária).
 
         Parameters
         ----------
@@ -169,6 +180,7 @@ class TrendFollowingAlpha(AlphaModel):
         - O **meta-modelo** e demais features operam sobre ``close_fracdiff``
           (estacionária, com memória preservada via FFD).
         - A rotulação via Triple Barrier é a ponte entre os dois mundos.
+
         """
         if "close" not in df.columns:
             raise KeyError(
@@ -203,9 +215,7 @@ class TrendFollowingAlpha(AlphaModel):
 # Composite Alpha
 # ---------------------------------------------------------------------------
 class CompositeAlpha(AlphaModel):
-    """
-    Composite Alpha combining Trend Following (EMAs), Hurst Exponent regime filter,
-    and Volume Imbalance Z-Score filter.
+    """Composite Alpha combining Trend Following, Hurst Exponent regime filter, and VIR filter.
 
     Signal generation requires simultaneous agreement:
     1. EMA fast > EMA slow (for long) or EMA fast < EMA slow (for short).
@@ -258,6 +268,7 @@ class CompositeAlpha(AlphaModel):
 
     @property
     def name(self) -> str:
+        """Retorna o nome."""
         return (
             f"CompositeAlpha("
             f"L:[f={self.long_fast_span}, s={self.long_slow_span}, h>{self.long_hurst_threshold}, vz>{self.long_vir_zscore_threshold}], "
@@ -278,6 +289,7 @@ class CompositeAlpha(AlphaModel):
         -------
         pd.Series
             Series of {-1, 0, +1} signals.
+
         """
         required_cols = ["close", "hurst_exponent", "volume_imbalance_zscore"]
         for col in required_cols:
@@ -340,6 +352,7 @@ class MeanReversionAlpha(AlphaModel):
         Z-score mínimo para abrir posição. Default: config.
     exit_threshold : float, optional
         Z-score para fechar posição. Default: config.
+
     """
 
     def __init__(
@@ -348,6 +361,18 @@ class MeanReversionAlpha(AlphaModel):
         entry_threshold: float | None = None,
         exit_threshold: float | None = None,
     ) -> None:
+        """Inicializa o modelo Alpha baseando-se em zscores de Reversão à Média.
+
+        Parameters
+        ----------
+        window : int | None, optional
+            O escopo histórico na computação do zscore (rolling).
+        entry_threshold : float | None, optional
+            Ponto limite (zscore absol) indicando anomalia atípica na distribuição, apta à agressão reversa.
+        exit_threshold : float | None, optional
+            Critério indicativo (zscore) em que a operação assume reversão natural já mitigada à média (fechamento temporal do setup).
+
+        """
         self.window = window or labeling_config.mean_rev_window
         self.entry_threshold = (
             entry_threshold if entry_threshold is not None else labeling_config.mean_rev_entry
@@ -358,6 +383,7 @@ class MeanReversionAlpha(AlphaModel):
 
     @property
     def name(self) -> str:
+        """Retorna o nome."""
         return (
             f"MeanReversion(w={self.window}, "
             f"entry={self.entry_threshold}, exit={self.exit_threshold})"
@@ -440,8 +466,7 @@ class MeanReversionAlpha(AlphaModel):
 # Utilitários
 # ---------------------------------------------------------------------------
 def get_signal_events(signal: pd.Series) -> pd.DatetimeIndex:
-    """
-    Extrai timestamps onde o sinal muda (transições de posição).
+    """Extrai timestamps onde o sinal muda (transições de posição).
 
     Útil para definir os momentos de amostragem na Tripla Barreira.
 
@@ -454,6 +479,7 @@ def get_signal_events(signal: pd.Series) -> pd.DatetimeIndex:
     -------
     pd.DatetimeIndex
         Timestamps onde houve mudança de sinal (excluindo transição para 0).
+
     """
     changes = signal.diff().abs()
     # Filtra apenas mudanças que resultam em posição ativa (!= 0)

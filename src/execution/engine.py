@@ -1,5 +1,4 @@
-"""
-Motor de Execução Assíncrono (Event Loop) — TradeSystem5000.
+"""Motor de Execução Assíncrono (Event Loop) — TradeSystem5000.
 
 Este módulo implementa o coração da execução em tempo real, gerenciando o
 loop de eventos que processa dados, gera sinais e roteia ordens para o
@@ -32,9 +31,7 @@ from src.execution.risk import RiskManager
 
 
 class AsyncTradingEngine:
-    """
-    Motor de execução principal do TradeSystem5000.
-    """
+    """Motor de execução principal do TradeSystem5000."""
 
     def __init__(
         self,
@@ -43,7 +40,8 @@ class AsyncTradingEngine:
         max_position: float = 1.0,
         trade_type: str = "day_trade"
     ) -> None:
-        """
+        """Inicializa o AsyncTradingEngine.
+
         Parameters
         ----------
         model_pipeline : object
@@ -55,6 +53,7 @@ class AsyncTradingEngine:
             Máximo em lotes.
         trade_type : str
             'day_trade' ou 'swing_trade'.
+
         """
         self.model_pipeline = model_pipeline
         self.symbols = symbols
@@ -74,7 +73,6 @@ class AsyncTradingEngine:
 
     async def _process_symbol(self, symbol: str) -> None:
         """Lógica executada a cada iteração do polling para um ativo."""
-
         # 1. Checa circuit breakers (Se estourou PnL ou fora do horário)
         if not self.risk.can_trade(symbol):
             # Se a modalidade for Day Trade, fecha tudo ao bater o horário (ou circuit breaker)

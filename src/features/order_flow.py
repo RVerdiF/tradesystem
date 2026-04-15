@@ -1,5 +1,4 @@
-"""
-src/features/order_flow.py
+"""src/features/order_flow.py.
 
 Volume Imbalance Ratio (VIR) utilities.
 
@@ -23,9 +22,7 @@ logger = logging.getLogger(__name__)
 
 
 def tick_rule_direction(close_series: pd.Series) -> pd.Series:
-    """
-    Apply the Tick Rule (Lee & Ready, 1991) to classify each bar as
-    buyer-aggressor (+1) or seller-aggressor (-1).
+    """Apply the Tick Rule to classify each bar as buyer-aggressor (+1) or seller-aggressor (-1).
 
     Rules:
     - close[t] > close[t-1]  → uptick  → buy aggression  (+1)
@@ -44,6 +41,7 @@ def tick_rule_direction(close_series: pd.Series) -> pd.Series:
     pd.Series
         Series of {-1, 0, +1} with same index as close_series.
         0 only appears at the very first bar (no prior close available).
+
     """
     diff = close_series.diff()
 
@@ -63,8 +61,7 @@ def tick_rule_direction(close_series: pd.Series) -> pd.Series:
 
 
 def compute_vir(df: pd.DataFrame, window: int = 20) -> pd.Series:
-    """
-    Compute the Volume Imbalance Ratio (VIR).
+    """Compute the Volume Imbalance Ratio (VIR).
 
     VIR[t] = rolling_sum(buy_vol - sell_vol, window) / rolling_sum(total_vol, window)
 
@@ -93,6 +90,7 @@ def compute_vir(df: pd.DataFrame, window: int = 20) -> pd.Series:
     -------
     pd.Series
         VIR series aligned to df.index. NaN where total volume is zero.
+
     """
     # --- Volume column selection ---
     if "real_volume" in df.columns and df["real_volume"].sum() > 0:
@@ -130,8 +128,7 @@ def compute_vir(df: pd.DataFrame, window: int = 20) -> pd.Series:
 
 
 def compute_vir_zscore(vir_series: pd.Series, window: int = 20) -> pd.Series:
-    """
-    Compute the rolling z-score of the VIR series.
+    """Compute the rolling z-score of the VIR series.
 
     z = (VIR[t] - mean(VIR[t-window:t])) / std(VIR[t-window:t])
 
@@ -154,6 +151,7 @@ def compute_vir_zscore(vir_series: pd.Series, window: int = 20) -> pd.Series:
     pd.Series
         Rolling z-score of VIR. NaN where std is zero or VIR is NaN.
         No inf values (zero std replaced with NaN).
+
     """
     rolling_mean = vir_series.rolling(window=window, min_periods=1).mean()
     rolling_std = vir_series.rolling(window=window, min_periods=1).std()
@@ -178,8 +176,7 @@ def compute_vir_zscore(vir_series: pd.Series, window: int = 20) -> pd.Series:
 
 
 def calculate_vpin(df: pd.DataFrame, bucket_size: int, window: int) -> pd.Series:
-    """
-    Calculate Volume-Synchronized Probability of Informed Trading (VPIN).
+    """Calculate Volume-Synchronized Probability of Informed Trading (VPIN).
 
     This function applies the strict Tick Rule to determine buy/sell volume aggression,
     buckets the data into intervals of constant volume (Volume Clock), computes
@@ -199,6 +196,7 @@ def calculate_vpin(df: pd.DataFrame, bucket_size: int, window: int) -> pd.Series
     -------
     pd.Series
         The calculated VPIN series mapped back to the original dataframe index.
+
     """
     # Create a copy to avoid SettingWithCopyWarning
     temp_df = df.copy()

@@ -1,5 +1,4 @@
-"""
-Testes para o módulo de diferenciação fracionária (frac_diff.py).
+"""Testes para o módulo de diferenciação fracionária (frac_diff.py).
 
 Testa cálculo de pesos FFD, aplicação da transformação e busca automática
 do d mínimo com dados sintéticos (random walk).
@@ -57,7 +56,7 @@ class TestGetWeightsFFD:
         assert abs_weights[-1] >= abs_weights[0]
 
     def test_higher_d_more_weights(self):
-        """d maior deve gerar menos pesos (decaem mais rápido para d inteiro)."""
+        """D maior deve gerar menos pesos (decaem mais rápido para d inteiro)."""
         w_low = get_weights_ffd(d=0.2, threshold=1e-5)
         w_high = get_weights_ffd(d=0.8, threshold=1e-5)
         # Ambos devem ter pesos válidos

@@ -1,5 +1,4 @@
-"""
-Motor de Otimização Bayesiana (Optuna) — TradeSystem5000.
+"""Motor de Otimização Bayesiana (Optuna) — TradeSystem5000.
 
 Este módulo implementa a lógica de busca de hiperparâmetros utilizando o
 framework Optuna, com foco em robustez estatística e mitigação de overfitting.
@@ -38,18 +37,14 @@ _FILTER_RATE_MIN_MULTIPLIER = 0.05  # piso da penalidade quadrática
 
 
 def _sharpe_lift_multiplier(lift: float) -> float:
-    """
-    Retorna o multiplicador de fitness baseado no Sharpe Lift.
-    """
+    """Retorna o multiplicador de fitness baseado no Sharpe Lift."""
     if lift >= 0.0:
         return 1.0
     return math.exp(_LIFT_DECAY_COEFFICIENT * lift)  # lift < 0, então exp(negativo)
 
 
 def _filter_rate_multiplier(filter_rate: float) -> float | None:
-    """
-    Retorna o multiplicador de fitness baseado na filter_rate.
-    """
+    """Retorna o multiplicador de fitness baseado na filter_rate."""
     if filter_rate <= _FILTER_RATE_SOFT_START:
         return 1.0
     if filter_rate > _FILTER_RATE_HARD_REJECT:
@@ -119,9 +114,24 @@ def apply_penalties(results, trial, fitness):
 
 
 def objective_phase1(trial, df, interval):
-    """
-    Fase 1: Otimiza Alpha (Labels, CUSUM, Features).
-    Parâmetros do Meta-Model são fixados para evitar overfitting cruzado e focar na qualidade do sinal.
+    """Otimiza a parametrização inicial Alpha de sinais e filtragens em Optuna.
+
+    A Fase 1 otimiza Alpha (Labels, CUSUM, Features) fixando o Meta-Model.
+
+    Parameters
+    ----------
+    trial : optuna.Trial
+        A iteração concorrente orquestrada pelo explorador heurístico.
+    df : pd.DataFrame
+        O dataframe referencial.
+    interval : str
+        Intervalo das amostras.
+
+    Returns
+    -------
+    float
+        A avaliação da eficácia parametrizada (Sharpe referencial base penalizado).
+
     """
     params = {
         "cusum_threshold": trial.suggest_float("cusum_threshold", *optimization_config.cusum_range),
@@ -186,9 +196,26 @@ def objective_phase1(trial, df, interval):
 
 
 def objective_phase2(trial, df, interval, base_params):
-    """
-    Fase 2: Otimiza Hyperparâmetros do ML (Meta-Model).
-    Recebe os parâmetros do Alpha otimizados e fixos.
+    """Otimiza a segunda leva de hiperparâmetros (Meta-Model do classificador Ensemble).
+
+    A Fase 2 otimiza Hyperparâmetros do ML (Meta-Model) recebendo o Alpha fixo.
+
+    Parameters
+    ----------
+    trial : optuna.Trial
+        Objeto operando no seletor TPE do tuner.
+    df : pd.DataFrame
+        Os dados passados à rotina instanciando métrica sob a avaliação.
+    interval : str
+        Janela de agregação da barra OHLC temporal a converter os retornos anualizados.
+    base_params : dict
+        Dicionário estático carregado a partir do estado vitorioso na primeira rodada (Phase 1).
+
+    Returns
+    -------
+    float
+        Lift avaliado de recompensa após submeter XGBoost à validação cruzada CPCV.
+
     """
     params = dict(base_params)  # Copia os melhores parâmetros da Fase 1
 
@@ -229,8 +256,7 @@ def objective_phase2(trial, df, interval, base_params):
 def run_optimization(
     df, interval, n_trials=None, n_trials_phase1=None, n_trials_phase2=None, symbol="default"
 ):
-    """
-    Configura e executa o estudo do Optuna em duas fases.
+    """Configura e executa o estudo do Optuna em duas fases.
 
     Parameters
     ----------
@@ -255,6 +281,7 @@ def run_optimization(
     usando o mesmo df e os mesmos splits temporais (determinísticos pelo índice de tempo).
     Não há vazamento pois Phase 2 não vê os labels de Phase 1 diretamente — eles são
     re-gerados deterministicamente dentro de run_pipeline.
+
     """
     if n_trials_phase1 is None:
         n_trials_phase1 = optimization_config.n_trials_phase1 if n_trials is None else n_trials

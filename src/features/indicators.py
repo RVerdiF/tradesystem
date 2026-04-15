@@ -1,5 +1,4 @@
-"""
-Indicadores Técnicos e de Microestrutura — TradeSystem5000.
+"""Indicadores Técnicos e de Microestrutura — TradeSystem5000.
 
 Este módulo implementa features financeiras point-in-time (sem look-ahead),
 organizadas em categorias de momentum, volatilidade e microestrutura.
@@ -34,8 +33,7 @@ from src.features.order_flow import calculate_vpin
 # Momentum
 # ===========================================================================
 def moving_average_distance(close: pd.Series, period: int) -> pd.Series:
-    """
-    Calcula a distância percentual do preço para a média móvel selecionada.
+    """Calcula a distância percentual do preço para a média móvel selecionada.
 
     Normaliza o momentum e evita limites fixos (como no RSI), sendo mais
     informativo para modelos de ML sobre o "estiramento" do preço.
@@ -51,6 +49,7 @@ def moving_average_distance(close: pd.Series, period: int) -> pd.Series:
     -------
     pd.Series
         Distância percentual: (Close - MA) / MA.
+
     """
     ma = close.ewm(span=period, adjust=False).mean()
     result = (close - ma) / ma.replace(0, np.nan)
@@ -59,8 +58,7 @@ def moving_average_distance(close: pd.Series, period: int) -> pd.Series:
 
 
 def roc(close: pd.Series, period: int = 10) -> pd.Series:
-    """
-    Rate of Change (retorno percentual em ``period`` barras).
+    """Rate of Change (retorno percentual em ``period`` barras).
 
     Parameters
     ----------
@@ -73,6 +71,7 @@ def roc(close: pd.Series, period: int = 10) -> pd.Series:
     -------
     pd.Series
         ROC em percentual.
+
     """
     result = close.pct_change(periods=period) * 100.0
     result.name = "roc"
@@ -88,8 +87,7 @@ def atr(
     close: pd.Series,
     period: int | None = None,
 ) -> pd.Series:
-    """
-    Average True Range.
+    """Average True Range.
 
     Parameters
     ----------
@@ -102,6 +100,7 @@ def atr(
     -------
     pd.Series
         ATR (sempre positivo).
+
     """
     if period is None:
         period = feature_config.atr_period
@@ -122,8 +121,7 @@ def atr(
 
 
 def rolling_volatility(close: pd.Series, window: int = 20) -> pd.Series:
-    """
-    Desvio padrão móvel dos retornos logarítmicos.
+    """Desvio padrão móvel dos retornos logarítmicos.
 
     Parameters
     ----------
@@ -136,6 +134,7 @@ def rolling_volatility(close: pd.Series, window: int = 20) -> pd.Series:
     -------
     pd.Series
         Volatilidade realizada (log-retornos).
+
     """
     log_ret = np.log(close / close.shift(1))
     result = log_ret.rolling(window=window, min_periods=max(1, window // 4)).std()
@@ -150,8 +149,7 @@ def garman_klass_volatility(
     close: pd.Series,
     window: int = 20,
 ) -> pd.Series:
-    """
-    Estimador de volatilidade Garman-Klass (baseado em OHLC).
+    """Estimador de volatilidade Garman-Klass (baseado em OHLC).
 
     Incorpora a informação dos preços de abertura, máxima, mínima e fechamento,
     sendo mais eficiente que estimadores baseados apenas no fechamento.
@@ -169,8 +167,7 @@ def garman_klass_volatility(
 
 
 def rolling_moments(close: pd.Series, window: int = 40) -> pd.DataFrame:
-    """
-    Calcula Skewness e Kurtosis móvel dos retornos.
+    """Calcula Skewness e Kurtosis móvel dos retornos.
 
     Ajuda a detectar exaustão de tendência e excesso de cauda (eventos extremos).
     """
@@ -186,9 +183,7 @@ def rolling_moments(close: pd.Series, window: int = 40) -> pd.DataFrame:
 # ===========================================================================
 @njit
 def _fast_rs_analysis(series_values: np.ndarray, max_lag: int) -> float:
-    """
-    Implementação Numba do cálculo do Expoente de Hurst via R/S Analysis.
-    """
+    """Implementação Numba do cálculo do Expoente de Hurst via R/S Analysis."""
     n = len(series_values)
     if n < 20:
         return np.nan
@@ -294,8 +289,7 @@ def rescaled_range_analysis(
     series: pd.Series,
     max_lag: int | None = None,
 ) -> float:
-    """
-    Calcula o Expoente de Hurst via análise R/S (Rescaled Range).
+    """Calcula o Expoente de Hurst via análise R/S (Rescaled Range).
 
     O expoente de Hurst (H) classifica o comportamento da série:
     - H = 0.5: passeio aleatório (random walk)
@@ -315,6 +309,7 @@ def rescaled_range_analysis(
     -------
     float
         Expoente de Hurst estimado. NaN se dados insuficientes.
+
     """
     if len(series) < 20:
         return np.nan
@@ -331,8 +326,7 @@ def rolling_hurst_exponent(
     window: int = 100,
     step: int = 1,
 ) -> pd.Series:
-    """
-    Calcula o Expoente de Hurst em janela rolante.
+    """Calcula o Expoente de Hurst em janela rolante.
 
     Parameters
     ----------
@@ -347,6 +341,7 @@ def rolling_hurst_exponent(
     -------
     pd.Series
         Série com o Expoente de Hurst em cada timestamp.
+
     """
     max_lag = min(window // 2, 60)
 
@@ -372,8 +367,7 @@ def volume_spread_analysis(
     open_p: pd.Series,
     volume: pd.Series,
 ) -> pd.DataFrame:
-    """
-    Features de Volume Spread Analysis (VSA).
+    """Features de Volume Spread Analysis (VSA).
 
     Avalia a relação entre o esforço (volume) e o resultado (movimento de preço).
     """
@@ -406,8 +400,7 @@ def volume_spread_analysis(
 
 
 def order_flow_imbalance(volume: pd.Series, close: pd.Series) -> pd.Series:
-    """
-    Order Flow Imbalance estimado via tick rule.
+    """Order Flow Imbalance estimado via tick rule.
 
     Classifica cada barra como compra (close > close anterior) ou venda,
     e calcula o desequilíbrio de volume.
@@ -423,6 +416,7 @@ def order_flow_imbalance(volume: pd.Series, close: pd.Series) -> pd.Series:
     -------
     pd.Series
         OFI: positivo = pressão compradora, negativo = pressão vendedora.
+
     """
     # Tick rule: +1 se preço subiu, -1 se caiu, 0 se igual
     direction = np.sign(close.diff())
@@ -442,8 +436,7 @@ def volume_imbalance(
     close: pd.Series,
     window: int = 20,
 ) -> pd.Series:
-    """
-    Volume Imbalance — pressão direcional de volume.
+    """Volume Imbalance — pressão direcional de volume.
 
     Calcula o desequilíbrio entre volume comprador e vendedor usando tick rule,
     normalizado pelo volume total na janela. Valores positivos indicam pressão
@@ -465,6 +458,7 @@ def volume_imbalance(
     -------
     pd.Series
         Volume imbalance em [-1, 1]. 0 = equilíbrio.
+
     """
     # Tick rule: +1 se preço subiu, -1 se caiu
     direction = np.sign(close.diff())
@@ -490,8 +484,7 @@ def volume_imbalance_zscore(
     window: int = 20,
     z_window: int = 50,
 ) -> pd.Series:
-    """
-    Z-score do Volume Imbalance — detecta picos de pressão direcional.
+    """Z-score do Volume Imbalance — detecta picos de pressão direcional.
 
     Útil para filtrar falsos rompimentos: um CUSUM trigger só é válido
     se houver um pico estatisticamente significativo no volume imbalance
@@ -513,6 +506,7 @@ def volume_imbalance_zscore(
     pd.Series
         Z-score do volume imbalance. Valores > 0 = pressão compradora
         acima da média; valores < 0 = pressão vendedora abaixo da média.
+
     """
     imb = volume_imbalance(volume, close, window=window)
 
@@ -532,8 +526,7 @@ def compute_all_features(
     config: object | None = None,
     is_volume_clock: bool = False,
 ) -> pd.DataFrame:
-    """
-    Calcula todas as features a partir de um DataFrame OHLCV.
+    """Calcula todas as features a partir de um DataFrame OHLCV.
 
     Parameters
     ----------
@@ -548,6 +541,7 @@ def compute_all_features(
     -------
     pd.DataFrame
         DataFrame com todas as features calculadas.
+
     """
     if config is None:
         config = feature_config

@@ -1,5 +1,4 @@
-"""
-Validação Cruzada Purificada (Purged K-Fold) — TradeSystem5000.
+"""Validação Cruzada Purificada (Purged K-Fold) — TradeSystem5000.
 
 Este módulo implementa a técnica de Purged K-Fold Cross Validation, que adapta
 o K-Fold tradicional para séries temporais financeiras sobrepostas.
@@ -33,8 +32,7 @@ from src.modeling.purge_embargo import apply_embargo, get_train_times
 
 
 class PurgedKFold(_BaseKFold):
-    """
-    K-Fold Cross Validation com Purga e Embargo para séries temporais.
+    """K-Fold Cross Validation com Purga e Embargo para séries temporais.
 
     Garante que as observações de treinamento não se sobreponham 
     (no tempo) com o conjunto de teste (purga) e que haja uma lacuna
@@ -49,6 +47,7 @@ class PurgedKFold(_BaseKFold):
         (data de fim do evento), correspondendo aos trades ou features.
     pct_embargo : float, optional
         Fração da amostra usada para o embargo pós-teste.
+
     """
 
     def __init__(
@@ -57,6 +56,7 @@ class PurgedKFold(_BaseKFold):
         n_splits: int | None = None,
         pct_embargo: float | None = None,
     ) -> None:
+        """Inicializa."""
         if not isinstance(samples_info, pd.Series):
             raise ValueError("samples_info deve ser uma pd.Series (index=t0, values=t1)")
 
@@ -72,8 +72,7 @@ class PurgedKFold(_BaseKFold):
         y: pd.Series | np.ndarray | None = None,
         groups: np.ndarray | None = None,
     ) -> collections.abc.Iterator[tuple[np.ndarray, np.ndarray]]:
-        """
-        Gera os índices para treino e teste para cada fold.
+        """Gera os índices para treino e teste para cada fold.
 
         Parameters
         ----------
@@ -88,6 +87,7 @@ class PurgedKFold(_BaseKFold):
         ------
         tuple[np.ndarray, np.ndarray]
             (train_indices, test_indices)
+
         """
         if isinstance(X, pd.DataFrame):
             indices = np.arange(X.shape[0])
@@ -160,9 +160,7 @@ def cv_score(
     samples_info: pd.Series | None = None,
     n_splits: int | None = None,
 ) -> pd.DataFrame:
-    """
-    Utilitário para rodar PurgedKFold facilmente.
-    """
+    """Utilitário para rodar PurgedKFold facilmente."""
     from sklearn.model_selection import cross_validate
 
     if samples_info is None:

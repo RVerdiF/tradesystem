@@ -1,5 +1,4 @@
-"""
-Métricas de Performance para Backtesting — TradeSystem5000.
+"""Métricas de Performance para Backtesting — TradeSystem5000.
 
 Este módulo implementa métricas estatísticas e de risco para avaliação
 rigorosa de estratégias de trading, seguindo os padrões AFML.
@@ -33,8 +32,7 @@ def sharpe_ratio(
     risk_free: float = 0.0,
     periods_per_year: int = 252,
 ) -> float:
-    """
-    Calcula o Sharpe Ratio anualizado.
+    """Calcula o Sharpe Ratio anualizado.
 
     Parameters
     ----------
@@ -49,6 +47,7 @@ def sharpe_ratio(
     -------
     float
         Sharpe Ratio anualizado.
+
     """
     excess = np.asarray(returns) - risk_free
     std = np.std(excess, ddof=1)
@@ -71,8 +70,7 @@ def deflated_sharpe(
     risk_free: float = 0.0,
     periods_per_year: int = 252,
 ) -> float:
-    """
-    Calcula o Sharpe Deflacionado (DSR).
+    """Calcula o Sharpe Deflacionado (DSR).
 
     Ajusta o Sharpe Ratio observado pela quantidade de testes (trials)
     realizados, controlando o viés de seleção (data snooping).
@@ -99,6 +97,7 @@ def deflated_sharpe(
     float
         p-value do DSR. Valores < 0.05 significam que o SR observado
         é estatisticamente significativo mesmo após ajuste por múltiplos testes.
+
     """
     if n_trials < 1 or n_obs < 2:
         return 1.0
@@ -140,8 +139,7 @@ def deflated_sharpe(
 # Drawdown
 # ---------------------------------------------------------------------------
 def max_drawdown(returns: pd.Series | np.ndarray) -> float:
-    """
-    Calcula o Maximum Drawdown (MDD).
+    """Calcula o Maximum Drawdown (MDD).
 
     Parameters
     ----------
@@ -152,6 +150,7 @@ def max_drawdown(returns: pd.Series | np.ndarray) -> float:
     -------
     float
         Maximum Drawdown (valor negativo, ex: -0.15 = 15% de queda).
+
     """
     cumulative = (1 + pd.Series(returns)).cumprod()
     peak = cumulative.cummax()
@@ -175,8 +174,7 @@ def calmar_ratio(
     returns: pd.Series | np.ndarray,
     periods_per_year: int = 252,
 ) -> float:
-    """
-    Calcula o Calmar Ratio (retorno anualizado / |MDD|).
+    """Calcula o Calmar Ratio (retorno anualizado / |MDD|).
 
     Parameters
     ----------
@@ -189,6 +187,7 @@ def calmar_ratio(
     -------
     float
         Calmar Ratio. Quanto maior, melhor o retorno por unidade de drawdown.
+
     """
     mdd = max_drawdown(returns)
     if mdd == 0:
@@ -205,8 +204,7 @@ def probability_of_ruin(
     returns: pd.Series | np.ndarray,
     threshold: float = -0.50,
 ) -> float:
-    """
-    Estima a probabilidade de ruína (drawdown atingir threshold).
+    """Estima a probabilidade de ruína (drawdown atingir threshold).
 
     Usa simulação de Monte Carlo simples sobre os retornos observados.
 
@@ -221,6 +219,7 @@ def probability_of_ruin(
     -------
     float
         Probabilidade estimada de ruína [0, 1].
+
     """
     returns = np.asarray(returns)
     n_simulations = 1000
@@ -252,8 +251,7 @@ def performance_report(
     risk_free: float = 0.0,
     periods_per_year: int = 252,
 ) -> dict:
-    """
-    Gera um relatório completo de performance.
+    """Gera um relatório completo de performance.
 
     Parameters
     ----------
@@ -270,6 +268,7 @@ def performance_report(
     -------
     dict
         Dicionário com todas as métricas.
+
     """
     sr = sharpe_ratio(returns, risk_free, periods_per_year)
     mdd = max_drawdown(returns)

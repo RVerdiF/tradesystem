@@ -1,5 +1,4 @@
-"""
-Testes para a Fase 4 — ML Modeling.
+"""Testes para a Fase 4 — ML Modeling.
 
 Valida a purga/embargo para evitar data leakage, K-fold validado no tempo, 
 e logica do classificador e do bet sizing (Kelly Fracionário).
@@ -22,8 +21,7 @@ from src.modeling.bet_sizing import compute_kelly_fraction, discretize_bet
 # ---------------------------------------------------------------------------
 @pytest.fixture
 def synthetic_events():
-    """
-    Simula uma série temporal de eventos de trading.
+    """Simula uma série temporal de eventos de trading.
     t0 (index) = entrada do trade
     t1 (values) = saída do trade (barreira atingida)
     """

@@ -1,5 +1,4 @@
-"""
-Configurações centralizadas do TradeSystem5000.
+"""Configurações centralizadas do TradeSystem5000.
 
 Credenciais sensíveis são lidas de variáveis de ambiente.
 Parâmetros de trading e risco são definidos aqui como constantes.

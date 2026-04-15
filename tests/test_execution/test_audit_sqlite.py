@@ -1,5 +1,4 @@
-"""
-Testes dedicados para AuditLogger (SQLite).
+"""Testes dedicados para AuditLogger (SQLite).
 
 Verifica:
 - Escrita correta de sinais, ordens e erros.

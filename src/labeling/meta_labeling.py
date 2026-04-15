@@ -1,5 +1,4 @@
-"""
-Meta-Labeling (Rotulagem Secundária) — TradeSystem5000.
+"""Meta-Labeling (Rotulagem Secundária) — TradeSystem5000.
 
 Este módulo implementa a técnica de Meta-Labeling para treinar um modelo
 secundário (Meta-Modelo) capaz de filtrar os sinais do modelo de Alpha.
@@ -34,8 +33,7 @@ def get_meta_labels(
     triple_barrier_result: pd.DataFrame,
     min_return: float | None = None,
 ) -> pd.Series:
-    """
-    Converte o resultado da Tripla Barreira em rótulos binários para meta-labeling.
+    """Rotula o resultado da Tripla Barreira em rótulos binários para meta-labeling.
 
     O meta-label indica se o Alpha Model *acertou* a direção:
     - ``1``: o trade do Alpha foi lucrativo (TP atingido ou retorno positivo no tempo)
@@ -54,6 +52,7 @@ def get_meta_labels(
     pd.Series
         Série binária {0, 1} com mesmo índice dos eventos.
         Nome: ``meta_label``.
+
     """
     if min_return is None:
         min_return = labeling_config.min_return
@@ -91,8 +90,7 @@ def build_training_dataset(
     include_return_info: bool = False,
     dropna: bool = True,
 ) -> pd.DataFrame:
-    """
-    Monta o dataset final de treinamento combinando features + meta-labels.
+    """Monta o dataset final de treinamento combinando features + meta-labels.
 
     Parameters
     ----------
@@ -114,6 +112,7 @@ def build_training_dataset(
         - Colunas de features
         - Coluna ``meta_label`` (target)
         - Opcionalmente ``side``, ``ret``, ``barrier_type``
+
     """
     # Alinha features com os eventos da tripla barreira
     event_idx = triple_barrier_result.index
@@ -168,8 +167,7 @@ def build_training_dataset(
 def meta_label_analysis(
     triple_barrier_result: pd.DataFrame,
 ) -> dict:
-    """
-    Retorna estatísticas descritivas do resultado da meta-rotulagem.
+    """Retorna estatísticas descritivas do resultado da meta-rotulagem.
 
     Parameters
     ----------
@@ -180,6 +178,7 @@ def meta_label_analysis(
     -------
     dict
         Dicionário com métricas descritivas.
+
     """
     meta = get_meta_labels(triple_barrier_result)
 

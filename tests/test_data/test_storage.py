@@ -1,5 +1,4 @@
-"""
-Testes para o módulo de armazenamento Parquet (storage.py).
+"""Testes para o módulo de armazenamento Parquet (storage.py).
 
 Testa round-trip save/load, append sem duplicatas, filtro temporal e metadados.
 """
@@ -137,7 +136,7 @@ class TestParquetStoreUtils:
         assert set(symbols) == {"PETR4", "VALE3"}
 
     def test_delete_removes_data(self, store, sample_ohlc):
-        """delete deve remover o arquivo."""
+        """Delete deve remover o arquivo."""
         store.save(sample_ohlc, "PETR4", "ohlc")
         assert store.exists("PETR4", "ohlc")
 
@@ -145,7 +144,7 @@ class TestParquetStoreUtils:
         assert not store.exists("PETR4", "ohlc")
 
     def test_info_returns_metadata(self, store, sample_ohlc):
-        """info deve retornar metadados do arquivo."""
+        """Info deve retornar metadados do arquivo."""
         store.save(sample_ohlc, "PETR4", "ohlc")
 
         info = store.info("PETR4", "ohlc")

@@ -1,5 +1,4 @@
-"""
-Normalização Temporal de Features — TradeSystem5000.
+"""Normalização Temporal de Features — TradeSystem5000.
 
 Este módulo implementa técnicas de normalização point-in-time para garantir
 que as features tenham escalas comparáveis sem introduzir viés de antecipação
@@ -60,8 +59,7 @@ def rolling_zscore(
     series: pd.Series,
     window: int | None = None,
 ) -> pd.Series:
-    """
-    Z-score com janela móvel (point-in-time).
+    """Z-score com janela móvel (point-in-time).
 
     Parameters
     ----------
@@ -74,6 +72,7 @@ def rolling_zscore(
     -------
     pd.Series
         Série normalizada (média ≈ 0, std ≈ 1 na janela).
+
     """
     if window is None:
         window = feature_config.zscore_window
@@ -94,8 +93,7 @@ def rolling_zscore(
 # Rank Percentual Expandido
 # ---------------------------------------------------------------------------
 def expanding_rank(series: pd.Series) -> pd.Series:
-    """
-    Rank percentual expandido (de 0 a 1).
+    """Rank percentual expandido (de 0 a 1).
 
     Para cada timestamp ``t``, retorna a posição relativa do valor atual
     em relação a todos os valores anteriores (inclusive).
@@ -109,6 +107,7 @@ def expanding_rank(series: pd.Series) -> pd.Series:
     -------
     pd.Series
         Série com valores em [0, 1].
+
     """
     result = series.expanding().rank(pct=True)
     result.name = f"{series.name}_rank" if series.name else "rank"
@@ -123,8 +122,7 @@ def normalize_features(
     method: str = "zscore",
     window: int | None = None,
 ) -> pd.DataFrame:
-    """
-    Normaliza colunas de features de um DataFrame, excluindo colunas brutas OHLCV.
+    """Normaliza colunas de features de um DataFrame, excluindo colunas brutas OHLCV.
 
     Colunas em ``_BLOCKLIST_RAW_COLS`` (open, high, low, close, volume e
     auxiliares de tempo) são preservadas sem transformação. Todas as demais
@@ -144,6 +142,7 @@ def normalize_features(
     -------
     pd.DataFrame
         DataFrame com features normalizadas e colunas OHLCV inalteradas.
+
     """
     if window is None:
         window = feature_config.zscore_window
@@ -180,8 +179,7 @@ def validate_no_lookahead(
     original: pd.DataFrame,
     window: int | None = None,
 ) -> bool:
-    """
-    Verifica que a normalização não introduziu look-ahead bias.
+    """Verifica que a normalização não introduziu look-ahead bias.
 
     Para cada timestamp ``t``, recalcula o Z-score usando apenas dados ``≤ t``
     e compara com o valor no DataFrame normalizado.
@@ -199,6 +197,7 @@ def validate_no_lookahead(
     -------
     bool
         True se não há look-ahead bias, False caso contrário.
+
     """
     if window is None:
         window = feature_config.zscore_window

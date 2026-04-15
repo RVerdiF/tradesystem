@@ -103,8 +103,7 @@ class TestExecutionFlow:
 # Testes — Bet Sizing Integration no Engine
 # ---------------------------------------------------------------------------
 class TestEngineBetSizing:
-    """
-    Testa que o engine NÃO fecha posições nem envia ordens quando kelly_fraction = 0
+    """Testa que o engine NÃO fecha posições nem envia ordens quando kelly_fraction = 0
     (sinal de baixa convicção / lote zero).
     """
 
@@ -121,8 +120,7 @@ class TestEngineBetSizing:
 
     @pytest.mark.asyncio
     async def test_zero_kelly_does_not_close_or_send(self):
-        """
-        Quando kelly_fraction=0 e meta_prob=0.3 (abaixo do threshold),
+        """Quando kelly_fraction=0 e meta_prob=0.3 (abaixo do threshold),
         close_positions e send_market_order NÃO devem ser chamados.
         """
         signal = {
@@ -159,8 +157,7 @@ class TestEngineBetSizing:
 
     @pytest.mark.asyncio
     async def test_nonzero_kelly_sends_proportional_volume(self):
-        """
-        Quando kelly_fraction=0.4 e max_position=5, deve enviar volume=2 lotes
+        """Quando kelly_fraction=0.4 e max_position=5, deve enviar volume=2 lotes
         (round(0.4 * 5) = 2), NÃO forçar mínimo de 1 nem máximo estático.
         """
         signal = {

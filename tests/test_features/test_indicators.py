@@ -1,5 +1,4 @@
-"""
-Testes para indicadores técnicos e de microestrutura (indicators.py).
+"""Testes para indicadores técnicos e de microestrutura (indicators.py).
 
 Verifica propriedades esperadas (ranges, sinais, shapes) com dados OHLCV sintéticos.
 Atualizado para refletir o "Truth Test" (Features Avançadas: MA Dist, GK Vol, Momentos, VSA).

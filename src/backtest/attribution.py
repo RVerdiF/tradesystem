@@ -1,5 +1,4 @@
-"""
-Análise de Atribuição (Alpha vs. Meta-Labeling) — TradeSystem5000.
+"""Análise de Atribuição (Alpha vs. Meta-Labeling) — TradeSystem5000.
 
 Este módulo decompõe a performance total do sistema em contribuições de cada
 componente da arquitetura AFML:
@@ -34,8 +33,7 @@ def attribution_analysis(
     returns_before_costs: pd.Series | None = None,
     periods_per_year: int = 252,
 ) -> dict:
-    """
-    Decompõe a performance em contribuições de cada componente.
+    """Decompõe a performance em contribuições de cada componente.
 
     Parameters
     ----------
@@ -52,6 +50,7 @@ def attribution_analysis(
     -------
     dict
         Dicionário com métricas de atribuição.
+
     """
     sr_full = sharpe_ratio(returns_full, periods_per_year=periods_per_year)
     sr_alpha = sharpe_ratio(returns_alpha_only, periods_per_year=periods_per_year)
@@ -93,8 +92,7 @@ def attribution_analysis(
 def trade_level_attribution(
     trades: pd.DataFrame,
 ) -> pd.DataFrame:
-    """
-    Análise de atribuição no nível de cada trade individual.
+    """Análise de atribuição no nível de cada trade individual.
 
     Parameters
     ----------
@@ -110,6 +108,7 @@ def trade_level_attribution(
     -------
     pd.DataFrame
         DataFrame com colunas adicionais de atribuição por trade.
+
     """
     result = trades.copy()
 
@@ -170,8 +169,7 @@ def trade_level_attribution(
 def attribution_summary(
     trade_attribution: pd.DataFrame,
 ) -> dict:
-    """
-    Resume a atribuição a nível agregado.
+    """Resume a atribuição a nível agregado.
 
     Parameters
     ----------
@@ -182,6 +180,7 @@ def attribution_summary(
     -------
     dict
         Métricas agregadas.
+
     """
     summary = {
         "total_trades": len(trade_attribution),
