@@ -24,8 +24,10 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 from loguru import logger
+from numba import njit
 
 from config.settings import feature_config
+from src.features.order_flow import calculate_vpin
 
 
 # ===========================================================================
@@ -182,6 +184,112 @@ def rolling_moments(close: pd.Series, window: int = 40) -> pd.DataFrame:
 # ===========================================================================
 # Regime Detection (Hurst Exponent)
 # ===========================================================================
+@njit
+def _fast_rs_analysis(series_values: np.ndarray, max_lag: int) -> float:
+    """
+    Implementação Numba do cálculo do Expoente de Hurst via R/S Analysis.
+    """
+    n = len(series_values)
+    if n < 20:
+        return np.nan
+
+    log_ret = np.zeros(n - 1)
+    for i in range(1, n):
+        if series_values[i - 1] != 0 and (series_values[i] / series_values[i - 1]) > 0:
+            log_ret[i - 1] = np.log(series_values[i] / series_values[i - 1])
+        else:
+            log_ret[i - 1] = np.nan
+
+    # Filtra NaNs
+    valid_idx = np.where(~np.isnan(log_ret))[0]
+    log_ret = log_ret[valid_idx]
+
+    if len(log_ret) < max_lag:
+        return np.nan
+
+    rs_values = np.zeros(max_lag)
+    lag_values = np.zeros(max_lag)
+    count = 0
+
+    for lag in range(10, max_lag + 1, 5):
+        if lag > len(log_ret):
+            break
+
+        n_sub = len(log_ret) // lag
+        if n_sub < 2:
+            continue
+
+        rs_sum = 0.0
+        valid_chunks = 0
+
+        for j in range(n_sub):
+            chunk = log_ret[j * lag : (j + 1) * lag]
+            mean_chunk = np.mean(chunk)
+
+            cum_dev = np.zeros(len(chunk))
+            curr_sum = 0.0
+            for k in range(len(chunk)):
+                curr_sum += chunk[k] - mean_chunk
+                cum_dev[k] = curr_sum
+
+            r_range = np.max(cum_dev) - np.min(cum_dev)
+
+            # Cálculo rápido de desvio padrão amostral (ddof=1)
+            chunk_var = 0.0
+            for k in range(len(chunk)):
+                chunk_var += (chunk[k] - mean_chunk) ** 2
+            s_std = np.sqrt(chunk_var / (len(chunk) - 1)) if len(chunk) > 1 else 0.0
+
+            if s_std > 0 and r_range > 0:
+                rs_sum += r_range / s_std
+                valid_chunks += 1
+
+        if valid_chunks > 0:
+            avg_rs = rs_sum / valid_chunks
+            if avg_rs > 0:
+                rs_values[count] = np.log(avg_rs)
+                lag_values[count] = np.log(lag)
+                count += 1
+
+    if count < 3:
+        return np.nan
+
+    x = lag_values[:count]
+    y = rs_values[:count]
+
+    x_mean = np.mean(x)
+    y_mean = np.mean(y)
+
+    numerator = np.sum((x - x_mean) * (y - y_mean))
+    denominator = np.sum((x - x_mean) ** 2)
+
+    if denominator == 0:
+        return np.nan
+
+    hurst = numerator / denominator
+
+    if hurst < 0.0:
+        return 0.0
+    elif hurst > 1.0:
+        return 1.0
+    return float(hurst)
+
+
+@njit
+def _fast_rolling_hurst_numba(
+    values: np.ndarray, window: int, step: int, max_lag: int
+) -> np.ndarray:
+    n = len(values)
+    result = np.full(n, np.nan)
+
+    for i in range(window, n, step):
+        window_data = values[i - window : i]
+        h = _fast_rs_analysis(window_data, max_lag)
+        result[i] = h
+
+    return result
+
+
 def rescaled_range_analysis(
     series: pd.Series,
     max_lag: int | None = None,
@@ -214,69 +322,8 @@ def rescaled_range_analysis(
     if max_lag is None:
         max_lag = min(len(series) // 2, 60)
 
-    # Usa retornos logarítmicos para estabilidade numérica
-    log_ret = np.log(series / series.shift(1)).dropna()
-    if len(log_ret) < max_lag:
-        return np.nan
-
-    # Calcula R/S para cada lag
-    rs_values = []
-    lag_values = []
-
-    # Otimização: Extrai os valores para array numpy fora do loop
-    # para evitar o overhead de slicing do Pandas .iloc em loop aninhado.
-    log_ret_values = log_ret.values
-
-    for lag in range(10, max_lag + 1, 5):  # step=5 para eficiência
-        if lag > len(log_ret_values):
-            break
-
-        # Divide a série em sub-séries de tamanho 'lag'
-        n_sub = len(log_ret_values) // lag
-        if n_sub < 2:
-            continue
-
-        rs_sum = 0.0
-        valid_chunks = 0
-
-        for j in range(n_sub):
-            chunk = log_ret_values[j * lag : (j + 1) * lag]
-            mean_chunk = np.mean(chunk)
-            cum_dev = np.cumsum(chunk - mean_chunk)
-
-            r_range = np.max(cum_dev) - np.min(cum_dev)
-            s_std = np.std(chunk, ddof=1)
-
-            if s_std > 0 and r_range > 0:
-                rs_sum += r_range / s_std
-                valid_chunks += 1
-
-        if valid_chunks > 0:
-            avg_rs = rs_sum / valid_chunks
-            if avg_rs > 0:
-                rs_values.append(np.log(avg_rs))
-                lag_values.append(np.log(lag))
-
-    if len(rs_values) < 3:
-        return np.nan
-
-    # Regressão linear OLS: log(R/S) = H * log(n) + C
-    x = np.array(lag_values)
-    y = np.array(rs_values)
-
-    x_mean = np.mean(x)
-    y_mean = np.mean(y)
-
-    numerator = np.sum((x - x_mean) * (y - y_mean))
-    denominator = np.sum((x - x_mean) ** 2)
-
-    if denominator == 0:
-        return np.nan
-
-    hurst = numerator / denominator
-
-    # Clampa a [0, 1] para validade matemática
-    return float(np.clip(hurst, 0.0, 1.0))
+    # Delegamos para a implementação Numba hiper-otimizada
+    return _fast_rs_analysis(series.values, max_lag)
 
 
 def rolling_hurst_exponent(
@@ -301,17 +348,13 @@ def rolling_hurst_exponent(
     pd.Series
         Série com o Expoente de Hurst em cada timestamp.
     """
-    result = pd.Series(np.nan, index=close.index, dtype=np.float64)
+    max_lag = min(window // 2, 60)
+
+    # Executa o loop pesado no C via Numba
+    out_array = _fast_rolling_hurst_numba(close.values, window, step, max_lag)
+
+    result = pd.Series(out_array, index=close.index, dtype=np.float64)
     result.name = "hurst_exponent"
-
-    # Pré-computa a cada 'step' barras para eficiência
-    indices = range(window, len(close), step)
-
-    for i in indices:
-        window_data = close.iloc[i - window : i]
-        h = rescaled_range_analysis(window_data)
-        if not np.isnan(h):
-            result.iloc[i] = h
 
     # Forward-fill para preencher gaps entre cálculos (quando step > 1)
     result = result.ffill()
@@ -393,8 +436,6 @@ def order_flow_imbalance(volume: pd.Series, close: pd.Series) -> pd.Series:
     ofi.name = "ofi"
     return ofi
 
-
-from src.features.order_flow import calculate_vpin
 
 def volume_imbalance(
     volume: pd.Series,
@@ -516,8 +557,12 @@ def compute_all_features(
     features = pd.DataFrame(index=df.index)
 
     # Momentum (Distância de Médias)
-    features["ma_dist_fast"] = moving_average_distance(df["close"], period=config.ma_dist_fast_period)
-    features["ma_dist_slow"] = moving_average_distance(df["close"], period=config.ma_dist_slow_period)
+    features["ma_dist_fast"] = moving_average_distance(
+        df["close"], period=config.ma_dist_fast_period
+    )
+    features["ma_dist_slow"] = moving_average_distance(
+        df["close"], period=config.ma_dist_slow_period
+    )
     features["roc"] = roc(df["close"])
 
     # Volatilidade
@@ -548,7 +593,9 @@ def compute_all_features(
         features["volume_imbalance"] = volume_imbalance(df["volume"], df["close"])
         features["volume_imbalance_zscore"] = volume_imbalance_zscore(df["volume"], df["close"])
 
-        vsa_df = volume_spread_analysis(df["high"], df["low"], df["close"], df["open"], df["volume"])
+        vsa_df = volume_spread_analysis(
+            df["high"], df["low"], df["close"], df["open"], df["volume"]
+        )
         features = pd.concat([features, vsa_df], axis=1)
 
     # Regime Detection (Hurst Exponent)
