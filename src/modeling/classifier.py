@@ -1,5 +1,4 @@
-"""
-Classificador Secundário (Meta-Model) — TradeSystem5000.
+"""Classificador Secundário (Meta-Model) — TradeSystem5000.
 
 Este módulo implementa o Meta-Classificador responsável por filtrar os sinais
 do modelo primário (Alpha), estimando a probabilidade de um sinal ser um
@@ -36,8 +35,7 @@ except ImportError:
 
 
 class MetaClassifier(BaseEstimator, ClassifierMixin):
-    """
-    Meta-Classificador Secundário para filtrar sinais do modelo primário.
+    """Meta-Classificador Secundário para filtrar sinais do modelo primário.
 
     Wraps um XGBoost Classifier ou RandomForestClassifier.
 
@@ -55,6 +53,7 @@ class MetaClassifier(BaseEstimator, ClassifierMixin):
         Usado apenas para Random Forest (XGBoost ignora este parâmetro).
     n_jobs : int, default=-1
         Processamento paralelo.
+
     """
 
     def __init__(
@@ -71,6 +70,7 @@ class MetaClassifier(BaseEstimator, ClassifierMixin):
         random_state: int | None = 42,
         use_xgboost: bool = True,
     ) -> None:
+        """Inicializa."""
         self.n_estimators = n_estimators
         self.max_depth = max_depth
         self.gamma = gamma
@@ -119,16 +119,17 @@ class MetaClassifier(BaseEstimator, ClassifierMixin):
         y: pd.Series | np.ndarray,
         sample_weight: pd.Series | np.ndarray | None = None,
     ) -> MetaClassifier:
-        """
-        Treina o classificador Secundário.
+        """Treina.
 
         Parameters
         ----------
-        X : DataFrame (features)
-        y : Series (labels: 0 ou 1)
-        sample_weight : Series_like, optional
-            Pesos para cada amostra (p. ex., retorno absoluto para dar
-            mais peso a predições de trades maiores).
+        X : pd.DataFrame | np.ndarray
+            Features.
+        y : pd.Series | np.ndarray
+            Targets.
+        sample_weight : pd.Series | np.ndarray, optional
+            Weights.
+
         """
         # Inserir um debug print preventivo
         if isinstance(X, pd.DataFrame):
@@ -185,8 +186,7 @@ class MetaClassifier(BaseEstimator, ClassifierMixin):
         return self.model.predict(X)
 
     def predict_proba(self, X: pd.DataFrame | np.ndarray) -> np.ndarray:
-        """
-        Retorna as probabilidades.
+        """Retorna as probabilidades.
 
         A coluna 1 é a probabilidade do trade do Alpha Model ser lucrativo,
         que será a principal entrada para o dimensionamento de posição (Bet Sizing).
@@ -196,8 +196,7 @@ class MetaClassifier(BaseEstimator, ClassifierMixin):
         return self.model.predict_proba(X)
 
     def feature_importances(self, feature_names: list[str] | None = None) -> pd.Series:
-        """
-        Extrai importância das features extraída do Random Forest (MDI).
+        """Extrai importância das features extraída do Random Forest (MDI).
 
         Nota: Feature Importance por MDI em finanças pode ser enganosa se houver
         correlação ou substituição. Para aprofundar, veja Cap. 8 de AFML (MDA/CFI).
@@ -211,7 +210,21 @@ class MetaClassifier(BaseEstimator, ClassifierMixin):
         return pd.Series(importances).sort_values(ascending=False)
 
     def evaluate(self, X_test: pd.DataFrame, y_test: pd.Series) -> dict:
-        """Relatório de avaliação rápido"""
+        """Avalia o relatório gerado pela modelagem rápida.
+
+        Parameters
+        ----------
+        X_test : pd.DataFrame
+            Features de teste.
+        y_test : pd.Series
+            Target de teste.
+
+        Returns
+        -------
+        dict
+            Dicionário com o report das avaliações das métricas de perfomance do Meta-Model.
+
+        """
         y_pred = self.predict(X_test)
         y_prob = self.predict_proba(X_test)[:, 1]
 

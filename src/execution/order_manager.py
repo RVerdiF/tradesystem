@@ -1,5 +1,4 @@
-"""
-Gerenciador de Ordens (MetaTrader 5 Integration) — TradeSystem5000.
+"""Gerenciador de Ordens (MetaTrader 5 Integration) — TradeSystem5000.
 
 Este módulo abstrai a comunicação de baixo nível com a API do MetaTrader 5
 para envio de ordens, controle de posições e fechamento de exposições.
@@ -24,11 +23,10 @@ from src.execution.audit import audit
 
 
 class OrderManager:
-    """
-    Controlador de ordens para MetaTrader 5.
-    """
+    """Controlador de ordens para MetaTrader 5."""
 
     def __init__(self) -> None:
+        """Inicializa a classe de roteamento."""
         self.magic_number = execution_config.magic_number
         self.deviation = execution_config.max_slippage_ticks
 
@@ -55,8 +53,7 @@ class OrderManager:
         return True
 
     def send_market_order(self, symbol: str, action: str, volume: float) -> bool:
-        """
-        Envia uma ordem a mercado.
+        """Envia uma ordem a mercado.
         
         Parameters
         ----------
@@ -71,6 +68,7 @@ class OrderManager:
         -------
         bool
             True se executada com sucesso.
+
         """
         # Proteção: lote zero é comportamento legítimo do Bet Sizing (sem convicção suficiente).
         # Não constitui erro — retorna True silenciosamente para não poluir logs/alertas.

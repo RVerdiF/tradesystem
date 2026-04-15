@@ -1,5 +1,4 @@
-"""
-Gerenciamento de Risco e Circuit Breakers — TradeSystem5000.
+"""Gerenciamento de Risco e Circuit Breakers — TradeSystem5000.
 
 Este módulo implementa a camada de proteção macro (nível de conta), impedindo
 operações se limites críticos de perda, lucro ou tempo forem atingidos.
@@ -39,8 +38,8 @@ STATE_OUTSIDE_WINDOW = "OUTSIDE_WINDOW"
 
 
 class RiskManager:
-    """
-    Gerenciador de Risco Macro (Conta/Global).
+    """Gerenciador de Risco Macro (Conta/Global).
+
     Avalia se o sistema como um todo está autorizado a enviar novas ordens.
     """
 
@@ -51,7 +50,8 @@ class RiskManager:
         start_time: str = risk_config.trading_start_time,
         end_time: str = risk_config.trading_end_time
     ) -> None:
-        """
+        """Inicializa o RiskManager.
+
         Parameters
         ----------
         start_balance : float, opcional
@@ -63,6 +63,7 @@ class RiskManager:
             Horário de início (HH:MM:SS).
         end_time : str
             Horário de término (HH:MM:SS).
+
         """
         self.start_balance = start_balance
         self.current_equity = start_balance
@@ -96,8 +97,7 @@ class RiskManager:
     # ------------------------------------------------------------------
 
     def update_equity(self, balance: float, equity: float) -> None:
-        """
-        Atualiza o estado da conta (chamado a cada ciclo/tick).
+        """Atualiza o estado da conta (chamado a cada ciclo/tick).
 
         No MT5: balance = saldo fechado, equity = saldo + lucro flutuante.
         """
@@ -123,8 +123,7 @@ class RiskManager:
         self._check_circuit_breakers()
 
     def notify_trade_closed(self, symbol: str = "GLOBAL") -> None:
-        """
-        Inicia o período de cool-down após uma saída de posição para flat.
+        """Inicia o período de cool-down após uma saída de posição para flat.
 
         Deve ser chamado APENAS na saída por circuit breaker ou TP/SL (não em stop-and-reverse),
         para evitar bloquear a gestão de posições recém-abertas.
@@ -146,9 +145,7 @@ class RiskManager:
         logger.info("Cool-down ativado para {} até: {}", symbol, cool_down_until.strftime('%H:%M:%S'))
 
     def can_trade(self, symbol: str = "GLOBAL") -> bool:
-        """
-        Retorna True se o sistema e o ativo estiverem livres para enviar ordens.
-        """
+        """Retorna True se o sistema e o ativo estiverem livres para enviar ordens."""
         if self.is_halted:
             logger.warning("TRADING HALTED: {}", self.halt_reason)
             return False
@@ -164,9 +161,7 @@ class RiskManager:
         return True
 
     def validate_order(self, current_exposure: float, new_volume: float, max_exposure: float) -> bool:
-        """
-        Verifica exposição máxima por ativo/conta antes de enviar uma ordem.
-        """
+        """Verifica exposição máxima por ativo/conta antes de enviar uma ordem."""
         if self.is_halted:
             return False
 
@@ -183,23 +178,24 @@ class RiskManager:
     # ------------------------------------------------------------------
 
     def _set_state(self, state: str, reason: str) -> None:
-        """
-        Transição de estado atómica. Mantém system_state, is_halted e
-        halt_reason em sincronia. Único ponto de mutação de estado.
+        """Transição de estado atômica.
+
+        Mantém system_state, is_halted e halt_reason em sincronia.
+        Único ponto de mutação de estado.
         """
         self.system_state = state
         self.is_halted = state != STATE_ACTIVE
         self.halt_reason = reason
 
     def _check_circuit_breakers(self) -> None:
-        """
-        Avalia todas as regras de risco macro. Ordem de prioridade:
+        """Avalia todas as regras de risco macro.
 
+        Ordem de prioridade:
         1. Halt permanente do dia (só o reset diário pode limpar)
         2. Janela de horário
         3. Daily Loss
         4. Daily Profit
-        5. Max Drawdown
+        5. Max Drawdown.
         """
         # --- 1. Halt permanente do dia (PnL ou Drawdown) ---
         if self.system_state == STATE_HALTED_FOR_DAY:

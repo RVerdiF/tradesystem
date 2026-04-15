@@ -1,5 +1,4 @@
-"""
-Gerenciamento e Persistência de Hiperparâmetros — TradeSystem5000.
+"""Gerenciamento e Persistência de Hiperparâmetros — TradeSystem5000.
 
 Este módulo implementa a camada de armazenamento para os parâmetros otimizados
 pelo Tuner, utilizando o banco de dados SQLite central para auditoria e
@@ -36,9 +35,20 @@ def _normalize_symbol(symbol: str) -> str:
 
 
 def get_continuous_symbol(symbol: str) -> str:
-    """
-    Retorna o símbolo contínuo para ativos da B3 que possuem séries mensais.
-    Ex: WINJ26 -> WIN$, WDOM25 -> WDO$
+    """Retorna o símbolo contínuo para ativos da B3 que possuem séries mensais.
+
+    Ex: WINJ26 -> WIN$, WDOM25 -> WDO$.
+
+    Parameters
+    ----------
+    symbol : str
+        Ativo de entrada B3 original para serialização.
+
+    Returns
+    -------
+    str
+        Ticker consolidado de negociação contínua.
+
     """
     # Regex para WIN, WDO, IND, DOL + Letra do Mês + Ano (2 dígitos)
     match = re.match(r"^(WIN|WDO|IND|DOL)[FGHJKMNQUVXZ]\d{2}$", symbol, re.IGNORECASE)
@@ -48,8 +58,7 @@ def get_continuous_symbol(symbol: str) -> str:
 
 
 def save_optimized_params(symbol: str, params: dict, metadata: dict | None = None) -> None:
-    """
-    Persiste os parâmetros otimizados no banco SQLite.
+    """Salva e armazena os parâmetros otimizados no banco SQLite.
 
     Usa ``INSERT OR REPLACE`` — sobrescreve se o símbolo já existir.
 
@@ -61,6 +70,7 @@ def save_optimized_params(symbol: str, params: dict, metadata: dict | None = Non
         Hiperparâmetros otimizados.
     metadata : dict | None
         Dados extras do Optuna (Sharpe, DSR, data, n_trials).
+
     """
     symbol = _normalize_symbol(symbol)
 
@@ -83,13 +93,13 @@ def save_optimized_params(symbol: str, params: dict, metadata: dict | None = Non
 
 
 def load_optimized_params(symbol: str) -> dict | None:
-    """
-    Lê os parâmetros do banco SQLite.
+    """Lê os parâmetros do banco SQLite.
 
     Returns
     -------
     dict com chaves ``symbol``, ``params`` e ``metadata``, ou ``None``
     se o símbolo não tiver sido otimizado ainda.
+
     """
     symbol = _normalize_symbol(symbol)
 

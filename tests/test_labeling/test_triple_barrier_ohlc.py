@@ -1,5 +1,4 @@
-"""
-Testes para a semântica v2 da Tripla Barreira (avaliação intrabar High/Low).
+"""Testes para a semântica v2 da Tripla Barreira (avaliação intrabar High/Low).
 
 Cobre os quatro cenários distintos que a versão close-only não conseguia
 detectar corretamente:
@@ -32,8 +31,7 @@ def _build_ohlc(bars: list[dict]) -> dict[str, pd.Series]:
 
 
 def test_pt_hit_by_high_close_reverts():
-    """
-    Cenário A: Long. Entry @ bar1 open = 100. PT = +2%, SL = -2%.
+    """Cenário A: Long. Entry @ bar1 open = 100. PT = +2%, SL = -2%.
     Bar 3: high 102.5 (cruza PT), close 100.5 (reverte).
     Semântica v1 (buggy): não detecta — continua até vertical.
     Semântica v2: detecta PT na bar 3, retorna ret = +0.02.
@@ -68,8 +66,7 @@ def test_pt_hit_by_high_close_reverts():
 
 
 def test_sl_hit_by_low_close_recovers():
-    """
-    Cenário B: Long. Bar 3: low 97.5 (cruza SL), close 100 (recupera).
+    """Cenário B: Long. Bar 3: low 97.5 (cruza SL), close 100 (recupera).
     Semântica v2: SL na bar 3, ret = -0.02.
     """
     bars = [
@@ -102,8 +99,7 @@ def test_sl_hit_by_low_close_recovers():
 
 
 def test_same_bar_double_hit_prefers_sl():
-    """
-    Cenário C: bar cruza ambos → SL vence (convenção LdP, fill conservador).
+    """Cenário C: bar cruza ambos → SL vence (convenção LdP, fill conservador).
     """
     bars = [
         {"open": 100, "high": 100.1, "low": 99.9, "close": 100},
@@ -134,8 +130,7 @@ def test_same_bar_double_hit_prefers_sl():
 
 
 def test_breakeven_trigger_on_high_then_sl_same_bar():
-    """
-    Cenário D: BE ativa na high (>= upper*be_trigger=0.01) e SL movido (0.0001)
+    """Cenário D: BE ativa na high (>= upper*be_trigger=0.01) e SL movido (0.0001)
     é atingido pela low na mesma barra. Esperado: barrier_type=sl, ret≈0.0001.
     """
     # Entry bar1 open=100. upper=0.02 (PT @ 2%). be_trigger=0.5 → ativa em +1%.
@@ -171,8 +166,7 @@ def test_breakeven_trigger_on_high_then_sl_same_bar():
 
 
 def test_short_side_pt_hit_by_low():
-    """
-    Short: Entry @ 100. PT = +2% side-adjusted → preço cai para 98.
+    """Short: Entry @ 100. PT = +2% side-adjusted → preço cai para 98.
     Bar 3: low 97.5 (cruza PT para short), close 100 (reverte).
     Semântica v2: detecta PT, ret = +0.02 (side-adjusted).
     """

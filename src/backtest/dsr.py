@@ -1,5 +1,4 @@
-"""
-Deflated Sharpe Ratio (DSR) — TradeSystem5000.
+"""Deflated Sharpe Ratio (DSR) — TradeSystem5000.
 
 O DSR corrige o viés de seleção decorrente de múltiplos testes (multi-testing).
 Ele estima a probabilidade de que o melhor Sharpe Ratio encontrado em uma
@@ -23,8 +22,7 @@ def deflated_sharpe_ratio(
     n_trials: int,
     n_days: int,
 ) -> float:
-    """
-    Calcula o Deflated Sharpe Ratio (DSR).
+    """Calcula o Deflated Sharpe Ratio (DSR).
 
     O DSR é expresso como a probabilidade [0, 1] de que o Sharpe Ratio
     observado seja estatisticamente significativo após o ajuste por
@@ -46,6 +44,7 @@ def deflated_sharpe_ratio(
     float
         Valor do DSR (probabilidade). Valores > 0.95 (ou p-value < 0.05)
         indicam que a estratégia é robusta contra o viés de seleção.
+
     """
     if len(sr_values) < 2:
         return 1.0

@@ -1,5 +1,4 @@
-"""
-Volatilidade Dinâmica para Labeling — TradeSystem5000.
+"""Volatilidade Dinâmica para Labeling — TradeSystem5000.
 
 Este módulo calcula a volatilidade dos retornos utilizando EWMA (Exponentially
 Weighted Moving Average) para ajuste dinâmico das barreiras de saída.
@@ -36,8 +35,7 @@ def daily_vol(
     span: int | None = None,
     log_returns: bool = True,
 ) -> pd.Series:
-    """
-    Estima a volatilidade dinâmica via desvio padrão EWMA dos retornos.
+    """Estima a volatilidade dinâmica via desvio padrão EWMA dos retornos.
 
     Usado para definir a largura das barreiras no método da Tripla Barreira.
     Cada barra recebe um alvo de volatilidade proporcional à volatilidade
@@ -61,6 +59,7 @@ def daily_vol(
     -----
     O uso de EWMA dá mais peso a observações recentes, capturando mudanças
     de regime de volatilidade mais rapidamente que uma janela rolling fixa.
+
     """
     if span is None:
         span = labeling_config.vol_span
@@ -91,8 +90,7 @@ def get_volatility_targets(
     event_timestamps: pd.DatetimeIndex,
     span: int | None = None,
 ) -> pd.Series:
-    """
-    Retorna a volatilidade estimada nos instantes de cada evento.
+    """Retorna a volatilidade estimada nos instantes de cada evento.
 
     Parameters
     ----------
@@ -107,6 +105,7 @@ def get_volatility_targets(
     -------
     pd.Series
         Volatilidade nos timestamps dos eventos. Índice = event_timestamps.
+
     """
     vol = daily_vol(close, span=span)
 
@@ -139,8 +138,7 @@ def vol_regime(
     span_fast: int = 10,
     span_slow: int = 50,
 ) -> pd.Series:
-    """
-    Identifica regime de volatilidade: alta vs. baixa.
+    """Identifica regime de volatilidade: alta vs. baixa.
 
     Compara volatilidade de curto prazo (rápida) com a de longo prazo (lenta).
 
@@ -157,6 +155,7 @@ def vol_regime(
     -------
     pd.Series
         Ratio vol_fast / vol_slow. Valores > 1 indicam volatilidade crescente.
+
     """
     vol_fast = daily_vol(close, span=span_fast)
     vol_slow = daily_vol(close, span=span_slow)

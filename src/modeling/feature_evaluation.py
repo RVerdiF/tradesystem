@@ -1,5 +1,4 @@
-"""
-Avaliação de Features e Auditoria de Modelos — TradeSystem5000.
+"""Avaliação de Features e Auditoria de Modelos — TradeSystem5000.
 
 Este módulo implementa técnicas avançadas de explicabilidade e auditoria de
 features para validar a utilidade das variáveis e evitar overfitting.
@@ -22,8 +21,7 @@ from sklearn.metrics import roc_auc_score
 
 
 def evaluate_features_shap(model, X: pd.DataFrame, y: pd.Series) -> pd.DataFrame:
-    """
-    Calcula a importância das features via SHAP (Shapley Additive Explanations).
+    """Calcula a importância das features via SHAP (Shapley Additive Explanations).
 
     Utiliza o TreeExplainer para extrair as contribuições médias absolutas de cada
     feature para a predição do modelo.
@@ -41,6 +39,7 @@ def evaluate_features_shap(model, X: pd.DataFrame, y: pd.Series) -> pd.DataFrame
     -------
     pd.DataFrame
         DataFrame ordenado com colunas ['col_name', 'feature_importance_vals'].
+
     """
     logger.info("Iniciando avaliação explicativa SHAP...")
 
@@ -83,8 +82,7 @@ def evaluate_features_shap(model, X: pd.DataFrame, y: pd.Series) -> pd.DataFrame
 def evaluate_features_mda(
     model, X: pd.DataFrame, y: pd.Series, n_repeats: int = 5
 ) -> pd.Series:
-    """
-    Calcula a importância via Mean Decrease Accuracy (MDA) por Permutação.
+    """Calcula a importância via Mean Decrease Accuracy (MDA) por Permutação.
 
     Mede a queda na performance do modelo (ROC-AUC) ao embaralhar os valores
     de cada feature individualmente. Features que causam maior queda são
@@ -105,6 +103,7 @@ def evaluate_features_mda(
     -------
     pd.Series
         Série com a queda média no ROC-AUC por feature.
+
     """
     logger.info("Iniciando auditoria matemática (MDA) via Permutação...")
 

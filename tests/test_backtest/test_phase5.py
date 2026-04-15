@@ -1,5 +1,4 @@
-"""
-Testes para a Fase 5 — Backtesting.
+"""Testes para a Fase 5 — Backtesting.
 
 Valida CPCV, modelagem de custos, métricas de performance e atribuição.
 """

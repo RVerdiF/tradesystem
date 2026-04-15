@@ -1253,6 +1253,9 @@ requires-dist = [
 ]
 provides-extras = ["dev"]
 
+[package.metadata.requires-dev]
+dev = []
+
 [[package]]
 name = "typing-extensions"
 version = "4.15.0"

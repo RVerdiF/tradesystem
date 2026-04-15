@@ -1,5 +1,4 @@
-"""
-Purga e Embargo de Dados (Purging & Embargoing) — TradeSystem5000.
+"""Purga e Embargo de Dados (Purging & Embargoing) — TradeSystem5000.
 
 Este módulo implementa as técnicas de saneamento de amostras necessárias para
 evitar o vazamento de dados (data leakage) em Cross-Validation de séries
@@ -31,8 +30,7 @@ def get_train_times(
     t1: pd.Series,
     test_times: pd.Series,
 ) -> pd.Series:
-    """
-    Realiza a purga removendo sobreposições entre treino e teste.
+    """Realiza a purga removendo sobreposições entre treino e teste.
 
     Retorna os tempos de treino válidos que NÃO sobrepõem o intervalo
     do conjunto de teste.
@@ -51,6 +49,7 @@ def get_train_times(
     pd.Series
         Subconjunto de `t1` contendo apenas instâncias de treino que não sofrem
         vazamento de dados para o `test_times`.
+
     """
     train_times = t1.copy(deep=True)
 
@@ -84,8 +83,7 @@ def apply_embargo(
     pct_embargo: float | None = None,
     step: pd.Timedelta | None = None,
 ) -> pd.Series:
-    """
-    Aplica o embargo após o conjunto de teste.
+    """Aplica o embargo após o conjunto de teste.
 
     O embargo remove amostras de treino que iniciam imediatamente após
     o período de teste para prevenir vazamento via autocorrelação.
@@ -106,6 +104,7 @@ def apply_embargo(
     -------
     pd.Series
         `t1` ajustado sem o período de embargo.
+
     """
     if pct_embargo is None:
         pct_embargo = ml_config.embargo_pct
@@ -144,8 +143,7 @@ def purge_and_embargo(
     test_times: pd.Series,
     pct_embargo: float | None = None,
 ) -> pd.Series:
-    """
-    Executa purga e embargo de uma só vez.
+    """Executa purga e embargo de uma só vez.
 
     Parameters
     ----------
@@ -160,6 +158,7 @@ def purge_and_embargo(
     -------
     pd.Series
         Amostras válidas do conjunto de treino após purga e embargo.
+
     """
     # 1. Purga
     train_purged = get_train_times(t1, test_times)

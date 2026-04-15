@@ -1,5 +1,4 @@
-"""
-Testes para o filtro CUSUM (cusum_filter.py).
+"""Testes para o filtro CUSUM (cusum_filter.py).
 
 Testa detecção de eventos com threshold fixo e adaptativo usando séries
 sintéticas com saltos conhecidos.

@@ -1,5 +1,4 @@
-"""
-Script de Orquestração de Otimização — TradeSystem5000.
+"""Script de Orquestração de Otimização — TradeSystem5000.
 
 Este módulo fornece uma interface de linha de comando (CLI) para executar o
 processo completo de otimização bayesiana para um determinado ativo.
@@ -40,6 +39,7 @@ from src.optimization.tuner import run_optimization
 
 
 def main():
+    """Instancia o CLI para sintonia paramétrica operando otimização baseada nas estratégias de Meta-label."""
     parser = argparse.ArgumentParser(description="Script Genérico de Otimização TradeSystem5000")
     parser.add_argument("--symbol", type=str, required=True, help="Ativo para otimizar (ex: PETR4)")
     parser.add_argument("--n-bars", type=int, default=10000, help="Número de barras para extrair (padrão: 10000)")

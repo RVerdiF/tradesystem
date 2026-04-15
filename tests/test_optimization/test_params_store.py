@@ -1,5 +1,4 @@
-"""
-Testes para src.optimization.params_store (SQLite backend).
+"""Testes para src.optimization.params_store (SQLite backend).
 
 Usa pytest tmp_path para isolar cada teste com um banco temporário,
 evitando poluição do banco de desenvolvimento.
@@ -19,8 +18,7 @@ from src.optimization.params_store import (
 
 @pytest.fixture(autouse=True)
 def isolated_db(tmp_path):
-    """
-    Redireciona DB_PATH para um banco temporário por teste.
+    """Redireciona DB_PATH para um banco temporário por teste.
     Garante isolamento total entre testes sem atingir o banco real.
     """
     db_file = tmp_path / "test_params.db"
@@ -97,7 +95,7 @@ def test_save_overwrites_existing():
 
 
 def test_metadata_timestamp_auto_added():
-    """timestamp deve ser adicionado automaticamente pelo save."""
+    """Timestamp deve ser adicionado automaticamente pelo save."""
     save_optimized_params("WINFUT", {"x": 0})
     data = load_optimized_params("WINFUT")
     assert "timestamp" in data["metadata"]
