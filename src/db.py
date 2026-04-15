@@ -91,6 +91,7 @@ _ALL_DDL = [
 # Pública
 # ---------------------------------------------------------------------------
 
+
 def get_connection(db_path: Path | None = None) -> sqlite3.Connection:
     """Abre e retorna uma nova conexão SQLite com WAL-mode habilitado.
 

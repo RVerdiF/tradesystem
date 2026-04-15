@@ -105,15 +105,15 @@ def deflated_sharpe(
     # SR esperado sob H0 (melhor SR de n_trials tentativas aleatórias)
     # Usando a aproximação de Euler-Mascheroni para o máximo esperado
     euler_mascheroni = 0.5772156649
-    sr_expected = np.sqrt(2 * np.log(n_trials)) - (
-        (np.log(np.pi) + euler_mascheroni) / (2 * np.sqrt(2 * np.log(n_trials)))
-    ) if n_trials > 1 else 0.0
+    sr_expected = (
+        np.sqrt(2 * np.log(n_trials))
+        - ((np.log(np.pi) + euler_mascheroni) / (2 * np.sqrt(2 * np.log(n_trials))))
+        if n_trials > 1
+        else 0.0
+    )
 
     # Desvio padrão do SR estimado (ajustado por skew e kurtosis)
-    sr_std = np.sqrt(
-        (1 - skew * observed_sr + (kurtosis - 1) / 4 * observed_sr**2)
-        / (n_obs - 1)
-    )
+    sr_std = np.sqrt((1 - skew * observed_sr + (kurtosis - 1) / 4 * observed_sr**2) / (n_obs - 1))
 
     if sr_std == 0:
         return 1.0

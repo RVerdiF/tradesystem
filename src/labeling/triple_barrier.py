@@ -283,14 +283,16 @@ def apply_triple_barrier(
         else:
             result_ts = close_idx[-1]
 
-        results.append({
-            "event_ts": event_ts,
-            "t1": result_ts,
-            "ret": touch_ret,
-            "trgt": trgt,
-            "side": side,
-            "barrier_type": barrier_type,
-        })
+        results.append(
+            {
+                "event_ts": event_ts,
+                "t1": result_ts,
+                "ret": touch_ret,
+                "trgt": trgt,
+                "side": side,
+                "barrier_type": barrier_type,
+            }
+        )
 
     result_df = pd.DataFrame(results)
     if len(result_df) > 0:
@@ -429,7 +431,9 @@ def get_labels(
         return pd.DataFrame()
 
     result = apply_triple_barrier(
-        close, events, pt_sl,
+        close,
+        events,
+        pt_sl,
         be_trigger=be_trigger,
         open_prices=open_prices,
         high_prices=high_prices,

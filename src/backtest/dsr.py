@@ -62,8 +62,7 @@ def deflated_sharpe_ratio(
     # Estimativa do Sharpe esperado máximo sob a hipótese nula (H0)
     # Baseado na distribuição do valor máximo de N variáveis normais
     expected_max_sr = sigma_sr * (
-        (1 - gamma) * ss.norm.ppf(1 - 1/n_trials) +
-        gamma * ss.norm.ppf(1 - 1/(n_trials * np.e))
+        (1 - gamma) * ss.norm.ppf(1 - 1 / n_trials) + gamma * ss.norm.ppf(1 - 1 / (n_trials * np.e))
     )
 
     # Parâmetros para o PSR (Probabilistic Sharpe Ratio)
@@ -73,8 +72,9 @@ def deflated_sharpe_ratio(
 
     # Ajuste de significância (Z-stat)
     z_stat = (
-        (sr_daily - expected_max_sr / np.sqrt(252)) * np.sqrt(n_days - 1) /
-        np.sqrt(1 - skew * sr_daily + (kurt - 1) / 4 * sr_daily**2)
+        (sr_daily - expected_max_sr / np.sqrt(252))
+        * np.sqrt(n_days - 1)
+        / np.sqrt(1 - skew * sr_daily + (kurt - 1) / 4 * sr_daily**2)
     )
 
     # Probabilidade acumulada (DSR)
@@ -82,7 +82,10 @@ def deflated_sharpe_ratio(
 
     logger.info(
         "DSR Analysis: Obs_SR={:.2f}, Max_H0_SR={:.2f}, N_Trials={}, DSR={:.4f}",
-        observed_sr, expected_max_sr, n_trials, dsr
+        observed_sr,
+        expected_max_sr,
+        n_trials,
+        dsr,
     )
 
     return float(dsr)
