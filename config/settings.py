@@ -144,9 +144,13 @@ class FeatureConfig:
     hurst_window: int = 100  # Janela rolante para cálculo do Hurst
     hurst_step: int = 5  # Passo de cálculo (>1 para performance)
     hurst_threshold: float = 0.55  # Threshold para regime de tendência
+    long_hurst_threshold: float = 0.55
+    short_hurst_threshold: float = 0.55
 
     # Volume Imbalance (Order Flow Filter)
     vol_imbalance_z_threshold: float = 1.0  # Z-score threshold para desbalanceamento de volume
+    long_vol_imbalance_z_threshold: float = 1.0
+    short_vol_imbalance_z_threshold: float = 1.0
 
     # VPIN
     vpin_bucket_size: int = 5000
@@ -163,6 +167,12 @@ class LabelingConfig:
     # Alpha — Trend Following
     trend_fast_span: int = 11  # EMA rápida (períodos) (Otimizado PETR4.SA)
     trend_slow_span: int = 58  # EMA lenta (períodos) (Otimizado PETR4.SA)
+
+    # Alpha — Composite Alpha (Decoupled Long/Short)
+    long_fast_span: int = 11
+    long_slow_span: int = 58
+    short_fast_span: int = 11
+    short_slow_span: int = 58
 
     # Alpha — Mean Reversion
     mean_rev_window: int = 20  # Janela do Z-score
@@ -215,6 +225,16 @@ class OptimizationConfig:
     # Primary Model (Alpha)
     fast_span_range: tuple[int, int] = (9, 50)
     slow_span_range: tuple[int, int] = (50, 200)
+
+    # Composite Alpha (Decoupled Ranges)
+    long_fast_span_range: tuple[int, int] = (9, 50)
+    long_slow_span_range: tuple[int, int] = (50, 200)
+    short_fast_span_range: tuple[int, int] = (9, 50)
+    short_slow_span_range: tuple[int, int] = (50, 200)
+    long_hurst_threshold_range: tuple[float, float] = (0.50, 0.70)
+    short_hurst_threshold_range: tuple[float, float] = (0.50, 0.70)
+    long_vir_threshold_range: tuple[float, float] = (0.5, 2.0)
+    short_vir_threshold_range: tuple[float, float] = (0.5, 2.0)
 
     # Novas Features (Busca restrita)
     ma_dist_fast_range: tuple[int, int] = (7, 15)

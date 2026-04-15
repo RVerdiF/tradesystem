@@ -93,8 +93,10 @@ def test_run_pipeline_basic():
 def test_run_pipeline_with_params():
     df = generate_synthetic_data(n_days=200)
     params = {
-        "alpha_fast": 5,
-        "alpha_slow": 15,
+        "long_alpha_fast": 5,
+        "long_alpha_slow": 15,
+        "short_alpha_fast": 5,
+        "short_alpha_slow": 15,
         "pt_sl": (2.0, 2.0),
         "xgb_max_depth": 3
     }

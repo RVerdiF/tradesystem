@@ -129,13 +129,25 @@ def train_model(df: pd.DataFrame, interval: str = "1h", params: dict | None = No
     if params is None:
         params = {}
 
-    fast_span = params.get("alpha_fast", labeling_config.trend_fast_span)
-    slow_span = params.get("alpha_slow", labeling_config.trend_slow_span)
+    long_fast_span = params.get("long_alpha_fast", labeling_config.long_fast_span)
+    long_slow_span = params.get("long_alpha_slow", labeling_config.long_slow_span)
+    short_fast_span = params.get("short_alpha_fast", labeling_config.short_fast_span)
+    short_slow_span = params.get("short_alpha_slow", labeling_config.short_slow_span)
+    long_hurst_threshold = params.get("long_hurst_threshold", feature_config.long_hurst_threshold)
+    short_hurst_threshold = params.get("short_hurst_threshold", feature_config.short_hurst_threshold)
+    long_voi_threshold = params.get("long_voi_threshold", feature_config.long_vol_imbalance_z_threshold)
+    short_voi_threshold = params.get("short_voi_threshold", feature_config.short_vol_imbalance_z_threshold)
 
     # --- Alpha ---
     alpha = CompositeAlpha(
-        fast_span=fast_span,
-        slow_span=slow_span,
+        long_fast_span=long_fast_span,
+        long_slow_span=long_slow_span,
+        short_fast_span=short_fast_span,
+        short_slow_span=short_slow_span,
+        long_hurst_threshold=long_hurst_threshold,
+        short_hurst_threshold=short_hurst_threshold,
+        long_vir_zscore_threshold=long_voi_threshold,
+        short_vir_zscore_threshold=short_voi_threshold,
     )
     signal = alpha.generate_signal(df_aligned)
     signal_events = get_signal_events(signal)

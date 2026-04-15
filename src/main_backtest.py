@@ -237,6 +237,10 @@ def run_pipeline(df: pd.DataFrame, interval: str = "1d", use_volume_bars: bool =
         Dicionário contendo os resultados de performance, atribuição e dados processados.
 
     """
+    if len(df) == 0:
+        logger.error("DataFrame vazio. Abortando run_pipeline.")
+        return None
+
     if params is None:
         params = {}
 
@@ -334,12 +338,24 @@ def run_pipeline(df: pd.DataFrame, interval: str = "1d", use_volume_bars: bool =
     logger.info("--- Fase 3: Alpha e Labeling ---")
 
     # Extrai spans dos params ou usa os padrões do config
-    fast_span = params.get("alpha_fast", labeling_config.trend_fast_span)
-    slow_span = params.get("alpha_slow", labeling_config.trend_slow_span)
+    long_fast_span = params.get("long_alpha_fast", labeling_config.long_fast_span)
+    long_slow_span = params.get("long_alpha_slow", labeling_config.long_slow_span)
+    short_fast_span = params.get("short_alpha_fast", labeling_config.short_fast_span)
+    short_slow_span = params.get("short_alpha_slow", labeling_config.short_slow_span)
+    long_hurst_threshold = params.get("long_hurst_threshold", feature_config.long_hurst_threshold)
+    short_hurst_threshold = params.get("short_hurst_threshold", feature_config.short_hurst_threshold)
+    long_voi_threshold = params.get("long_voi_threshold", feature_config.long_vol_imbalance_z_threshold)
+    short_voi_threshold = params.get("short_voi_threshold", feature_config.short_vol_imbalance_z_threshold)
 
     alpha_model = CompositeAlpha(
-        fast_span=fast_span,
-        slow_span=slow_span,
+        long_fast_span=long_fast_span,
+        long_slow_span=long_slow_span,
+        short_fast_span=short_fast_span,
+        short_slow_span=short_slow_span,
+        long_hurst_threshold=long_hurst_threshold,
+        short_hurst_threshold=short_hurst_threshold,
+        long_vir_zscore_threshold=long_voi_threshold,
+        short_vir_zscore_threshold=short_voi_threshold,
     )
     signal = alpha_model.generate_signal(df)
 

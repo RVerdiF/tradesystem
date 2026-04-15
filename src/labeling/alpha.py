@@ -224,51 +224,58 @@ class CompositeAlpha(AlphaModel):
 
     Parameters
     ----------
-    fast_span : int, optional
-        Fast EMA span. Default: config.
-    slow_span : int, optional
-        Slow EMA span. Default: config.
-    hurst_threshold : float, optional
-        Minimum Hurst Exponent required. Default: config.
-    vir_zscore_threshold : float, optional
-        Minimum absolute Volume Imbalance Z-Score required. Default: config.
+    long_fast_span : int, optional
+        Fast EMA span for long signals. Default: config.
+    long_slow_span : int, optional
+        Slow EMA span for long signals. Default: config.
+    short_fast_span : int, optional
+        Fast EMA span for short signals. Default: config.
+    short_slow_span : int, optional
+        Slow EMA span for short signals. Default: config.
+    long_hurst_threshold : float, optional
+        Minimum Hurst Exponent required for long. Default: config.
+    short_hurst_threshold : float, optional
+        Minimum Hurst Exponent required for short. Default: config.
+    long_vir_zscore_threshold : float, optional
+        Minimum Volume Imbalance Z-Score required for long. Default: config.
+    short_vir_zscore_threshold : float, optional
+        Minimum Volume Imbalance Z-Score required for short. Default: config.
 
     """
 
     def __init__(
         self,
-        fast_span: int | None = None,
-        slow_span: int | None = None,
-        hurst_threshold: float | None = None,
-        vir_zscore_threshold: float | None = None,
+        long_fast_span: int | None = None,
+        long_slow_span: int | None = None,
+        short_fast_span: int | None = None,
+        short_slow_span: int | None = None,
+        long_hurst_threshold: float | None = None,
+        short_hurst_threshold: float | None = None,
+        long_vir_zscore_threshold: float | None = None,
+        short_vir_zscore_threshold: float | None = None,
     ) -> None:
-        """Inicializa composito.
-
-        Parameters
-        ----------
-        fast_span : int, optional
-            Fast.
-        slow_span : int, optional
-            Slow.
-        hurst_threshold : float, optional
-            Hurst.
-        vir_zscore_threshold : float, optional
-            VIR.
-
-        """
-        self.fast_span = fast_span or labeling_config.trend_fast_span
-        self.slow_span = slow_span or labeling_config.trend_slow_span
-        self.hurst_threshold = hurst_threshold or feature_config.hurst_threshold
-        self.vir_zscore_threshold = (
-            vir_zscore_threshold if vir_zscore_threshold is not None else feature_config.vol_imbalance_z_threshold
+        """Inicializa composito."""
+        self.long_fast_span = long_fast_span or labeling_config.long_fast_span
+        self.long_slow_span = long_slow_span or labeling_config.long_slow_span
+        self.short_fast_span = short_fast_span or labeling_config.short_fast_span
+        self.short_slow_span = short_slow_span or labeling_config.short_slow_span
+        self.long_hurst_threshold = long_hurst_threshold or feature_config.long_hurst_threshold
+        self.short_hurst_threshold = short_hurst_threshold or feature_config.short_hurst_threshold
+        self.long_vir_zscore_threshold = (
+            long_vir_zscore_threshold if long_vir_zscore_threshold is not None else feature_config.long_vol_imbalance_z_threshold
+        )
+        self.short_vir_zscore_threshold = (
+            short_vir_zscore_threshold if short_vir_zscore_threshold is not None else feature_config.short_vol_imbalance_z_threshold
         )
 
     @property
     def name(self) -> str:
         """Retorna o nome."""
         return (
-            f"CompositeAlpha(fast={self.fast_span}, slow={self.slow_span}, "
-            f"hurst>{self.hurst_threshold}, |vir_z|>{self.vir_zscore_threshold})"
+            f"CompositeAlpha("
+            f"L:[f={self.long_fast_span}, s={self.long_slow_span}, h>{self.long_hurst_threshold}, vz>{self.long_vir_zscore_threshold}], "
+            f"S:[f={self.short_fast_span}, s={self.short_slow_span}, h>{self.short_hurst_threshold}, vz<-{self.short_vir_zscore_threshold}]"
+            f")"
         )
 
     def generate_signal(self, df: pd.DataFrame) -> pd.Series:
@@ -291,30 +298,34 @@ class CompositeAlpha(AlphaModel):
                 raise KeyError(f"CompositeAlpha.generate_signal: column '{col}' missing.")
 
         price_series = df["close"]
-        ema_fast = price_series.ewm(span=self.fast_span, adjust=False).mean()
-        ema_slow = price_series.ewm(span=self.slow_span, adjust=False).mean()
+
+        long_ema_fast = price_series.ewm(span=self.long_fast_span, adjust=False).mean()
+        long_ema_slow = price_series.ewm(span=self.long_slow_span, adjust=False).mean()
+
+        short_ema_fast = price_series.ewm(span=self.short_fast_span, adjust=False).mean()
+        short_ema_slow = price_series.ewm(span=self.short_slow_span, adjust=False).mean()
 
         signal = pd.Series(0, index=price_series.index, dtype=np.int8, name="signal")
 
         # Long conditions
         long_cond = (
-            (ema_fast > ema_slow)
-            & (df["hurst_exponent"] > self.hurst_threshold)
-            & (df["volume_imbalance_zscore"] > self.vir_zscore_threshold)
+            (long_ema_fast > long_ema_slow)
+            & (df["hurst_exponent"] > self.long_hurst_threshold)
+            & (df["volume_imbalance_zscore"] > self.long_vir_zscore_threshold)
         )
 
         # Short conditions
         short_cond = (
-            (ema_fast < ema_slow)
-            & (df["hurst_exponent"] > self.hurst_threshold)
-            & (df["volume_imbalance_zscore"] < -self.vir_zscore_threshold)
+            (short_ema_fast < short_ema_slow)
+            & (df["hurst_exponent"] > self.short_hurst_threshold)
+            & (df["volume_imbalance_zscore"] < -self.short_vir_zscore_threshold)
         )
 
         signal[long_cond] = 1
         signal[short_cond] = -1
 
-        # Warm-up: set to NaN until EMAs are stable
-        warmup = max(self.fast_span, self.slow_span)
+        # Warm-up: set to NaN until EMAs are stable for both sides
+        warmup = max(self.long_fast_span, self.long_slow_span, self.short_fast_span, self.short_slow_span)
         signal.iloc[:warmup] = 0
 
         return signal
@@ -324,7 +335,7 @@ class CompositeAlpha(AlphaModel):
 # Mean Reversion — Z-score
 # ---------------------------------------------------------------------------
 class MeanReversionAlpha(AlphaModel):
-    """Alpha baseado em reversão à média via Z-score.
+    """Alpha baseado em reversão à média via Z-score, aplicado sobre série fracionária estacionária.
 
     Sinal:
     - +1 (compra) quando Z-score < -entry (preço muito abaixo da média)
@@ -379,12 +390,12 @@ class MeanReversionAlpha(AlphaModel):
         )
 
     def generate_signal(self, df: pd.DataFrame) -> pd.Series:
-        """Gera sinais de reversão à média (Z-score) sobre a série de preço real.
+        """Gera sinais de reversão à média (Z-score) sobre a série fracionariamente diferenciada.
 
         Parameters
         ----------
         df : pd.DataFrame
-            Deve conter coluna ``close`` (preço real de fechamento OHLCV).
+            Deve conter coluna ``close_fracdiff`` (série estacionária).
 
         Returns
         -------
@@ -393,17 +404,17 @@ class MeanReversionAlpha(AlphaModel):
 
         Notes
         -----
-        Reversão à média baseada em Z-score é uma heurística de trader que captura
-        distorções transitórias do preço real em relação à sua média móvel. O Z-score
-        rolling auto-normaliza a escala, tornando ``entry_threshold``/``exit_threshold``
-        dimensionalmente consistentes independentemente do nível absoluto do preço.
+        De acordo com AFML, técnicas estatísticas como o Z-score pressupõem estacionariedade.
+        Operar sobre séries brutas de preço introduz heterocedasticidade. Usamos `close_fracdiff`
+        para manter a validade matemática do limite de reversão.
 
         """
-        if "close" not in df.columns:
+        if "close_fracdiff" not in df.columns:
             raise KeyError(
-                "MeanReversionAlpha.generate_signal: coluna 'close' ausente."
+                "MeanReversionAlpha.generate_signal: coluna 'close_fracdiff' ausente. "
+                "O Z-Score deve ser aplicado sobre série estacionária."
             )
-        price_series = df["close"]
+        price_series = df["close_fracdiff"]
 
         rolling_mean = price_series.rolling(window=self.window, min_periods=self.window).mean()
         rolling_std = price_series.rolling(window=self.window, min_periods=self.window).std()

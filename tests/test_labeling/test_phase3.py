@@ -81,19 +81,19 @@ def simple_up_down_df():
     n = 100
     dates = pd.date_range("2024-01-01", periods=n, freq="5min", tz="UTC")
     prices = np.zeros(n)
-    prices[0] = 100.0
+    prices[0] = 100000.0 # Make price large enough to cover friction cost
     for i in range(1, n):
         if (i // 10) % 2 == 0:
-            prices[i] = prices[i - 1] + 0.5  # sobe
+            prices[i] = prices[i - 1] + 500.0  # sobe
         else:
-            prices[i] = prices[i - 1] - 0.5  # desce
+            prices[i] = prices[i - 1] - 500.0  # desce
     # Série FracDiff: diferenças simples como proxy estacionária
     fracdiff = pd.Series(prices).diff().fillna(0.0).values
     return pd.DataFrame(
         {
             "open": prices,
-            "high": prices + 0.2,
-            "low": prices - 0.2,
+            "high": prices + 200.0,
+            "low": prices - 200.0,
             "close": prices,
             "close_fracdiff": fracdiff,
             "volume": np.full(n, 100),
@@ -187,10 +187,10 @@ class TestMeanReversionAlpha:
         assert (signal.isin([-1, 0, 1])).all()
 
     def test_raises_keyerror_without_close(self, mean_reverting_df):
-        """Deve lançar KeyError se coluna close estiver ausente."""
-        df_no_close = mean_reverting_df.drop(columns=["close"])
+        """Deve lançar KeyError se coluna close_fracdiff estiver ausente."""
+        df_no_close = mean_reverting_df.drop(columns=["close_fracdiff"])
         alpha = MeanReversionAlpha(window=20, entry_threshold=1.5, exit_threshold=0.0)
-        with pytest.raises(KeyError, match="close"):
+        with pytest.raises(KeyError, match="close_fracdiff"):
             alpha.generate_signal(df_no_close)
 
 

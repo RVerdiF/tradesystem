@@ -6,10 +6,11 @@ from src.labeling.triple_barrier import create_events, apply_triple_barrier, get
 @pytest.fixture
 def sample_data():
     dates = pd.date_range("2024-01-01", periods=100, freq="1d")
-    close = pd.Series(np.linspace(100, 200, 100), index=dates)
+    close = pd.Series(np.linspace(100000, 200000, 100), index=dates)
     
     events_ts = dates[10:90:10]
-    target_vol = pd.Series(np.full(len(events_ts), 0.05), index=events_ts)
+    # Make target volatility higher (e.g. 1%) so that profit target > cost.
+    target_vol = pd.Series(np.full(len(events_ts), 0.01), index=events_ts)
     side = pd.Series(np.ones(len(events_ts)), index=events_ts)
     
     return close, events_ts, target_vol, side

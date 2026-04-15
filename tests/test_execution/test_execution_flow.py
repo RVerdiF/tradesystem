@@ -37,21 +37,40 @@ class TestExecutionFlow:
             "volume": [100]*10
         }, index=dates)
         
-        params = {"alpha_fast": 5, "alpha_slow": 8}
+        params = {
+            "long_alpha_fast": 5,
+            "long_alpha_slow": 8,
+            "short_alpha_fast": 5,
+            "short_alpha_slow": 8,
+            "long_hurst_threshold": 0.5,
+            "short_hurst_threshold": 0.5,
+            "long_voi_threshold": 1.0,
+            "short_voi_threshold": 1.0
+        }
         with patch("src.main_execution.compute_all_features", return_value=df):
             with patch("src.main_execution.find_min_d", return_value=0.5):
                 with patch("src.main_execution.frac_diff_ffd", return_value=df["close"]):
                     with patch("src.main_execution.CompositeAlpha") as mock_alpha_cls:
-                        mock_alpha = MagicMock()
-                        mock_alpha_cls.return_value = mock_alpha
-                        # Ensure signal has transitions so get_signal_events is not empty
-                        s = pd.Series(0, index=df.index)
-                        s.iloc[5:] = 1 # Transition at index 5
-                        mock_alpha.generate_signal.return_value = s
-                        
-                        with patch("src.main_execution.MetaClassifier") as mock_clf:
-                            me.train_model(df, params=params)
-                            mock_alpha_cls.assert_called_once_with(fast_span=5, slow_span=8)
+                        with patch("src.main_execution.get_labels", return_value=pd.DataFrame({"label": [1], "ret": [0.01]}, index=[dates[6]])):
+                            mock_alpha = MagicMock()
+                            mock_alpha_cls.return_value = mock_alpha
+                            # Ensure signal has transitions so get_signal_events is not empty
+                            s = pd.Series(0, index=df.index)
+                            s.iloc[5:] = 1 # Transition at index 5
+                            mock_alpha.generate_signal.return_value = s
+
+                            with patch("src.main_execution.MetaClassifier") as mock_clf:
+                                me.train_model(df, params=params)
+                                mock_alpha_cls.assert_called_once_with(
+                                    long_fast_span=5,
+                                    long_slow_span=8,
+                                    short_fast_span=5,
+                                    short_slow_span=8,
+                                    long_hurst_threshold=0.5,
+                                    short_hurst_threshold=0.5,
+                                    long_vir_zscore_threshold=1.0,
+                                    short_vir_zscore_threshold=1.0
+                                )
 
 
 

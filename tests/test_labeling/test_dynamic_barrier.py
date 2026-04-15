@@ -17,15 +17,16 @@ def test_breakeven_activation():
     n = 30
     dates = pd.date_range("2024-01-01", periods=n, freq="5min")
 
-    # Entry em T+1 = open_prices[1] = 100.0
-    # close sobe rápido: atinge 101.0 (trigger 1%) na barra 5
-    # depois cai rápido: atinge 100.0 (breakeven) na barra 10
-    # e continua caindo até 98.0 (SL original) na barra 15
-    close_vals = [100.0, 100.5, 101.0, 101.0, 100.5, 101.0,   # 0-5: sobe
-                  100.5, 100.0, 99.5, 99.0, 98.5, 98.0,        # 6-11: cai rápido
-                  97.5, 97.0, 96.5, 96.0, 95.5, 95.0,          # 12-17
-                  95.0, 95.0, 95.0, 95.0, 95.0, 95.0,          # 18-23
-                  95.0, 95.0, 95.0, 95.0, 95.0, 95.0]          # 24-29
+    # Large prices to bypass friction filter
+    # Entry em T+1 = open_prices[1] = 100000.0
+    # close sobe rápido: atinge 101000.0 (trigger 1%) na barra 5
+    # depois cai rápido: atinge 100000.0 (breakeven) na barra 10
+    # e continua caindo até 98000.0 (SL original) na barra 15
+    close_vals = [100000.0, 100500.0, 101000.0, 101000.0, 100500.0, 101000.0,   # 0-5: sobe
+                  100500.0, 100000.0, 99500.0, 99000.0, 98500.0, 98000.0,        # 6-11: cai rápido
+                  97500.0, 97000.0, 96500.0, 96000.0, 95500.0, 95000.0,          # 12-17
+                  95000.0, 95000.0, 95000.0, 95000.0, 95000.0, 95000.0,          # 18-23
+                  95000.0, 95000.0, 95000.0, 95000.0, 95000.0, 95000.0]          # 24-29
     close = pd.Series(close_vals, index=dates)
     open_prices = pd.Series(close_vals, index=dates)
 
@@ -37,12 +38,12 @@ def test_breakeven_activation():
 
     events = create_events(close, events_ts, targets, pt_sl=(1.0, 1.0), max_holding=20)
 
-    # 1. Sem breakeven: SL em 98.0, close atinge 98.0 na barra 11 → 'sl'
+    # 1. Sem breakeven: SL em 98000.0, close atinge 98000.0 na barra 11 → 'sl'
     labels_no_be = get_labels(close, events, pt_sl=(1.0, 1.0), be_trigger=0.0, open_prices=open_prices, high_prices=close, low_prices=close)
     assert labels_no_be.iloc[0]["barrier_type"] == "sl"
 
-    # 2. Com breakeven: close atinge 101.0 (ret=1%) na barra 2 → trigger ativado
-    # Breakeven move SL para 0.0001, close volta a ~100.0 na barra 7 → SL hit com ret≈0
+    # 2. Com breakeven: close atinge 101000.0 (ret=1%) na barra 2 → trigger ativado
+    # Breakeven move SL para 0.0001, close volta a ~100000.0 na barra 7 → SL hit com ret≈0
     labels_be = get_labels(close, events, pt_sl=(1.0, 1.0), be_trigger=0.5, open_prices=open_prices, high_prices=close, low_prices=close)
     assert labels_be.iloc[0]["barrier_type"] == "sl"
     # Breakeven ativado: SL movido para ~0, retorno próximo de zero (não o SL original de -2%)
@@ -53,10 +54,10 @@ def test_breakeven_not_activated():
     """Testa se o breakeven NÃO é ativado se o preço não atingir o gatilho."""
     n = 20
     dates = pd.date_range("2024-01-01", periods=n, freq="5min")
-    # Preços: 100 -> 100.8 (não atinge 101.0) -> 98.0 (SL)
-    # trigger = 0.5 de 2% lucro (101.0)
-    prices = np.linspace(100, 100.8, 10)
-    prices = np.append(prices, np.linspace(100.8, 97.0, 10))
+    # Preços: 100000 -> 100800 (não atinge 101000) -> 98000 (SL)
+    # trigger = 0.5 de 2% lucro (101000)
+    prices = np.linspace(100000, 100800, 10)
+    prices = np.append(prices, np.linspace(100800, 97000, 10))
     close = pd.Series(prices, index=dates)
     
     events_ts = pd.DatetimeIndex([dates[0]])
@@ -66,7 +67,7 @@ def test_breakeven_not_activated():
     
     labels_be = get_labels(close, events, pt_sl=(1.0, 1.0), be_trigger=0.5, open_prices=close, high_prices=close, low_prices=close)
 
-    # Deve bater no SL original (aprox 98.0) pois não atingiu 101.0
+    # Deve bater no SL original (aprox 98000) pois não atingiu 101000
     assert labels_be.iloc[0]["barrier_type"] == "sl"
     # Retorno deve ser por volta de -2%
     assert labels_be.iloc[0]["ret"] <= -0.019
@@ -76,8 +77,8 @@ def test_breakeven_then_tp():
     """Testa breakeven ativado, mas preço continua subindo e atinge TP."""
     n = 20
     dates = pd.date_range("2024-01-01", periods=n, freq="5min")
-    # 100 -> 103 (atravessa trigger 101.0 e TP 102.0)
-    prices = np.linspace(100, 103, n)
+    # 100000 -> 103000 (atravessa trigger 101000.0 e TP 102000.0)
+    prices = np.linspace(100000, 103000, n)
     close = pd.Series(prices, index=dates)
     
     events_ts = pd.DatetimeIndex([dates[0]])
