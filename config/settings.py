@@ -144,8 +144,10 @@ class FeatureConfig:
     # Regime Detection (Hurst Exponent)
     hurst_window: int = 100  # Janela rolante para cálculo do Hurst
     hurst_step: int = 5  # Passo de cálculo (>1 para performance)
+    hurst_threshold: float = 0.55  # Threshold para regime de tendência
 
     # Volume Imbalance (Order Flow Filter)
+    vol_imbalance_z_threshold: float = 1.0  # Z-score threshold para desbalanceamento de volume
 
     # VPIN
     vpin_bucket_size: int = 5000
