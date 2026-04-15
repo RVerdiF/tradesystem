@@ -38,14 +38,14 @@ class AsyncTradingEngine:
         model_pipeline,
         symbols: list[str],
         max_position: float = 1.0,
-        trade_type: str = "day_trade",
+        trade_type: str = "day_trade"
     ) -> None:
         """Inicializa o AsyncTradingEngine.
 
         Parameters
         ----------
         model_pipeline : object
-            Objeto/Função que recebe um DataFrame contínuo de preços ohlcv e
+            Objeto/Função que recebe um DataFrame contínuo de preços ohlcv e 
             retorna um dict {"side": int, "meta_prob": float, "kelly_fraction": float}.
         symbols : list[str]
             Lista de ativos monitorados.
@@ -69,11 +69,7 @@ class AsyncTradingEngine:
         # Usado para detectar fechamentos por TP/SL no broker (posição some sem o engine ter enviado close).
         self._last_position: dict[str, float] = {}
 
-        logger.info(
-            "Engine inicializado. Modo: {} | Modalidade: {}",
-            execution_config.mode.upper(),
-            self.trade_type.upper(),
-        )
+        logger.info("Engine inicializado. Modo: {} | Modalidade: {}", execution_config.mode.upper(), self.trade_type.upper())
 
     async def _process_symbol(self, symbol: str) -> None:
         """Lógica executada a cada iteração do polling para um ativo."""
@@ -83,9 +79,7 @@ class AsyncTradingEngine:
             # Se for Swing Trade, só fecha se NÃO for motivo de horário (ou seja, foi circuit breaker de PnL)
             if self.trade_type == "day_trade" or "WINDOW" not in self.risk.halt_reason:
                 if self.om.get_net_position(symbol) != 0:
-                    logger.warning(
-                        "Fechando posições para {} devido a: {}", symbol, self.risk.halt_reason
-                    )
+                    logger.warning("Fechando posições para {} devido a: {}", symbol, self.risk.halt_reason)
                     self.om.close_positions(symbol)
                     self._last_position[symbol] = 0.0
                     # notify_trade_closed é um no-op se system_state == HALTED_FOR_DAY;
@@ -100,16 +94,14 @@ class AsyncTradingEngine:
             # apenas candles matematicamente fechados sejam usados — evita
             # repainting e sinais fantasmas.
             if execution_config.mode == "live":
-                rates = mt5.copy_rates_from_pos(
-                    symbol, mt5.TIMEFRAME_M5, 1, execution_config.live_bars
-                )
+                rates = mt5.copy_rates_from_pos(symbol, mt5.TIMEFRAME_M5, 1, execution_config.live_bars)
                 if rates is None or len(rates) == 0:
                     return
                 df_snapshot = pd.DataFrame(rates)
-                df_snapshot["time"] = pd.to_datetime(df_snapshot["time"], unit="s")
-                df_snapshot.set_index("time", inplace=True)
+                df_snapshot['time'] = pd.to_datetime(df_snapshot['time'], unit='s')
+                df_snapshot.set_index('time', inplace=True)
             else:
-                df_snapshot = pd.DataFrame()  # Simulado / mock
+                df_snapshot = pd.DataFrame() # Simulado / mock
 
             # Se não há barra ou está incompleto, ignora
             if df_snapshot.empty or len(df_snapshot) < 50:
@@ -120,8 +112,7 @@ class AsyncTradingEngine:
             last_closed_ts = df_snapshot.index[-1]
             logger.info(
                 "Audit [{}]: Predição usando último candle fechado em {}",
-                symbol,
-                last_closed_ts,
+                symbol, last_closed_ts,
             )
 
             # 3. Predição Completa (Alpha -> MT5 Bar -> FeatureGen -> ML Meta)
@@ -146,13 +137,7 @@ class AsyncTradingEngine:
 
             # Rastreia o sinal (incluindo lotes zero para análise de cobertura)
             if alpha_side != 0:
-                audit.log_signal(
-                    symbol,
-                    alpha_side,
-                    int(meta_prob >= risk_config.min_conviction_threshold),
-                    kelly_f,
-                    price,
-                )
+                audit.log_signal(symbol, alpha_side, int(meta_prob >= risk_config.min_conviction_threshold), kelly_f, price)
 
             # 4. Avalia Ação Direcional
             net_position = self.om.get_net_position(symbol)
@@ -164,8 +149,7 @@ class AsyncTradingEngine:
             if last_pos != 0.0 and net_position == 0:
                 logger.info(
                     "TP/SL detectado para {} (posição anterior: {:.1f} lotes). Iniciando cool-down.",
-                    symbol,
-                    last_pos,
+                    symbol, last_pos,
                 )
                 self._last_position[symbol] = 0.0
                 self.risk.notify_trade_closed(symbol)
@@ -179,9 +163,7 @@ class AsyncTradingEngine:
                 # Comprar! Fecha posição vendida antes, então abre long proporcional.
                 self.om.close_positions(symbol)
 
-                if self.risk.validate_order(
-                    abs(self.om.get_net_position(symbol)), float(target_volume), self.max_position
-                ):
+                if self.risk.validate_order(abs(self.om.get_net_position(symbol)), float(target_volume), self.max_position):
                     self.om.send_market_order(symbol, "buy", float(target_volume))
                     self._last_position[symbol] = float(target_volume)
 
@@ -189,9 +171,7 @@ class AsyncTradingEngine:
                 # Vender! Fecha posição comprada antes, então abre short proporcional.
                 self.om.close_positions(symbol)
 
-                if self.risk.validate_order(
-                    abs(self.om.get_net_position(symbol)), float(target_volume), self.max_position
-                ):
+                if self.risk.validate_order(abs(self.om.get_net_position(symbol)), float(target_volume), self.max_position):
                     self.om.send_market_order(symbol, "sell", float(target_volume))
                     self._last_position[symbol] = -float(target_volume)
 

@@ -152,9 +152,7 @@ class MetaClassifier(BaseEstimator, ClassifierMixin):
             if n_pos > 0:
                 dynamic_spw = n_neg / n_pos
                 self.model.set_params(scale_pos_weight=dynamic_spw)
-                logger.info(
-                    "XGBoost configurado com scale_pos_weight dinâmico: {:.4f}", dynamic_spw
-                )
+                logger.info("XGBoost configurado com scale_pos_weight dinâmico: {:.4f}", dynamic_spw)
 
         self.model.fit(X, y, sample_weight=sample_weight)
         self.is_fitted_ = True

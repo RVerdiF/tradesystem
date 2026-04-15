@@ -79,7 +79,9 @@ def evaluate_features_shap(model, X: pd.DataFrame, y: pd.Series) -> pd.DataFrame
         return pd.DataFrame()
 
 
-def evaluate_features_mda(model, X: pd.DataFrame, y: pd.Series, n_repeats: int = 5) -> pd.Series:
+def evaluate_features_mda(
+    model, X: pd.DataFrame, y: pd.Series, n_repeats: int = 5
+) -> pd.Series:
     """Calcula a importância via Mean Decrease Accuracy (MDA) por Permutação.
 
     Mede a queda na performance do modelo (ROC-AUC) ao embaralhar os valores
@@ -107,9 +109,7 @@ def evaluate_features_mda(model, X: pd.DataFrame, y: pd.Series, n_repeats: int =
 
     try:
         if len(np.unique(y)) < 2:
-            logger.warning(
-                "Não é possível calcular MDA (ROC-AUC): y possui apenas uma classe. Ignorando validação por MDA."
-            )
+            logger.warning("Não é possível calcular MDA (ROC-AUC): y possui apenas uma classe. Ignorando validação por MDA.")
             return pd.Series(dtype=float)
 
         baseline_prob = model.predict_proba(X)[:, 1]
@@ -138,7 +138,9 @@ def evaluate_features_mda(model, X: pd.DataFrame, y: pd.Series, n_repeats: int =
             elif val > -0.0001:
                 logger.warning(f" - {col}: {val:.6f} (Insignificante/Neutra)")
             else:
-                logger.error(f" - {col}: {val:.6f} (RISCO: Redundante ou Ruído - MDA Negativo)")
+                logger.error(
+                    f" - {col}: {val:.6f} (RISCO: Redundante ou Ruído - MDA Negativo)"
+                )
 
         return mda_df
 

@@ -166,7 +166,8 @@ def compute_vir_zscore(vir_series: pd.Series, window: int = 20) -> pd.Series:
     n_inf = np.isinf(zscore).sum()
     if n_inf > 0:
         logger.warning(
-            "compute_vir_zscore: %d inf values detected in vir_zscore. Replacing with NaN.",
+            "compute_vir_zscore: %d inf values detected in vir_zscore. "
+            "Replacing with NaN.",
             n_inf,
         )
         zscore = zscore.replace([np.inf, -np.inf], np.nan)
@@ -230,7 +231,10 @@ def calculate_vpin(df: pd.DataFrame, bucket_size: int, window: int) -> pd.Series
     #       cum_vol=400 -> bucket 1
     temp_df["bucket"] = ((temp_df["cum_vol"] - 1e-9) // bucket_size).astype(int)
 
-    buckets = temp_df.groupby("bucket").agg({"buy_vol": "sum", "sell_vol": "sum"})
+    buckets = temp_df.groupby("bucket").agg({
+        "buy_vol": "sum",
+        "sell_vol": "sum"
+    })
 
     # 3. Imbalance and VPIN calculation
     buckets["imbalance"] = (buckets["buy_vol"] - buckets["sell_vol"]).abs()

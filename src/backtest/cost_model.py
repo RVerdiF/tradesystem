@@ -53,18 +53,12 @@ class BrazilianCostModel:
     ) -> None:
         """Inicializa BaseCostModel."""
         self.brokerage = brokerage if brokerage is not None else cost_config.brokerage_per_contract
-        self.emoluments_pct = (
-            emoluments_pct if emoluments_pct is not None else cost_config.emoluments_pct
-        )
-        self.settlement_pct = (
-            settlement_pct if settlement_pct is not None else cost_config.settlement_pct
-        )
+        self.emoluments_pct = emoluments_pct if emoluments_pct is not None else cost_config.emoluments_pct
+        self.settlement_pct = settlement_pct if settlement_pct is not None else cost_config.settlement_pct
         self.iss_pct = iss_pct if iss_pct is not None else cost_config.iss_pct
         self.symbol = symbol
 
-        self.is_future = any(
-            self.symbol.startswith(prefix) for prefix in cost_config.asset_multipliers.keys()
-        )
+        self.is_future = any(self.symbol.startswith(prefix) for prefix in cost_config.asset_multipliers.keys())
         self.multiplier = 1.0
         for prefix, mult in cost_config.asset_multipliers.items():
             if self.symbol.startswith(prefix):
@@ -121,12 +115,11 @@ class SlippageModel:
         """Inicializa o SlippageModel."""
         self.symbol = symbol
         self.base_slippage_bps = (
-            base_slippage_bps if base_slippage_bps is not None else cost_config.slippage_bps
+            base_slippage_bps if base_slippage_bps is not None
+            else cost_config.slippage_bps
         )
 
-        self.is_future = any(
-            self.symbol.startswith(prefix) for prefix in cost_config.asset_multipliers.keys()
-        )
+        self.is_future = any(self.symbol.startswith(prefix) for prefix in cost_config.asset_multipliers.keys())
         self.multiplier = 1.0
         self.tick_size = 0.01
         matched = False
