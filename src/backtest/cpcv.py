@@ -66,6 +66,7 @@ class CombinatorialPurgedCV:
     def n_paths(self) -> int:
         """Número total de caminhos (combinações) gerados."""
         from math import comb
+
         return comb(self.n_groups, self.n_test_groups)
 
     def get_combinations(self) -> list[tuple[int, ...]]:
