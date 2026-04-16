@@ -47,7 +47,7 @@ def ohlc_with_spikes(clean_ohlc_df):
     df = clean_ohlc_df.copy()
     # Injeta spike no índice 30 e 70
     df.iloc[30, df.columns.get_loc("close")] = 999.0  # spike grande
-    df.iloc[70, df.columns.get_loc("close")] = 0.01   # spike baixo
+    df.iloc[70, df.columns.get_loc("close")] = 0.01  # spike baixo
     return df
 
 
@@ -115,8 +115,9 @@ class TestFillGaps:
 
     def test_fills_missing_periods(self):
         """Lacunas devem ser preenchidas com forward fill."""
-        dates = pd.to_datetime(["2024-01-01 10:00", "2024-01-01 10:05",
-                                 "2024-01-01 10:15", "2024-01-01 10:20"])
+        dates = pd.to_datetime(
+            ["2024-01-01 10:00", "2024-01-01 10:05", "2024-01-01 10:15", "2024-01-01 10:20"]
+        )
         df = pd.DataFrame({"close": [100, 101, 103, 104]}, index=dates)
         df.index = df.index.tz_localize("UTC")
 
@@ -155,24 +156,28 @@ class TestValidateOHLC:
 
     def test_fixes_high_low_swap(self):
         """High < Low deve ser corrigido com swap."""
-        df = pd.DataFrame({
-            "open": [100.0],
-            "high": [95.0],   # errado — menor que low
-            "low": [105.0],   # errado — maior que high
-            "close": [100.0],
-        })
+        df = pd.DataFrame(
+            {
+                "open": [100.0],
+                "high": [95.0],  # errado — menor que low
+                "low": [105.0],  # errado — maior que high
+                "close": [100.0],
+            }
+        )
         fixed = validate_ohlc(df, fix=True)
         assert fixed["high"].iloc[0] == 105.0
         assert fixed["low"].iloc[0] == 95.0
 
     def test_clips_open_to_range(self):
         """Open fora de [Low, High] deve ser clipado."""
-        df = pd.DataFrame({
-            "open": [200.0],   # fora do range
-            "high": [110.0],
-            "low": [90.0],
-            "close": [100.0],
-        })
+        df = pd.DataFrame(
+            {
+                "open": [200.0],  # fora do range
+                "high": [110.0],
+                "low": [90.0],
+                "close": [100.0],
+            }
+        )
         fixed = validate_ohlc(df, fix=True)
         assert 90.0 <= fixed["open"].iloc[0] <= 110.0
 

@@ -18,7 +18,6 @@ Capítulo 7.
 from __future__ import annotations
 
 import pandas as pd
-from loguru import logger
 
 from config.settings import ml_config
 
@@ -133,42 +132,3 @@ def apply_embargo(
         train_times = train_times.loc[~overlap]
 
     return train_times
-
-
-# ---------------------------------------------------------------------------
-# Pipeline completo Purged + Embargo
-# ---------------------------------------------------------------------------
-def purge_and_embargo(
-    t1: pd.Series,
-    test_times: pd.Series,
-    pct_embargo: float | None = None,
-) -> pd.Series:
-    """Executa purga e embargo de uma só vez.
-
-    Parameters
-    ----------
-    t1 : pd.Series
-        Série temporal completa com início/fim dos trades de todo o dataset.
-    test_times : pd.Series
-        Início/fim do bloco de teste específico de uma iteração de CV.
-    pct_embargo : float, optional
-        Tamanho do embargo.
-
-    Returns
-    -------
-    pd.Series
-        Amostras válidas do conjunto de treino após purga e embargo.
-
-    """
-    # 1. Purga
-    train_purged = get_train_times(t1, test_times)
-
-    # 2. Embargo
-    train_valid = apply_embargo(train_purged, test_times, pct_embargo)
-
-    n_dropped = len(t1) - len(train_valid) - len(test_times)
-    logger.debug(
-        "Purge/Embargo: excluídos {} de {} ({} teste)", n_dropped, len(t1), len(test_times)
-    )
-
-    return train_valid

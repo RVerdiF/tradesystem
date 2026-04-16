@@ -7,14 +7,12 @@ detectar corretamente:
   3. Ambiguidade same-bar (PT e SL cruzados) → SL vence.
   4. BE ativado pela Máxima e SL atingido na mesma barra.
 """
-import numpy as np
+
 import pandas as pd
 import pytest
 
 from src.labeling.triple_barrier import (
     apply_triple_barrier,
-    create_events,
-    get_labels,
 )
 
 
@@ -47,14 +45,19 @@ def test_pt_hit_by_high_close_reverts():
     ohlc = _build_ohlc(bars)
     close = ohlc["close"]
 
-    events = pd.DataFrame({
-        "t1": [close.index[9]],
-        "trgt": [0.02],
-        "side": [1],
-    }, index=[close.index[0]])
+    events = pd.DataFrame(
+        {
+            "t1": [close.index[9]],
+            "trgt": [0.02],
+            "side": [1],
+        },
+        index=[close.index[0]],
+    )
 
     result = apply_triple_barrier(
-        close, events, pt_sl=(1.0, 1.0),
+        close,
+        events,
+        pt_sl=(1.0, 1.0),
         open_prices=ohlc["open"],
         high_prices=ohlc["high"],
         low_prices=ohlc["low"],
@@ -80,14 +83,19 @@ def test_sl_hit_by_low_close_recovers():
     ohlc = _build_ohlc(bars)
     close = ohlc["close"]
 
-    events = pd.DataFrame({
-        "t1": [close.index[9]],
-        "trgt": [0.02],
-        "side": [1],
-    }, index=[close.index[0]])
+    events = pd.DataFrame(
+        {
+            "t1": [close.index[9]],
+            "trgt": [0.02],
+            "side": [1],
+        },
+        index=[close.index[0]],
+    )
 
     result = apply_triple_barrier(
-        close, events, pt_sl=(1.0, 1.0),
+        close,
+        events,
+        pt_sl=(1.0, 1.0),
         open_prices=ohlc["open"],
         high_prices=ohlc["high"],
         low_prices=ohlc["low"],
@@ -99,8 +107,7 @@ def test_sl_hit_by_low_close_recovers():
 
 
 def test_same_bar_double_hit_prefers_sl():
-    """Cenário C: bar cruza ambos → SL vence (convenção LdP, fill conservador).
-    """
+    """Cenário C: bar cruza ambos → SL vence (convenção LdP, fill conservador)."""
     bars = [
         {"open": 100, "high": 100.1, "low": 99.9, "close": 100},
         {"open": 100, "high": 100.2, "low": 99.9, "close": 100.0},  # bar1 (entry)
@@ -111,14 +118,19 @@ def test_same_bar_double_hit_prefers_sl():
     ohlc = _build_ohlc(bars)
     close = ohlc["close"]
 
-    events = pd.DataFrame({
-        "t1": [close.index[9]],
-        "trgt": [0.02],
-        "side": [1],
-    }, index=[close.index[0]])
+    events = pd.DataFrame(
+        {
+            "t1": [close.index[9]],
+            "trgt": [0.02],
+            "side": [1],
+        },
+        index=[close.index[0]],
+    )
 
     result = apply_triple_barrier(
-        close, events, pt_sl=(1.0, 1.0),
+        close,
+        events,
+        pt_sl=(1.0, 1.0),
         open_prices=ohlc["open"],
         high_prices=ohlc["high"],
         low_prices=ohlc["low"],
@@ -146,14 +158,19 @@ def test_breakeven_trigger_on_high_then_sl_same_bar():
     ohlc = _build_ohlc(bars)
     close = ohlc["close"]
 
-    events = pd.DataFrame({
-        "t1": [close.index[9]],
-        "trgt": [0.02],
-        "side": [1],
-    }, index=[close.index[0]])
+    events = pd.DataFrame(
+        {
+            "t1": [close.index[9]],
+            "trgt": [0.02],
+            "side": [1],
+        },
+        index=[close.index[0]],
+    )
 
     result = apply_triple_barrier(
-        close, events, pt_sl=(1.0, 1.0),
+        close,
+        events,
+        pt_sl=(1.0, 1.0),
         be_trigger=0.5,
         open_prices=ohlc["open"],
         high_prices=ohlc["high"],
@@ -181,14 +198,19 @@ def test_short_side_pt_hit_by_low():
     ohlc = _build_ohlc(bars)
     close = ohlc["close"]
 
-    events = pd.DataFrame({
-        "t1": [close.index[9]],
-        "trgt": [0.02],
-        "side": [-1],
-    }, index=[close.index[0]])
+    events = pd.DataFrame(
+        {
+            "t1": [close.index[9]],
+            "trgt": [0.02],
+            "side": [-1],
+        },
+        index=[close.index[0]],
+    )
 
     result = apply_triple_barrier(
-        close, events, pt_sl=(1.0, 1.0),
+        close,
+        events,
+        pt_sl=(1.0, 1.0),
         open_prices=ohlc["open"],
         high_prices=ohlc["high"],
         low_prices=ohlc["low"],

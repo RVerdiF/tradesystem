@@ -34,7 +34,8 @@ import argparse
 
 from loguru import logger
 
-from src.main_backtest import fetch_mt5_data, run_pipeline
+from src.data.loaders import fetch_mt5_data
+from src.main_backtest import run_pipeline
 from src.optimization.params_store import save_optimized_params
 from src.optimization.tuner import run_optimization
 

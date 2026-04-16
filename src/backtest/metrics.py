@@ -59,83 +59,6 @@ def sharpe_ratio(
 
 
 # ---------------------------------------------------------------------------
-# Sharpe Deflacionado
-# ---------------------------------------------------------------------------
-def deflated_sharpe(
-    observed_sr: float,
-    n_trials: int,
-    n_obs: int,
-    skew: float = 0.0,
-    kurtosis: float = 3.0,
-    risk_free: float = 0.0,
-    periods_per_year: int = 252,
-) -> float:
-    """Calcula o Sharpe Deflacionado (DSR).
-
-    Ajusta o Sharpe Ratio observado pela quantidade de testes (trials)
-    realizados, controlando o viés de seleção (data snooping).
-
-    Parameters
-    ----------
-    observed_sr : float
-        Sharpe Ratio observado (anualizado).
-    n_trials : int
-        Número total de estratégias/modelos testados.
-    n_obs : int
-        Número de observações (retornos) usado no cálculo do SR.
-    skew : float
-        Assimetria dos retornos.
-    kurtosis : float
-        Curtose dos retornos (3.0 = normal).
-    risk_free : float
-        Taxa livre de risco por período.
-    periods_per_year : int
-        Períodos por ano.
-
-    Returns
-    -------
-    float
-        p-value do DSR. Valores < 0.05 significam que o SR observado
-        é estatisticamente significativo mesmo após ajuste por múltiplos testes.
-
-    """
-    if n_trials < 1 or n_obs < 2:
-        return 1.0
-
-    # SR esperado sob H0 (melhor SR de n_trials tentativas aleatórias)
-    # Usando a aproximação de Euler-Mascheroni para o máximo esperado
-    euler_mascheroni = 0.5772156649
-    sr_expected = (
-        np.sqrt(2 * np.log(n_trials))
-        - ((np.log(np.pi) + euler_mascheroni) / (2 * np.sqrt(2 * np.log(n_trials))))
-        if n_trials > 1
-        else 0.0
-    )
-
-    # Desvio padrão do SR estimado (ajustado por skew e kurtosis)
-    sr_std = np.sqrt((1 - skew * observed_sr + (kurtosis - 1) / 4 * observed_sr**2) / (n_obs - 1))
-
-    if sr_std == 0:
-        return 1.0
-
-    # Estatística Z
-    z = (observed_sr - sr_expected) / sr_std
-
-    # p-value (bicaudal à direita)
-    p_value = 1 - scipy_stats.norm.cdf(z)
-
-    logger.debug(
-        "DSR: SR_obs={:.3f}, SR_exp={:.3f}, z={:.3f}, p={:.4f}",
-        observed_sr,
-        sr_expected,
-        z,
-        p_value,
-    )
-
-    return float(p_value)
-
-
-# ---------------------------------------------------------------------------
 # Drawdown
 # ---------------------------------------------------------------------------
 def max_drawdown(returns: pd.Series | np.ndarray) -> float:
@@ -156,15 +79,6 @@ def max_drawdown(returns: pd.Series | np.ndarray) -> float:
     peak = cumulative.cummax()
     drawdown = (cumulative - peak) / peak
     return float(drawdown.min())
-
-
-def drawdown_series(returns: pd.Series) -> pd.Series:
-    """Retorna a série completa de drawdown."""
-    cumulative = (1 + returns).cumprod()
-    peak = cumulative.cummax()
-    dd = (cumulative - peak) / peak
-    dd.name = "drawdown"
-    return dd
 
 
 # ---------------------------------------------------------------------------
@@ -286,15 +200,17 @@ def performance_report(
 
     # Sharpe Deflacionado
     if n_trials > 1:
-        dsr_pvalue = deflated_sharpe(
-            observed_sr=sr,
-            n_trials=n_trials,
-            n_obs=len(returns),
-            skew=report["skewness"],
-            kurtosis=report["kurtosis"],
-        )
-        report["deflated_sharpe_pvalue"] = dsr_pvalue
-        report["dsr_significant"] = dsr_pvalue < 0.05
+
+        # O DSR original de dsr.py precisa de sr_values e n_days, mas aqui não os temos facilmente,
+        # vamos usar sr_values=[sr] e n_days=len(returns) / periods_per_year aproximado como um proxy minimo
+        # (na vida real n_trials devia vir acompanhado de todos os trials e sr_values, o DSR em report costuma omitir esse parametro ou ser preenchido pos tuning)
+        # O tuner usa `deflated_sharpe_ratio` que recebe sr_values para calcular o variancia do teste multiplo.
+        # Como metrics.py nao recebe a variancia real do ensemble, o DSR local fica aproximado:
+
+        # Para fins de simplificação: remover a metrica do relatorio e usa-la onde faz mais sentido
+        # que é no tuner / hyperparameter tuning (que ja faz isso e calcula dsr por padrao).
+        # Report isolado apenas exibe "sharpe_ratio".
+        pass
 
     # Probabilidade de ruína
     report["prob_ruin_50pct"] = probability_of_ruin(returns, -0.50)

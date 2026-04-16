@@ -27,53 +27,6 @@ from config.settings import feature_config, labeling_config
 
 
 # ---------------------------------------------------------------------------
-# Hurst Exponent Utility
-# ---------------------------------------------------------------------------
-def compute_hurst_exponent(series: pd.Series, window: int = 100) -> pd.Series:
-    """Compute the rolling Hurst Exponent using the Rescaled Range (R/S) method.
-
-    H > 0.5  =>  trending / persistent series
-    H == 0.5 =>  random walk
-    H < 0.5  =>  mean-reverting series
-
-    Parameters
-    ----------
-    series : pd.Series
-        Price or indicator series. Index must be a DatetimeIndex.
-        For best results, pass close_fracdiff (stationary) rather than raw close.
-    window : int
-        Rolling window length. Minimum recommended: 100 bars.
-        Values below 60 are mathematically unreliable.
-
-    Returns
-    -------
-    pd.Series
-        Rolling Hurst exponent, aligned to the input index.
-        NaN for the first (window - 1) observations and wherever std == 0.
-
-    """
-    if window < 60:
-        raise ValueError(
-            f"compute_hurst_exponent: window={window} is below the minimum of 60. "
-            "Hurst estimates on short windows are statistically unreliable. "
-            "Use window >= 100 for production."
-        )
-
-    def _rs_hurst(arr: np.ndarray) -> float:
-        """Single-window R/S Hurst calculation. Called by rolling().apply()."""
-        n = len(arr)
-        mean_adj = arr - arr.mean()
-        cumdev = np.cumsum(mean_adj)
-        r = cumdev.max() - cumdev.min()
-        s = arr.std(ddof=1)
-        if s == 0.0 or r == 0.0:
-            return np.nan
-        return np.log(r / s) / np.log(n / 2)
-
-    return series.rolling(window=window).apply(_rs_hurst, raw=True)
-
-
-# ---------------------------------------------------------------------------
 # Interface base
 # ---------------------------------------------------------------------------
 class AlphaModel(ABC):

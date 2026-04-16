@@ -13,17 +13,17 @@ import pytest
 from src.features.indicators import (
     atr,
     compute_all_features,
-    order_flow_imbalance,
-    roc,
-    rolling_volatility,
-    moving_average_distance,
     garman_klass_volatility,
-    rolling_moments,
-    volume_spread_analysis,
+    moving_average_distance,
+    order_flow_imbalance,
     rescaled_range_analysis,
+    roc,
     rolling_hurst_exponent,
+    rolling_moments,
+    rolling_volatility,
     volume_imbalance,
     volume_imbalance_zscore,
+    volume_spread_analysis,
 )
 
 
@@ -42,7 +42,7 @@ def ohlcv_df():
     # Garante que low seja sempre menor que close/open e high maior que todos
     low = close - np.abs(np.random.randn(n) * 0.5)
     open_ = close + np.random.randn(n) * 0.2
-    
+
     # Garante OHLC válido
     high = np.maximum.reduce([high, open_, close])
     low = np.minimum.reduce([low, open_, close])
@@ -172,7 +172,11 @@ class TestVolumeSpreadAnalysis:
     def test_columns(self, ohlcv_df):
         """Deve retornar colunas corretas."""
         result = volume_spread_analysis(
-            ohlcv_df["high"], ohlcv_df["low"], ohlcv_df["close"], ohlcv_df["open"], ohlcv_df["volume"]
+            ohlcv_df["high"],
+            ohlcv_df["low"],
+            ohlcv_df["close"],
+            ohlcv_df["open"],
+            ohlcv_df["volume"],
         )
         expected_cols = ["vsa_rel_spread", "vsa_bar_pos", "vsa_rel_vol", "vsa_wick_ratio"]
         assert list(result.columns) == expected_cols
@@ -180,9 +184,13 @@ class TestVolumeSpreadAnalysis:
     def test_ratios_range(self, ohlcv_df):
         """bar_pos e wick_ratio devem estar limitados logica e fisicamente."""
         result = volume_spread_analysis(
-            ohlcv_df["high"], ohlcv_df["low"], ohlcv_df["close"], ohlcv_df["open"], ohlcv_df["volume"]
+            ohlcv_df["high"],
+            ohlcv_df["low"],
+            ohlcv_df["close"],
+            ohlcv_df["open"],
+            ohlcv_df["volume"],
         ).dropna()
-        
+
         # bar_pos representa a pos relativa de fechamento no range [0, 1]
         bars_pos = result["vsa_bar_pos"]
         assert (bars_pos >= -0.01).all() and (bars_pos <= 1.01).all()
@@ -208,11 +216,20 @@ class TestComputeAllFeatures:
         """Deve retornar DataFrame com todas as features esperadas do Truth Test."""
         result = compute_all_features(ohlcv_df)
         expected_cols = {
-            "ma_dist_fast", "ma_dist_slow", "roc", 
-            "atr", "rolling_vol", "garman_klass", 
-            "skew", "kurt", 
-            "ofi", "vpin", 
-            "vsa_rel_spread", "vsa_bar_pos", "vsa_rel_vol", "vsa_wick_ratio"
+            "ma_dist_fast",
+            "ma_dist_slow",
+            "roc",
+            "atr",
+            "rolling_vol",
+            "garman_klass",
+            "skew",
+            "kurt",
+            "ofi",
+            "vpin",
+            "vsa_rel_spread",
+            "vsa_bar_pos",
+            "vsa_rel_vol",
+            "vsa_wick_ratio",
         }
         assert expected_cols.issubset(set(result.columns))
 

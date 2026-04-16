@@ -1,24 +1,30 @@
-import pytest
-import pandas as pd
+from unittest.mock import MagicMock, patch
+
 import numpy as np
-from unittest.mock import patch, MagicMock
+import pandas as pd
+import pytest
+
 import src.main_execution as me
+
 
 @pytest.fixture
 def mock_ohlc():
     """Sample OHLC with tick_volume."""
-    df = pd.DataFrame({
-        "open": [10.0, 10.2],
-        "high": [10.5, 10.8],
-        "low": [9.5, 10.1],
-        "close": [10.2, 10.7],
-        "tick_volume": [100, 150]
-    }, index=pd.date_range("2024-01-01", periods=2, freq="1h", tz="UTC"))
+    df = pd.DataFrame(
+        {
+            "open": [10.0, 10.2],
+            "high": [10.5, 10.8],
+            "low": [9.5, 10.1],
+            "close": [10.2, 10.7],
+            "tick_volume": [100, 150],
+        },
+        index=pd.date_range("2024-01-01", periods=2, freq="1h", tz="UTC"),
+    )
     df.index.name = "time"
     return df
 
-class TestExecutionFlow:
 
+class TestExecutionFlow:
     def test_fetch_mt5_training_data(self, mock_ohlc):
         """Test fetching training data from MT5."""
         with patch("src.main_execution.mt5_session"):
@@ -29,14 +35,17 @@ class TestExecutionFlow:
     def test_train_model_with_optimized_params(self):
         """Test train_model using injected optimized parameters."""
         dates = pd.date_range("2024-01-01", periods=10, freq="1h", tz="UTC")
-        df = pd.DataFrame({
-            "open": np.random.randn(10).cumsum() + 100,
-            "high": np.random.randn(10).cumsum() + 100,
-            "low": np.random.randn(10).cumsum() + 100,
-            "close": np.random.randn(10).cumsum() + 100,
-            "volume": [100]*10
-        }, index=dates)
-        
+        df = pd.DataFrame(
+            {
+                "open": np.random.randn(10).cumsum() + 100,
+                "high": np.random.randn(10).cumsum() + 100,
+                "low": np.random.randn(10).cumsum() + 100,
+                "close": np.random.randn(10).cumsum() + 100,
+                "volume": [100] * 10,
+            },
+            index=dates,
+        )
+
         params = {
             "long_alpha_fast": 5,
             "long_alpha_slow": 8,
@@ -45,18 +54,23 @@ class TestExecutionFlow:
             "long_hurst_threshold": 0.5,
             "short_hurst_threshold": 0.5,
             "long_voi_threshold": 1.0,
-            "short_voi_threshold": 1.0
+            "short_voi_threshold": 1.0,
         }
         with patch("src.main_execution.compute_all_features", return_value=df):
             with patch("src.main_execution.find_min_d", return_value=0.5):
                 with patch("src.main_execution.frac_diff_ffd", return_value=df["close"]):
                     with patch("src.main_execution.CompositeAlpha") as mock_alpha_cls:
-                        with patch("src.main_execution.get_labels", return_value=pd.DataFrame({"label": [1], "ret": [0.01]}, index=[dates[6]])):
+                        with patch(
+                            "src.main_execution.get_labels",
+                            return_value=pd.DataFrame(
+                                {"label": [1], "ret": [0.01]}, index=[dates[6]]
+                            ),
+                        ):
                             mock_alpha = MagicMock()
                             mock_alpha_cls.return_value = mock_alpha
                             # Ensure signal has transitions so get_signal_events is not empty
                             s = pd.Series(0, index=df.index)
-                            s.iloc[5:] = 1 # Transition at index 5
+                            s.iloc[5:] = 1  # Transition at index 5
                             mock_alpha.generate_signal.return_value = s
 
                             with patch("src.main_execution.MetaClassifier") as mock_clf:
@@ -69,10 +83,8 @@ class TestExecutionFlow:
                                     long_hurst_threshold=0.5,
                                     short_hurst_threshold=0.5,
                                     long_vir_zscore_threshold=1.0,
-                                    short_vir_zscore_threshold=1.0
+                                    short_vir_zscore_threshold=1.0,
                                 )
-
-
 
     def test_auto_optimization_logic(self):
         """Minimal logic check for auto-optimization flow."""
@@ -82,18 +94,17 @@ class TestExecutionFlow:
             with patch.object(me, "fetch_mt5_training_data") as mock_fetch:
                 with patch.object(me, "save_optimized_params") as mock_save:
                     with patch("src.optimization.tuner.run_optimization") as mock_run:
-                        
                         # Scenario: Need optimization
                         mock_exist.return_value = False
                         mock_fetch.return_value = pd.DataFrame({"close": [1]})
                         mock_run.return_value = {"params": {"p": 1}, "metadata": {"m": 1}}
-                        
+
                         # Flow
                         if not me.params_exist(symbol):
                             df = me.fetch_mt5_training_data(symbol, "1h", 100)
                             res = mock_run(df, interval="1h")
                             me.save_optimized_params(symbol, res["params"], res["metadata"])
-                            
+
                         mock_fetch.assert_called_once()
                         mock_run.assert_called_once()
                         mock_save.assert_called_once()
@@ -110,6 +121,7 @@ class TestEngineBetSizing:
     def _make_engine(self, pipeline_output: dict):
         """Helper: cria AsyncTradingEngine com pipeline mockada."""
         from src.execution.engine import AsyncTradingEngine
+
         pipeline = MagicMock(return_value=pipeline_output)
         engine = AsyncTradingEngine(
             model_pipeline=pipeline,
@@ -124,7 +136,7 @@ class TestEngineBetSizing:
         close_positions e send_market_order NÃO devem ser chamados.
         """
         signal = {
-            "side": 1,          # Alpha quer comprar
+            "side": 1,  # Alpha quer comprar
             "meta_prob": 0.30,  # Abaixo do threshold padrão de 0.50
             "kelly_fraction": 0.0,
             "price": 130000.0,
@@ -135,8 +147,14 @@ class TestEngineBetSizing:
         # Registros com campo 'time' como unix timestamp (esperado pelo engine no modo live)
         base_ts = 1704067200  # 2024-01-01 00:00:00 UTC
         fake_records = [
-            {"time": base_ts + i * 60, "open": 1.0, "high": 1.0, "low": 1.0,
-             "close": 1.0, "tick_volume": 1}
+            {
+                "time": base_ts + i * 60,
+                "open": 1.0,
+                "high": 1.0,
+                "low": 1.0,
+                "close": 1.0,
+                "tick_volume": 1,
+            }
             for i in range(60)
         ]
 
@@ -172,8 +190,14 @@ class TestEngineBetSizing:
         # Registros com campo 'time' como unix timestamp (esperado pelo engine no modo live)
         base_ts = 1704067200  # 2024-01-01 00:00:00 UTC
         fake_records = [
-            {"time": base_ts + i * 60, "open": 1.0, "high": 1.0, "low": 1.0,
-             "close": 1.0, "tick_volume": 1}
+            {
+                "time": base_ts + i * 60,
+                "open": 1.0,
+                "high": 1.0,
+                "low": 1.0,
+                "close": 1.0,
+                "tick_volume": 1,
+            }
             for i in range(60)
         ]
 
@@ -205,7 +229,9 @@ class TestEngineBetSizing:
             engine.stop()
 
         assert engine.is_running is False
-        mock_logger.warning.assert_called_once_with("Sinal de parada recebido. Motor sendo deligado...")
+        mock_logger.warning.assert_called_once_with(
+            "Sinal de parada recebido. Motor sendo deligado..."
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -219,19 +245,23 @@ class TestLivePipelineGuards:
         np.random.seed(42)
         dates = pd.date_range("2024-01-01", periods=n_bars, freq="5min")
         close = pd.Series(100 + np.cumsum(np.random.randn(n_bars) * 0.1))
-        return pd.DataFrame({
-            "open": close.shift(1).fillna(close.iloc[0]).values,
-            "high": (close + np.abs(np.random.randn(n_bars) * 0.2)).values,
-            "low": (close - np.abs(np.random.randn(n_bars) * 0.2)).values,
-            "close": close.values,
-            "volume": np.random.randint(100, 1000, size=n_bars),
-        }, index=dates)
+        return pd.DataFrame(
+            {
+                "open": close.shift(1).fillna(close.iloc[0]).values,
+                "high": (close + np.abs(np.random.randn(n_bars) * 0.2)).values,
+                "low": (close - np.abs(np.random.randn(n_bars) * 0.2)).values,
+                "close": close.values,
+                "volume": np.random.randint(100, 1000, size=n_bars),
+            },
+            index=dates,
+        )
 
     def _make_mock_artifacts(self, optimal_d: float = 0.4) -> dict:
         """Cria artifacts mock para LivePipeline."""
         mock_model = MagicMock()
         mock_model.predict_proba.return_value = np.array([[0.5, 0.5]])
         from src.labeling.alpha import TrendFollowingAlpha
+
         alpha = TrendFollowingAlpha(fast_span=5, slow_span=20)
         return {
             "model": mock_model,

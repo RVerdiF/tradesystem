@@ -22,9 +22,8 @@ from __future__ import annotations
 
 import numpy as np
 import pandas as pd
-from loguru import logger
 
-from config.settings import ml_config, risk_config
+from config.settings import risk_config
 
 
 def compute_kelly_fraction(
@@ -82,100 +81,3 @@ def compute_kelly_fraction(
         f_final.name = "bet_size"
 
     return f_final
-
-
-def discretize_bet(
-    kelly_fraction: pd.Series,
-    max_position: int | None = None,
-    step_size: int = 1,
-) -> pd.Series:
-    """Discretiza a fração contínua de Kelly em tamanho numérico estático de posição (lotes).
-
-    Na prática de trading, não podemos negociar 0.32 contratos futuros.
-    Este utilitário discretiza a saída contínua para um número inteiro
-    de contratos, respeitando o limite máximo definido na configuração.
-
-    Parameters
-    ----------
-    kelly_fraction : pd.Series
-        Fração sugerida pela função `compute_kelly_fraction` ([0, 1]).
-    max_position : int, optional
-        Número máximo absoluto de contratos que o sistema permite abrir.
-        Se não fornecido, busca no config_ml.
-    step_size : int, default 1
-        Tamanho do lote mínimo (ex: Win/Winalot = 1).
-
-    Returns
-    -------
-    pd.Series
-        Tamanho da posição em lotes (sempre inteiro e  >= 0).
-
-    """
-    if max_position is None:
-        max_position = ml_config.max_leverage
-
-    if max_position <= 0:
-        return pd.Series(0, index=kelly_fraction.index, dtype=int)
-
-    # Multiplica a fração pelo tamanho máximo (regra de três simples para escalar o Kelly)
-    continuous_pos = kelly_fraction * max_position
-
-    # Arredonda para o step_size mais próximo e casta pra inteiro
-    discrete_pos = (np.round(continuous_pos / step_size) * step_size).astype(int)
-
-    # Clip final just in case
-    discrete_pos = discrete_pos.clip(lower=0, upper=max_position)
-
-    # Debug info global se for uma série maior, pra não spammar os logs
-    if len(discrete_pos) > 1:
-        avg_pos = discrete_pos.mean()
-        max_pos_reached = discrete_pos.max()
-        logger.info(
-            "Discretized Pos: Max sugerido={}, Média={:.2f}, Bets ignorados={}",
-            max_pos_reached,
-            avg_pos,
-            (discrete_pos == 0).sum(),
-        )
-
-    return discrete_pos
-
-
-def apply_conviction_threshold(
-    prob_win: pd.Series | np.ndarray | float,
-    threshold: float | None = None,
-) -> pd.Series | np.ndarray | float:
-    """Zera a probabilidade de entradas abaixo do limiar de convicção.
-
-    Opera ANTES do cálculo do Kelly. Uma probabilidade zerada produz um
-    Kelly negativo que é clipado para 0, resultando em posição zerada.
-
-    Isso separa dois conceitos distintos:
-    - Abaixo do threshold: "Não há edge suficiente" → prob = 0 → Kelly = 0 → lote = 0.
-    - Acima do threshold: "Edge existe, mas pode ser fraco" → Kelly fraccionário.
-
-    Parameters
-    ----------
-    prob_win : float, np.ndarray ou pd.Series
-        Probabilidade de sucesso prevista pelo Meta-Model.
-    threshold : float, optional
-        Limiar mínimo de probabilidade. Se não fornecido, busca em risk_config.
-
-    Returns
-    -------
-    prob_filtered : mesma estrutura de prob_win, com zeros onde abaixo do threshold.
-
-    """
-    if threshold is None:
-        threshold = risk_config.min_conviction_threshold
-
-    if isinstance(prob_win, pd.Series):
-        filtered = prob_win.copy()
-        filtered[filtered < threshold] = 0.0
-        return filtered
-    elif isinstance(prob_win, np.ndarray):
-        filtered = prob_win.copy()
-        filtered[filtered < threshold] = 0.0
-        return filtered
-    else:
-        # scalar float
-        return float(prob_win) if float(prob_win) >= threshold else 0.0

@@ -99,7 +99,9 @@ class TestFracDiffFFD:
         # Alinha os índices
         common = result.index.intersection(expected.index)
         assert len(common) > 0
-        np.testing.assert_allclose(result.loc[common].values, expected.loc[common].values, atol=1e-6)
+        np.testing.assert_allclose(
+            result.loc[common].values, expected.loc[common].values, atol=1e-6
+        )
 
     def test_stationarity_with_high_d(self, random_walk):
         """Série com d alto deve ser estacionária (ADF test)."""
@@ -125,6 +127,7 @@ class TestFracDiffFFD:
         result = frac_diff_ffd(small_series, d=0.5, threshold=1e-5)
         # Deve retornar só NaNs
         assert result.isna().all()
+
 
 # ---------------------------------------------------------------------------
 # Testes — Busca do d mínimo
@@ -174,4 +177,3 @@ class TestFindMinD:
         # Serie constante causa erro no adfuller. Ele deve ignorar as falhas e retornar 1.0
         d = find_min_d(prices)
         assert d == 1.0
-
