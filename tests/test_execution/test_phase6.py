@@ -9,19 +9,19 @@ Testa isoladamente:
 from __future__ import annotations
 
 import sqlite3
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
-from src.execution.risk import RiskManager
+from src.db import _ALL_DDL
 from src.execution.audit import AuditLogger
 from src.execution.order_manager import OrderManager
-from src.db import _ALL_DDL
-
+from src.execution.risk import RiskManager
 
 # ---------------------------------------------------------------------------
 # Fixture: banco SQLite isolado por teste
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture()
 def isolated_audit(tmp_path):
@@ -51,8 +51,8 @@ def isolated_audit(tmp_path):
 # Testes — Auditoria (SQLite)
 # ---------------------------------------------------------------------------
 
-class TestAudit:
 
+class TestAudit:
     def test_log_signal_persisted_in_db(self, isolated_audit):
         """log_signal deve inserir um registro válido na tabela audit_signals."""
         audit, get_conn = isolated_audit
@@ -60,9 +60,7 @@ class TestAudit:
         audit.log_signal("WINZ25", alpha_side=1, meta_label=1, kelly_fraction=0.5, price=105000.0)
 
         with get_conn() as conn:
-            rows = conn.execute(
-                "SELECT * FROM audit_signals WHERE symbol = 'WINZ25'"
-            ).fetchall()
+            rows = conn.execute("SELECT * FROM audit_signals WHERE symbol = 'WINZ25'").fetchall()
 
         assert len(rows) == 1
         row = rows[0]
@@ -80,9 +78,7 @@ class TestAudit:
         audit.log_order(12345, "PETR4", "buy", 100, 35.50, "Test Order")
 
         with get_conn() as conn:
-            rows = conn.execute(
-                "SELECT * FROM audit_orders WHERE symbol = 'PETR4'"
-            ).fetchall()
+            rows = conn.execute("SELECT * FROM audit_orders WHERE symbol = 'PETR4'").fetchall()
 
         assert len(rows) == 1
         row = rows[0]
@@ -114,9 +110,7 @@ class TestAudit:
         audit.log_error("RiskManager", "MAX DAILY LOSS REACHED", critical=True)
 
         with get_conn() as conn:
-            rows = conn.execute(
-                "SELECT * FROM audit_errors WHERE critical = 1"
-            ).fetchall()
+            rows = conn.execute("SELECT * FROM audit_errors WHERE critical = 1").fetchall()
 
         assert len(rows) == 1
         assert "MAX DAILY LOSS" in rows[0]["error_msg"]
@@ -159,22 +153,23 @@ class TestAudit:
 # Testes — Risk Manager (Circuit Breakers)
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture(autouse=True)
 def mock_trading_context():
     """Garante que os testes rodam sempre dentro do horário e em modo paper."""
     import datetime
-    from unittest.mock import MagicMock
+
     with (
         patch("src.execution.risk.datetime.datetime") as mock_dt,
         patch("src.execution.order_manager.execution_config") as mock_exec,
-        patch("src.execution.risk.risk_config") as mock_risk
+        patch("src.execution.risk.risk_config") as mock_risk,
     ):
         # Sempre 10:00 da manhã
         mock_dt.now.return_value.time.return_value = datetime.time(10, 0, 0)
-        
+
         # Modo Paper por padrão nos testes
         mock_exec.mode = "paper"
-        
+
         # Configurações de risco padrão para os testes
         mock_risk.max_daily_loss_pct = 0.02
         mock_risk.max_drawdown_pct = 0.05
@@ -183,11 +178,11 @@ def mock_trading_context():
         mock_risk.trading_start_time = "09:00:00"
         mock_risk.trading_end_time = "17:55:00"
         mock_risk.trade_type = "day_trade"
-        
+
         yield
 
-class TestRiskManager:
 
+class TestRiskManager:
     def test_initial_state_can_trade(self):
         risk = RiskManager(start_balance=10000.0)
         assert risk.can_trade() is True
@@ -241,8 +236,8 @@ class TestRiskManager:
 # Testes — Order Manager (Mock)
 # ---------------------------------------------------------------------------
 
-class TestOrderManager:
 
+class TestOrderManager:
     def test_paper_mode_bypasses_mt5(self):
         """No modo paper, send_market_order apenas loga e não chama a DLL mt5."""
         om = OrderManager()
@@ -293,12 +288,15 @@ class TestOrderManager:
         # Como as constantes de MT5 mockado são mock objects, a comparação de tipo no código
         # será `pos.type == mt5.ORDER_TYPE_BUY`. Precisamos configurar os mocks das constantes MT5
         import MetaTrader5 as mt5
+
         pos1.type = mt5.ORDER_TYPE_BUY
         pos2.type = mt5.ORDER_TYPE_SELL
         pos3.type = mt5.ORDER_TYPE_BUY
 
         with patch("src.execution.order_manager.execution_config") as mock_cfg:
             mock_cfg.mode = "live"
-            with patch("src.execution.order_manager.mt5.positions_get", return_value=[pos1, pos2, pos3]):
+            with patch(
+                "src.execution.order_manager.mt5.positions_get", return_value=[pos1, pos2, pos3]
+            ):
                 # Long 2.0, Short 1.0 -> Net = 1.0
                 assert om.get_net_position("WIN") == 1.0

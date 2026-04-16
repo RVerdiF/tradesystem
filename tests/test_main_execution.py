@@ -1,6 +1,4 @@
-import pickle
 import sys
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import numpy as np
@@ -39,10 +37,10 @@ def mock_artifacts():
     """Gera artefatos mockados para o LivePipeline."""
     model = MagicMock()
     model.predict_proba.return_value = np.array([[0.4, 0.6]])
-    
+
     alpha = MagicMock()
     alpha.generate_signal.return_value = pd.Series([1] * 10)
-    
+
     return {
         "model": model,
         "optimal_d": 0.5,
@@ -84,25 +82,23 @@ def test_train_model_success(
     )
     mock_min_d.return_value = 0.4
     mock_ffd.return_value = pd.Series([0.5] * 100, index=sample_df.index)
-    
+
     mock_alpha = MagicMock()
     mock_alpha.generate_signal.return_value = pd.Series([1] * 100, index=sample_df.index)
     mock_alpha_cls.return_value = mock_alpha
-    
+
     mock_signal_events.return_value = sample_df.index[::10]
     mock_cusum.return_value = sample_df.index[::5]
-    
+
     mock_vol_targets.return_value = pd.Series([0.01] * 20, index=sample_df.index[::5])
-    
+
     # Mock labels_df
-    labels_df = pd.DataFrame(
-        {"label": [1] * 20, "ret": [0.01] * 20}, index=sample_df.index[::5]
-    )
+    labels_df = pd.DataFrame({"label": [1] * 20, "ret": [0.01] * 20}, index=sample_df.index[::5])
     mock_get_labels.return_value = labels_df
-    
+
     # Execution
     artifacts = train_model(sample_df, interval="1h")
-    
+
     # Assertions
     assert "model" in artifacts
     assert "optimal_d" in artifacts
@@ -119,11 +115,11 @@ def test_train_model_success(
 def test_save_and_load_model(tmp_path):
     artifacts = {"data": "test_artifacts"}
     file_path = tmp_path / "model.pkl"
-    
+
     # Test save
     save_model(artifacts, file_path)
     assert file_path.exists()
-    
+
     # Test load
     loaded = load_model(file_path)
     assert loaded == artifacts
@@ -159,13 +155,11 @@ def test_live_pipeline_call_success(
 @patch("src.main_execution.compute_all_features")
 def test_live_pipeline_insufficient_data(mock_features, mock_weights, mock_artifacts, sample_df):
     # Features retornam DataFrame pequeno
-    mock_features.return_value = pd.DataFrame(
-        {"feat1": [1.0] * 5}, index=sample_df.index[:5]
-    )
-    
+    mock_features.return_value = pd.DataFrame({"feat1": [1.0] * 5}, index=sample_df.index[:5])
+
     pipeline = LivePipeline(mock_artifacts)
     result = pipeline(sample_df.iloc[:5])
-    
+
     assert result["side"] == 0
     assert result["meta_prob"] == 0.0
     assert result["kelly_fraction"] == 0.0
@@ -174,10 +168,10 @@ def test_live_pipeline_insufficient_data(mock_features, mock_weights, mock_artif
 @patch("src.main_execution.get_weights_ffd", return_value=np.ones(10))
 def test_live_pipeline_neutral_on_exception(mock_weights, mock_artifacts, sample_df):
     pipeline = LivePipeline(mock_artifacts)
-    
+
     # Forçar erro passando DataFrame vazio (menor que _min_bars → retorno neutro)
     result = pipeline(pd.DataFrame())
-    
+
     assert result["side"] == 0
     assert result["meta_prob"] == 0.0
 
@@ -188,17 +182,14 @@ def test_live_pipeline_neutral_on_exception(mock_weights, mock_artifacts, sample
 def test_fetch_training_data_success():
     mock_yf = MagicMock()
     mock_df = pd.DataFrame(
-        {
-            "Open": [10.0], "High": [11.0], "Low": [9.0],
-            "Close": [10.5], "Volume": [1000]
-        },
-        index=[pd.Timestamp.now()]
+        {"Open": [10.0], "High": [11.0], "Low": [9.0], "Close": [10.5], "Volume": [1000]},
+        index=[pd.Timestamp.now()],
     )
     mock_yf.download.return_value = mock_df
-    
-    with patch.dict(sys.modules, {'yfinance': mock_yf}):
+
+    with patch.dict(sys.modules, {"yfinance": mock_yf}):
         df = fetch_training_data("PETR4.SA", years=1, interval="1h")
-    
+
     assert not df.empty
     assert "close" in df.columns
     assert "volume" in df.columns
@@ -209,17 +200,14 @@ def test_fetch_training_data_success():
 @patch("src.main_execution.extract_ohlc")
 def test_fetch_mt5_training_data_success(mock_extract, mock_mt5_session):
     mock_df = pd.DataFrame(
-        {
-            "open": [10.0], "high": [11.0], "low": [9.0],
-            "close": [10.5], "tick_volume": [1000]
-        },
-        index=[pd.Timestamp.now()]
+        {"open": [10.0], "high": [11.0], "low": [9.0], "close": [10.5], "tick_volume": [1000]},
+        index=[pd.Timestamp.now()],
     )
     mock_extract.return_value = mock_df
     mock_mt5_session.return_value.__enter__.return_value = MagicMock()
-    
+
     df = fetch_mt5_training_data("WINJ26", interval="1h", n_bars=100)
-    
+
     assert not df.empty
     assert df.columns.tolist() == ["open", "high", "low", "close", "volume"]
     assert df["volume"].iloc[0] == 1000

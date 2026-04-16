@@ -83,6 +83,7 @@ class TestRollingZScore:
         z = rolling_zscore(price_series, window=None)
         assert isinstance(z, pd.Series)
 
+
 # ---------------------------------------------------------------------------
 # Testes — Expanding Rank
 # ---------------------------------------------------------------------------
@@ -145,14 +146,17 @@ class TestNormalizeFeatures:
         np.random.seed(42)
         n = 200
         dates = pd.date_range("2024-01-01", periods=n, freq="5min", tz="UTC")
-        df = pd.DataFrame({
-            "open": np.cumsum(np.random.randn(n)) + 100,
-            "high": np.cumsum(np.random.randn(n)) + 101,
-            "low": np.cumsum(np.random.randn(n)) + 99,
-            "close": np.cumsum(np.random.randn(n)) + 100,
-            "volume": np.abs(np.random.randn(n)) * 1000,
-            "atr": np.abs(np.random.randn(n)) + 0.5,  # feature derivada
-        }, index=dates)
+        df = pd.DataFrame(
+            {
+                "open": np.cumsum(np.random.randn(n)) + 100,
+                "high": np.cumsum(np.random.randn(n)) + 101,
+                "low": np.cumsum(np.random.randn(n)) + 99,
+                "close": np.cumsum(np.random.randn(n)) + 100,
+                "volume": np.abs(np.random.randn(n)) * 1000,
+                "atr": np.abs(np.random.randn(n)) + 0.5,  # feature derivada
+            },
+            index=dates,
+        )
 
         result = normalize_features(df, method="zscore")
 
@@ -171,15 +175,18 @@ class TestNormalizeFeatures:
         np.random.seed(42)
         n = 200
         dates = pd.date_range("2024-01-01", periods=n, freq="5min", tz="UTC")
-        df = pd.DataFrame({
-            "open": np.cumsum(np.random.randn(n)) + 100,
-            "high": np.cumsum(np.random.randn(n)) + 101,
-            "low": np.cumsum(np.random.randn(n)) + 99,
-            "close": np.cumsum(np.random.randn(n)) + 100,
-            "volume": np.abs(np.random.randn(n)) * 1000,
-            "atr": np.abs(np.random.randn(n)) + 0.5,
-            "rsi": np.random.uniform(20, 80, n),
-        }, index=dates)
+        df = pd.DataFrame(
+            {
+                "open": np.cumsum(np.random.randn(n)) + 100,
+                "high": np.cumsum(np.random.randn(n)) + 101,
+                "low": np.cumsum(np.random.randn(n)) + 99,
+                "close": np.cumsum(np.random.randn(n)) + 100,
+                "volume": np.abs(np.random.randn(n)) * 1000,
+                "atr": np.abs(np.random.randn(n)) + 0.5,
+                "rsi": np.random.uniform(20, 80, n),
+            },
+            index=dates,
+        )
 
         result = normalize_features(df, method="zscore")
 
@@ -230,4 +237,3 @@ class TestValidateNoLookahead:
         df = pd.DataFrame({"col": np.ones(50)})
         norm = pd.DataFrame({"col": np.ones(50)})
         assert validate_no_lookahead(norm, df, window=10) is True
-

@@ -1,11 +1,15 @@
+from unittest.mock import MagicMock, patch
+
 import pytest
-from unittest.mock import patch, MagicMock
+
 from src.execution.order_manager import OrderManager
+
 
 # Simulação de constantes do MT5 para o teste
 class MockMT5:
     ORDER_TYPE_BUY = 0
     ORDER_TYPE_SELL = 1
+
 
 @pytest.fixture
 def om():
@@ -14,8 +18,8 @@ def om():
         mock_cfg.max_slippage_ticks = 5
         yield OrderManager()
 
-class TestOrderManagerClose:
 
+class TestOrderManagerClose:
     def test_close_positions_paper_mode(self, om):
         """No modo paper, deve apenas logar e auditar, sem chamar mt5.positions_get."""
         with patch("src.execution.order_manager.execution_config") as mock_cfg:
@@ -26,7 +30,11 @@ class TestOrderManagerClose:
 
                     mock_mt5.positions_get.assert_not_called()
                     mock_audit.log_order.assert_called_once_with(
-                        ticket=-1, symbol="PETR4", action="CLOSE_ALL_SIMULADA", volume=0.0, price=0.0
+                        ticket=-1,
+                        symbol="PETR4",
+                        action="CLOSE_ALL_SIMULADA",
+                        volume=0.0,
+                        price=0.0,
                     )
 
     def test_close_positions_live_no_positions(self, om):

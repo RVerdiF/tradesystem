@@ -1,8 +1,10 @@
+from unittest.mock import patch
+
 import numpy as np
 import pandas as pd
 import pytest
+
 from src.modeling.classifier import MetaClassifier
-from unittest.mock import patch, MagicMock
 
 
 @pytest.fixture
@@ -126,8 +128,7 @@ def test_meta_classifier_xgboost_imbalance_treatment(dataset):
 
 
 def test_meta_classifier_custom_scale_pos_weight():
-    """Verifica que o scale_pos_weight pode ser definido custommente e é passado para o XGBoost.
-    """
+    """Verifica que o scale_pos_weight pode ser definido custommente e é passado para o XGBoost."""
     clf = MetaClassifier(n_estimators=10, max_depth=3, scale_pos_weight=2.5, use_xgboost=True)
     assert clf.scale_pos_weight == 2.5
     # Verify it's passed to the XGBClassifier model

@@ -6,13 +6,14 @@ evitando poluição do banco de desenvolvimento.
 
 from __future__ import annotations
 
-import pytest
 from unittest.mock import patch
 
+import pytest
+
 from src.optimization.params_store import (
-    save_optimized_params,
     load_optimized_params,
     params_exist,
+    save_optimized_params,
 )
 
 
@@ -30,6 +31,7 @@ def isolated_db(tmp_path):
     ):
         # Reimplementa get_connection usando o db temporário
         import sqlite3
+
         from src.db import _ALL_DDL
 
         def _temp_conn():
@@ -48,6 +50,7 @@ def isolated_db(tmp_path):
 # ---------------------------------------------------------------------------
 # Testes
 # ---------------------------------------------------------------------------
+
 
 def test_save_and_load_roundtrip():
     """Save + Load deve recuperar os dados exatos."""

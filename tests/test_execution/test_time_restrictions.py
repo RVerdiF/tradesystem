@@ -1,45 +1,46 @@
-import pytest
 import datetime
-import asyncio
-from unittest.mock import patch, MagicMock
-from src.execution.risk import RiskManager
+from unittest.mock import MagicMock, patch
+
+import pytest
+
 from src.execution.engine import AsyncTradingEngine
+from src.execution.risk import RiskManager
+
 
 class TestTimeRestrictions:
-    
     def test_risk_manager_time_window(self):
         """Valida se o RiskManager bloqueia/libera baseado no horário."""
         # Config: 09:00 to 17:55
         rm = RiskManager(
-            start_balance=100000.0, 
+            start_balance=100000.0,
             trade_type="day_trade",
-            start_time="09:00:00", 
-            end_time="17:55:00"
+            start_time="09:00:00",
+            end_time="17:55:00",
         )
-        
+
         # 1. Antes do horário (08:59)
-        with patch('src.execution.risk.datetime.datetime') as mock_dt:
+        with patch("src.execution.risk.datetime.datetime") as mock_dt:
             mock_dt.now.return_value.time.return_value = datetime.time(8, 59, 0)
             mock_dt.date = datetime.date
-            
+
             rm.update_equity(100000.0, 100000.0)
             assert rm.can_trade() is False
             assert "OUTSIDE TRADING WINDOW" in rm.halt_reason
-            
+
         # 2. Dentro do horário (09:01)
-        with patch('src.execution.risk.datetime.datetime') as mock_dt:
+        with patch("src.execution.risk.datetime.datetime") as mock_dt:
             mock_dt.now.return_value.time.return_value = datetime.time(9, 1, 0)
             mock_dt.date = datetime.date
-            
+
             rm.update_equity(100000.0, 100000.0)
             assert rm.can_trade() is True
             assert rm.halt_reason == ""
-            
+
         # 3. Depois do horário (17:56)
-        with patch('src.execution.risk.datetime.datetime') as mock_dt:
+        with patch("src.execution.risk.datetime.datetime") as mock_dt:
             mock_dt.now.return_value.time.return_value = datetime.time(17, 56, 0)
             mock_dt.date = datetime.date
-            
+
             rm.update_equity(100000.0, 100000.0)
             assert rm.can_trade() is False
             assert "OUTSIDE TRADING WINDOW" in rm.halt_reason
@@ -49,20 +50,20 @@ class TestTimeRestrictions:
         """Valida se o Engine fecha posições no Day Trade ao bater o horário."""
         mock_pipeline = MagicMock(return_value={"side": 0})
         symbols = ["PETR4"]
-        
+
         # Configurado como Day Trade
         engine = AsyncTradingEngine(mock_pipeline, symbols, trade_type="day_trade")
-        
+
         # Mock do OrderManager para verificar se close_positions foi chamado
         engine.om = MagicMock()
-        engine.om.get_net_position.return_value = 1.0 # Tem posição aberta
-        
+        engine.om.get_net_position.return_value = 1.0  # Tem posição aberta
+
         # Força o RiskManager a estar haltado por horário
         engine.risk.is_halted = True
         engine.risk.halt_reason = "OUTSIDE TRADING WINDOW (17:56:00)"
-        
+
         await engine._process_symbol("PETR4")
-        
+
         # Deve ter chamado close_positions
         engine.om.close_positions.assert_called_once_with("PETR4")
 
@@ -71,20 +72,20 @@ class TestTimeRestrictions:
         """Valida se o Engine MANTÉM posições no Swing Trade fora do horário."""
         mock_pipeline = MagicMock(return_value={"side": 0})
         symbols = ["PETR4"]
-        
+
         # Configurado como Swing Trade
         engine = AsyncTradingEngine(mock_pipeline, symbols, trade_type="swing_trade")
-        
+
         # Mock do OrderManager
         engine.om = MagicMock()
-        engine.om.get_net_position.return_value = 1.0 # Tem posição aberta
-        
+        engine.om.get_net_position.return_value = 1.0  # Tem posição aberta
+
         # Força o RiskManager a estar haltado por horário
         engine.risk.is_halted = True
         engine.risk.halt_reason = "OUTSIDE TRADING WINDOW (18:00:00)"
-        
+
         await engine._process_symbol("PETR4")
-        
+
         # NÃO deve ter chamado close_positions
         engine.om.close_positions.assert_not_called()
 
@@ -93,11 +94,11 @@ class TestTimeRestrictions:
         """Valida se o Engine FECHA posições no Swing Trade se o motivo for PnL."""
         mock_pipeline = MagicMock(return_value={"side": 0})
         symbols = ["PETR4"]
-        
+
         engine = AsyncTradingEngine(mock_pipeline, symbols, trade_type="swing_trade")
         engine.om = MagicMock()
         engine.om.get_net_position.return_value = 1.0
-        
+
         # Força o RiskManager a estar haltado por PERDA DIÁRIA (não horário)
         engine.risk.is_halted = True
         engine.risk.halt_reason = "MAX DAILY LOSS REACHED"
@@ -109,26 +110,26 @@ class TestTimeRestrictions:
 
 
 class TestCoolDown:
-
     def test_cool_down_activated_after_notify(self):
         """notify_trade_closed() deve activar o cool-down e bloquear novas ordens."""
         import src.execution.risk as risk_module
+
         rm = RiskManager(start_balance=100000.0)
-        
+
         # Garante que está ACTIVE dentro do horário
         mock_now = datetime.datetime(2026, 4, 12, 10, 0, 0)
-        with patch.object(risk_module.datetime, 'datetime', wraps=datetime.datetime) as mock_dt_cls:
+        with patch.object(risk_module.datetime, "datetime", wraps=datetime.datetime) as mock_dt_cls:
             mock_dt_cls.now.return_value = mock_now
             rm.update_equity(100000.0, 100000.0)
 
         assert rm.can_trade("PETR4") is True
 
         # Activa o cool-down (simula saída por circuit breaker)
-        with patch.object(risk_module.datetime, 'datetime', wraps=datetime.datetime) as mock_dt_cls:
+        with patch.object(risk_module.datetime, "datetime", wraps=datetime.datetime) as mock_dt_cls:
             mock_dt_cls.now.return_value = mock_now
             rm.notify_trade_closed("PETR4")
             assert rm.can_trade("PETR4") is False
-            
+
         assert "PETR4" in rm._cool_down_until
 
     def test_cool_down_expires_after_time(self):
@@ -139,7 +140,7 @@ class TestCoolDown:
 
         # Activa cool-down às 10:00:00
         mock_now_1 = datetime.datetime(2026, 4, 12, 10, 0, 0)
-        with patch.object(risk_module.datetime, 'datetime', wraps=datetime.datetime) as mock_dt_cls:
+        with patch.object(risk_module.datetime, "datetime", wraps=datetime.datetime) as mock_dt_cls:
             mock_dt_cls.now.return_value = mock_now_1
             rm.notify_trade_closed("PETR4")
 
@@ -147,7 +148,7 @@ class TestCoolDown:
 
         # Simula tick às 10:06:00 (após 5 min de cool-down)
         future = datetime.datetime(2026, 4, 12, 10, 6, 0)
-        with patch.object(risk_module.datetime, 'datetime', wraps=datetime.datetime) as mock_dt_cls:
+        with patch.object(risk_module.datetime, "datetime", wraps=datetime.datetime) as mock_dt_cls:
             mock_dt_cls.now.return_value = future
             rm.update_equity(100000.0, 100000.0)
             assert rm.can_trade("PETR4") is True
@@ -162,7 +163,7 @@ class TestCoolDown:
 
         mock_now = MagicMock()
         mock_now.time.return_value = datetime.time(10, 0, 0)
-        with patch('src.execution.risk.datetime.datetime') as mock_dt:
+        with patch("src.execution.risk.datetime.datetime") as mock_dt:
             mock_dt.now.return_value = mock_now
             mock_dt.date = datetime.date
             mock_dt.timedelta = datetime.timedelta
@@ -178,7 +179,7 @@ class TestCoolDown:
 
         mock_now = MagicMock()
         mock_now.time.return_value = datetime.time(10, 0, 0)
-        with patch('src.execution.risk.datetime.datetime') as mock_dt:
+        with patch("src.execution.risk.datetime.datetime") as mock_dt:
             mock_dt.now.return_value = mock_now
             mock_dt.date = datetime.date
             mock_dt.timedelta = datetime.timedelta
@@ -193,7 +194,7 @@ class TestCoolDown:
         # Força estado HALTED_FOR_DAY via perda diária
         mock_now = MagicMock()
         mock_now.time.return_value = datetime.time(10, 0, 0)
-        with patch('src.execution.risk.datetime.datetime') as mock_dt:
+        with patch("src.execution.risk.datetime.datetime") as mock_dt:
             mock_dt.now.return_value = mock_now
             mock_dt.date = datetime.date
             mock_dt.timedelta = datetime.timedelta
@@ -202,7 +203,7 @@ class TestCoolDown:
         assert rm.system_state == "HALTED_FOR_DAY"
 
         # Tenta activar cool-down — deve ser ignorado
-        with patch('src.execution.risk.datetime.datetime') as mock_dt:
+        with patch("src.execution.risk.datetime.datetime") as mock_dt:
             mock_dt.now.return_value = mock_now
             mock_dt.date = datetime.date
             mock_dt.timedelta = datetime.timedelta
@@ -257,10 +258,10 @@ class TestUpdateEquity:
         rm.last_trading_day = datetime.date(2024, 1, 1)
         rm._cool_down_until["PETR4"] = datetime.datetime.now() + datetime.timedelta(minutes=30)
 
-        with patch('src.execution.risk.datetime') as mock_datetime:
+        with patch("src.execution.risk.datetime") as mock_datetime:
             mock_datetime.date.today.return_value = datetime.date(2024, 1, 2)
             mock_now = MagicMock()
-            mock_now.time.return_value = datetime.time(10, 0, 0) # Dentro do horário
+            mock_now.time.return_value = datetime.time(10, 0, 0)  # Dentro do horário
             mock_datetime.datetime.now.return_value = mock_now
 
             # Envia novo saldo
@@ -276,13 +277,14 @@ class TestUpdateEquity:
     def test_update_equity_missing_start_balance(self):
         """Testa se balance é inicializado quando for None."""
         import src.execution.risk as risk_module
+
         rm = RiskManager(start_balance=None)
 
-        with patch.object(risk_module.datetime, 'date', wraps=datetime.date) as mock_date:
+        with patch.object(risk_module.datetime, "date", wraps=datetime.date) as mock_date:
             mock_date.today.return_value = datetime.date.today()
             rm.last_trading_day = datetime.date.today()
 
-            with patch('src.execution.risk.datetime.datetime') as mock_dt:
+            with patch("src.execution.risk.datetime.datetime") as mock_dt:
                 mock_now = MagicMock()
                 mock_now.time.return_value = datetime.time(10, 0, 0)
                 mock_dt.now.return_value = mock_now
@@ -298,8 +300,8 @@ class TestUpdateEquity:
         rm._set_state("HALTED_FOR_DAY", "SOME REASON")
 
         mock_now = MagicMock()
-        mock_now.time.return_value = datetime.time(8, 0, 0) # Fora do horário
-        with patch('src.execution.risk.datetime.datetime') as mock_dt:
+        mock_now.time.return_value = datetime.time(8, 0, 0)  # Fora do horário
+        with patch("src.execution.risk.datetime.datetime") as mock_dt:
             mock_dt.now.return_value = mock_now
             mock_dt.date = datetime.date
             rm.update_equity(100000.0, 100000.0)
@@ -314,7 +316,7 @@ class TestUpdateEquity:
 
         mock_now = MagicMock()
         mock_now.time.return_value = datetime.time(10, 0, 0)
-        with patch('src.execution.risk.datetime.datetime') as mock_dt:
+        with patch("src.execution.risk.datetime.datetime") as mock_dt:
             mock_dt.now.return_value = mock_now
             mock_dt.date = datetime.date
 

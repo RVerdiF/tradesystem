@@ -201,7 +201,9 @@ class MLConfig:
     embargo_pct: float = 0.03  # 5% — excede max_holding_periods e rompe autocorrelação
     xgb_max_depth: int = 2  # Produção: raso para evitar memorização de padrões espúrios
     xgb_gamma: float = 0.0  # Desativado (evita árvores vazias em amostras pequenas)
-    xgb_min_child_weight: float = 5.0  # Balanceado: impede splits espúrios sem bloquear aprendizado em datasets ~300 amostras
+    xgb_min_child_weight: float = (
+        5.0  # Balanceado: impede splits espúrios sem bloquear aprendizado em datasets ~300 amostras
+    )
     xgb_lambda: float = 1.0  # L2 Regularization
     xgb_alpha: float = 0.0  # L1 Regularization
 
@@ -219,7 +221,10 @@ class OptimizationConfig:
     # Ranges de busca fundamentais (Top 10 - "Faxina Real")
     cusum_range: tuple[float, float] = (0.001, 0.003)
     pt_sl_range: tuple[float, float] = (0.5, 3.5)  # SL floor=1.5 em tuner.py
-    meta_threshold_range: tuple[float, float] = (0.05, 0.45)  # calibrado para datasets desbalanceados (5-10% positivos)
+    meta_threshold_range: tuple[float, float] = (
+        0.05,
+        0.45,
+    )  # calibrado para datasets desbalanceados (5-10% positivos)
     max_depth_range: tuple[int, int] = (1, 2)
 
     # Primary Model (Alpha)
@@ -244,7 +249,7 @@ class OptimizationConfig:
     xgb_gamma_range: tuple[float, float] = (0.0, 2.0)
     xgb_lambda_range: tuple[float, float] = (1.0, 5.0)
     xgb_alpha_range: tuple[float, float] = (0.0, 2.0)
-    xgb_min_child_weight_range: tuple[float, float] = (1.0, 20.0) 
+    xgb_min_child_weight_range: tuple[float, float] = (1.0, 20.0)
     ffd_d_range: tuple[float, float] = (0.1, 0.9)
     atr_period_range: tuple[int, int] = (7, 21)
 

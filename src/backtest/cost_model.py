@@ -183,32 +183,3 @@ class SlippageModel:
             name="slippage",
         )
         return slippages
-
-
-# ---------------------------------------------------------------------------
-# Pipeline de custos completo
-# ---------------------------------------------------------------------------
-def total_cost(
-    prices: pd.Series,
-    quantities: pd.Series,
-    avg_volume: float = 1_000_000,
-    symbol: str = "WIN",
-) -> pd.DataFrame:
-    """Calcula custo total (corretagem + taxas + slippage) para uma série de trades."""
-    cost_model = BrazilianCostModel(symbol=symbol)
-    slip_model = SlippageModel(symbol=symbol)
-
-    tc = cost_model.cost_series(prices, quantities)
-    sl = slip_model.slippage_series(prices, quantities, avg_volume)
-
-    result = pd.DataFrame({"transaction_cost": tc, "slippage": sl})
-    result["total_cost"] = result.sum(axis=1)
-
-    logger.info(
-        "Custos totais ({}): corretagem={:.2f}, slippage={:.2f}, total={:.2f}",
-        symbol,
-        tc.sum(),
-        sl.sum(),
-        result["total_cost"].sum(),
-    )
-    return result

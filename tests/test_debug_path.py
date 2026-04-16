@@ -1,5 +1,5 @@
-import pytest
 import src.main_execution as me
+
 
 def test_file_path():
     print(f"\nModule file: {me.__file__}")

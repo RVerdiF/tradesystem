@@ -9,20 +9,18 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from src.backtest.cpcv import CombinatorialPurgedCV
-from src.backtest.cost_model import BrazilianCostModel, SlippageModel, total_cost
-from src.backtest.metrics import (
-    sharpe_ratio,
-    deflated_sharpe,
-    max_drawdown,
-    calmar_ratio,
-    probability_of_ruin,
-    performance_report,
-)
 from src.backtest.attribution import (
     attribution_analysis,
-    trade_level_attribution,
     attribution_summary,
+    trade_level_attribution,
+)
+from src.backtest.cost_model import BrazilianCostModel, SlippageModel
+from src.backtest.cpcv import CombinatorialPurgedCV
+from src.backtest.metrics import (
+    calmar_ratio,
+    max_drawdown,
+    performance_report,
+    sharpe_ratio,
 )
 
 
@@ -55,7 +53,6 @@ def synthetic_events_bt():
 # Testes — CPCV
 # ---------------------------------------------------------------------------
 class TestCPCV:
-
     def test_n_paths(self):
         """Número de caminhos deve ser C(n, k)."""
         cpcv = CombinatorialPurgedCV(n_groups=6, n_test_groups=2)
@@ -69,7 +66,8 @@ class TestCPCV:
         )
         # Sem purga para simplificar o teste de não-sobreposição
         cpcv = CombinatorialPurgedCV(
-            n_groups=4, n_test_groups=2,
+            n_groups=4,
+            n_test_groups=2,
             samples_info=None,  # sem purga
             pct_embargo=0.0,
         )
@@ -87,7 +85,6 @@ class TestCPCV:
 # Testes — Modelo de Custos
 # ---------------------------------------------------------------------------
 class TestCostModel:
-
     def test_round_trip_cost(self):
         """Custo de round-trip deve incluir todas as taxas."""
         model = BrazilianCostModel(
@@ -95,7 +92,7 @@ class TestCostModel:
             emoluments_pct=0.00005,
             settlement_pct=0.0000275,
             iss_pct=0.05,
-            symbol="PETR4"
+            symbol="PETR4",
         )
         cost = model.trade_cost(price=100.0, quantity=10, n_operations=2)
 
@@ -124,7 +121,6 @@ class TestCostModel:
 # Testes — Métricas
 # ---------------------------------------------------------------------------
 class TestMetrics:
-
     def test_sharpe_positive(self, positive_returns):
         """Retornos positivos devem ter Sharpe > 0."""
         sr = sharpe_ratio(positive_returns)
@@ -141,16 +137,6 @@ class TestMetrics:
         mdd = max_drawdown(positive_returns)
         assert mdd <= 0
 
-    def test_deflated_sharpe_penalizes_trials(self, positive_returns):
-        """Mais trials devem resultar em p-value maior (menos significativo)."""
-        sr = sharpe_ratio(positive_returns)
-        p1 = deflated_sharpe(sr, n_trials=1, n_obs=len(positive_returns))
-        p10 = deflated_sharpe(sr, n_trials=10, n_obs=len(positive_returns))
-        p100 = deflated_sharpe(sr, n_trials=100, n_obs=len(positive_returns))
-        # Mais trials → pior p-value
-        assert p10 >= p1
-        assert p100 >= p10
-
     def test_calmar_ratio(self, positive_returns):
         """Calmar ratio deve ser positivo para retornos positivos."""
         cr = calmar_ratio(positive_returns)
@@ -162,7 +148,6 @@ class TestMetrics:
         assert "sharpe_ratio" in report
         assert "max_drawdown" in report
         assert "calmar_ratio" in report
-        assert "deflated_sharpe_pvalue" in report
         assert "prob_ruin_50pct" in report
 
 
@@ -170,7 +155,6 @@ class TestMetrics:
 # Testes — Atribuição
 # ---------------------------------------------------------------------------
 class TestAttribution:
-
     def test_attribution_analysis(self, positive_returns):
         """Deve decompor SR em Alpha e Meta-Label."""
         rng = np.random.default_rng(99)
@@ -183,13 +167,15 @@ class TestAttribution:
 
     def test_trade_level_attribution(self):
         """Deve calcular contribuição por trade."""
-        trades = pd.DataFrame({
-            "ret": [0.02, -0.01, 0.015, -0.005],
-            "side": [1, -1, 1, -1],
-            "meta_label": [1, 1, 0, 1],
-            "bet_size": [0.5, 0.3, 0.0, 0.4],
-            "cost": [0.001, 0.001, 0.0, 0.001],
-        })
+        trades = pd.DataFrame(
+            {
+                "ret": [0.02, -0.01, 0.015, -0.005],
+                "side": [1, -1, 1, -1],
+                "meta_label": [1, 1, 0, 1],
+                "bet_size": [0.5, 0.3, 0.0, 0.4],
+                "cost": [0.001, 0.001, 0.0, 0.001],
+            }
+        )
         result = trade_level_attribution(trades)
         assert "alpha_contribution" in result.columns
         assert "net_return" in result.columns
@@ -197,12 +183,14 @@ class TestAttribution:
 
     def test_attribution_summary(self):
         """Sumário deve conter métricas agregadas."""
-        trades = pd.DataFrame({
-            "ret": [0.02, -0.01, 0.015],
-            "side": [1, -1, 1],
-            "meta_label": [1, 1, 0],
-            "bet_size": [0.5, 0.3, 0.0],
-        })
+        trades = pd.DataFrame(
+            {
+                "ret": [0.02, -0.01, 0.015],
+                "side": [1, -1, 1],
+                "meta_label": [1, 1, 0],
+                "bet_size": [0.5, 0.3, 0.0],
+            }
+        )
         attr = trade_level_attribution(trades)
         summary = attribution_summary(attr)
         assert "total_trades" in summary

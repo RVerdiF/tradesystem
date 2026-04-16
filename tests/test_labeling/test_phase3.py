@@ -17,13 +17,9 @@ from src.labeling.alpha import (
     TrendFollowingAlpha,
     get_signal_events,
 )
-from src.labeling.volatility import daily_vol, get_volatility_targets
+from src.labeling.meta_labeling import get_meta_labels
 from src.labeling.triple_barrier import apply_triple_barrier, create_events, get_labels
-from src.labeling.meta_labeling import (
-    build_training_dataset,
-    get_meta_labels,
-    meta_label_analysis,
-)
+from src.labeling.volatility import daily_vol, get_volatility_targets
 
 
 # ---------------------------------------------------------------------------
@@ -81,7 +77,7 @@ def simple_up_down_df():
     n = 100
     dates = pd.date_range("2024-01-01", periods=n, freq="5min", tz="UTC")
     prices = np.zeros(n)
-    prices[0] = 100000.0 # Make price large enough to cover friction cost
+    prices[0] = 100000.0  # Make price large enough to cover friction cost
     for i in range(1, n):
         if (i // 10) % 2 == 0:
             prices[i] = prices[i - 1] + 500.0  # sobe
@@ -240,8 +236,11 @@ class TestTripleBarrier:
         targets = get_volatility_targets(close, events_ts, span=10)
 
         events = create_events(
-            close, events_ts, targets,
-            pt_sl=(1.0, 1.0), max_holding=15,
+            close,
+            events_ts,
+            targets,
+            pt_sl=(1.0, 1.0),
+            max_holding=15,
         )
         assert "t1" in events.columns
         assert "trgt" in events.columns
@@ -256,10 +255,15 @@ class TestTripleBarrier:
         targets = get_volatility_targets(close, events_ts, span=10)
 
         events = create_events(
-            close, events_ts, targets,
-            pt_sl=(0.5, 0.5), max_holding=8,
+            close,
+            events_ts,
+            targets,
+            pt_sl=(0.5, 0.5),
+            max_holding=8,
         )
-        labels = get_labels(close, events, pt_sl=(0.5, 0.5), open_prices=close, high_prices=close, low_prices=close)
+        labels = get_labels(
+            close, events, pt_sl=(0.5, 0.5), open_prices=close, high_prices=close, low_prices=close
+        )
 
         # Deve ter pelo menos algum resultado
         assert len(labels) > 0
@@ -274,8 +278,11 @@ class TestTripleBarrier:
         targets = get_volatility_targets(close, events_ts, span=10)
 
         events = create_events(
-            close, events_ts, targets,
-            pt_sl=(1.0, 1.0), max_holding=10,
+            close,
+            events_ts,
+            targets,
+            pt_sl=(1.0, 1.0),
+            max_holding=10,
         )
         labels = get_labels(close, events, open_prices=close, high_prices=close, low_prices=close)
 
@@ -290,10 +297,15 @@ class TestTripleBarrier:
         targets = get_volatility_targets(close, events_ts, span=10)
 
         events = create_events(
-            close, events_ts, targets,
-            pt_sl=(1.0, 1.0), max_holding=10,
+            close,
+            events_ts,
+            targets,
+            pt_sl=(1.0, 1.0),
+            max_holding=10,
         )
-        result = apply_triple_barrier(close, events, open_prices=close, high_prices=close, low_prices=close)
+        result = apply_triple_barrier(
+            close, events, open_prices=close, high_prices=close, low_prices=close
+        )
 
         if len(result) > 0:
             assert (result["t1"] >= result.index).all()
@@ -303,7 +315,7 @@ class TestTripleBarrier:
 # Testes — Meta-Labeling
 # ---------------------------------------------------------------------------
 class TestMetaLabeling:
-    """Testes para get_meta_labels e build_training_dataset."""
+    """Testes para get_meta_labels."""
 
     def test_meta_labels_binary(self, simple_up_down_df):
         """Meta-labels devem ser binários {0, 1}."""
@@ -313,8 +325,11 @@ class TestMetaLabeling:
         targets = get_volatility_targets(close, events_ts, span=10)
 
         events = create_events(
-            close, events_ts, targets,
-            pt_sl=(1.0, 1.0), max_holding=10,
+            close,
+            events_ts,
+            targets,
+            pt_sl=(1.0, 1.0),
+            max_holding=10,
         )
         labels = get_labels(close, events, open_prices=close, high_prices=close, low_prices=close)
 
@@ -322,52 +337,3 @@ class TestMetaLabeling:
             meta = get_meta_labels(labels)
             assert set(meta.unique()).issubset({0, 1})
             assert meta.dtype == np.int8
-
-    def test_build_training_dataset(self, simple_up_down_df):
-        """Dataset de treinamento deve combinar features e meta-labels."""
-        close = simple_up_down_df["close"]
-        events_ts = close.index[10::15]
-        vol = daily_vol(close, span=10)
-        targets = get_volatility_targets(close, events_ts, span=10)
-
-        events = create_events(
-            close, events_ts, targets,
-            pt_sl=(1.0, 1.0), max_holding=10,
-        )
-        labels = get_labels(close, events, open_prices=close, high_prices=close, low_prices=close)
-
-        if len(labels) == 0:
-            pytest.skip("Nenhum label gerado")
-
-        # Features simples para teste
-        features = pd.DataFrame(
-            {"feat1": np.random.randn(len(close)), "feat2": np.random.randn(len(close))},
-            index=close.index,
-        )
-
-        dataset = build_training_dataset(features, labels)
-        assert "meta_label" in dataset.columns
-        assert "feat1" in dataset.columns
-        assert len(dataset) > 0
-
-    def test_meta_label_analysis(self, simple_up_down_df):
-        """Análise de meta-labels deve retornar dicionário com métricas."""
-        close = simple_up_down_df["close"]
-        events_ts = close.index[10::15]
-        vol = daily_vol(close, span=10)
-        targets = get_volatility_targets(close, events_ts, span=10)
-
-        events = create_events(
-            close, events_ts, targets,
-            pt_sl=(1.0, 1.0), max_holding=10,
-        )
-        labels = get_labels(close, events, open_prices=close, high_prices=close, low_prices=close)
-
-        if len(labels) == 0:
-            pytest.skip("Nenhum label gerado")
-
-        stats = meta_label_analysis(labels)
-        assert "total_events" in stats
-        assert "positive_ratio" in stats
-        assert stats["total_events"] > 0
-
