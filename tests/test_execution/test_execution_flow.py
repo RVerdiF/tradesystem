@@ -27,9 +27,10 @@ def mock_ohlc():
 class TestExecutionFlow:
     def test_fetch_mt5_training_data(self, mock_ohlc):
         """Test fetching training data from MT5."""
-        with patch("src.main_execution.mt5_session"):
-            with patch("src.main_execution.extract_ohlc", return_value=mock_ohlc):
-                df = me.fetch_mt5_training_data("PETR4", "1h", n_bars=2)
+        with patch("src.data.loaders.mt5_session"):
+            with patch("src.data.loaders.extract_ohlc", return_value=mock_ohlc):
+                from src.data.loaders import fetch_mt5_data
+                df = fetch_mt5_data(symbol="PETR4", interval="1h", n_bars=2)
                 assert len(df) == 2
 
     def test_train_model_with_optimized_params(self):
@@ -56,10 +57,12 @@ class TestExecutionFlow:
             "long_voi_threshold": 1.0,
             "short_voi_threshold": 1.0,
         }
+        df["hurst_exponent"] = 0.5
+        df["volume_imbalance_zscore"] = 0.0
         with patch("src.main_execution.compute_all_features", return_value=df):
             with patch("src.main_execution.find_min_d", return_value=0.5):
                 with patch("src.main_execution.frac_diff_ffd", return_value=df["close"]):
-                    with patch("src.main_execution.CompositeAlpha") as mock_alpha_cls:
+                    with patch("src.main_execution.create_alpha_from_params") as mock_alpha_cls:
                         with patch(
                             "src.main_execution.get_labels",
                             return_value=pd.DataFrame(
@@ -75,23 +78,14 @@ class TestExecutionFlow:
 
                             with patch("src.main_execution.MetaClassifier") as mock_clf:
                                 me.train_model(df, params=params)
-                                mock_alpha_cls.assert_called_once_with(
-                                    long_fast_span=5,
-                                    long_slow_span=8,
-                                    short_fast_span=5,
-                                    short_slow_span=8,
-                                    long_hurst_threshold=0.5,
-                                    short_hurst_threshold=0.5,
-                                    long_vir_zscore_threshold=1.0,
-                                    short_vir_zscore_threshold=1.0,
-                                )
+                                mock_alpha_cls.assert_called_once_with(params)
 
     def test_auto_optimization_logic(self):
         """Minimal logic check for auto-optimization flow."""
         symbol = "PETR4"
         # Mocking the functions directly in me
         with patch.object(me, "params_exist") as mock_exist:
-            with patch.object(me, "fetch_mt5_training_data") as mock_fetch:
+            with patch("src.main_execution.fetch_mt5_data") as mock_fetch:
                 with patch.object(me, "save_optimized_params") as mock_save:
                     with patch("src.optimization.tuner.run_optimization") as mock_run:
                         # Scenario: Need optimization
@@ -101,7 +95,7 @@ class TestExecutionFlow:
 
                         # Flow
                         if not me.params_exist(symbol):
-                            df = me.fetch_mt5_training_data(symbol, "1h", 100)
+                            df = mock_fetch(symbol=symbol, interval="1h", n_bars=100)
                             res = mock_run(df, interval="1h")
                             me.save_optimized_params(symbol, res["params"], res["metadata"])
 
