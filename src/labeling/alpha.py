@@ -546,3 +546,19 @@ def get_signal_events(signal: pd.Series) -> pd.DatetimeIndex:
     events = signal[(changes > 0) & (signal != 0)]
     logger.debug("Eventos de sinal: {} mudanças detectadas", len(events))
     return pd.DatetimeIndex(events.index)
+
+
+def create_alpha_from_params(params: dict | None = None) -> CompositeAlpha:
+    """Factory que cria CompositeAlpha a partir de hiperparâmetros otimizados."""
+    if params is None:
+        params = {}
+    return CompositeAlpha(
+        long_fast_span=params.get("long_alpha_fast"),
+        long_slow_span=params.get("long_alpha_slow"),
+        short_fast_span=params.get("short_alpha_fast"),
+        short_slow_span=params.get("short_alpha_slow"),
+        long_hurst_threshold=params.get("long_hurst_threshold"),
+        short_hurst_threshold=params.get("short_hurst_threshold"),
+        long_vir_zscore_threshold=params.get("long_voi_threshold"),
+        short_vir_zscore_threshold=params.get("short_voi_threshold"),
+    )

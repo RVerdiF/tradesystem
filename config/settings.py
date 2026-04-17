@@ -143,12 +143,10 @@ class FeatureConfig:
     # Regime Detection (Hurst Exponent)
     hurst_window: int = 100  # Janela rolante para cálculo do Hurst
     hurst_step: int = 5  # Passo de cálculo (>1 para performance)
-    hurst_threshold: float = 0.55  # Threshold para regime de tendência
     long_hurst_threshold: float = 0.55
     short_hurst_threshold: float = 0.55
 
     # Volume Imbalance (Order Flow Filter)
-    vol_imbalance_z_threshold: float = 1.0  # Z-score threshold para desbalanceamento de volume
     long_vol_imbalance_z_threshold: float = 1.0
     short_vol_imbalance_z_threshold: float = 1.0
 
@@ -184,7 +182,6 @@ class LabelingConfig:
 
     # Tripla Barreira
     pt_sl_ratio: tuple[float, float] = (2.77, 2.98)  # (profit_take, stop_loss) (Otimizado PETR4.SA)
-    be_trigger: float = 0.5  # Gatilho de breakeven (0.0 = desativado)
     max_holding_periods: int = 100  # Barreira vertical (barras máximas)
     min_return: float = 0.005  # Retorno mínimo para considerar label +1
 
@@ -226,10 +223,6 @@ class OptimizationConfig:
         0.45,
     )  # calibrado para datasets desbalanceados (5-10% positivos)
     max_depth_range: tuple[int, int] = (1, 2)
-
-    # Primary Model (Alpha)
-    fast_span_range: tuple[int, int] = (3, 8)
-    slow_span_range: tuple[int, int] = (15, 30)
 
     # Composite Alpha (Decoupled Ranges)
     long_fast_span_range: tuple[int, int] = (3, 8)
