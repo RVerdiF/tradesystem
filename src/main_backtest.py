@@ -56,7 +56,7 @@ from src.data.loaders import fetch_mt5_data, fetch_yfinance_data
 from src.features.cusum_filter import adaptive_cusum_events
 from src.features.frac_diff import find_min_d, frac_diff_ffd
 from src.features.indicators import compute_all_features
-from src.labeling.alpha import CompositeAlpha, get_signal_events
+from src.labeling.alpha import create_alpha_from_params, get_signal_events
 from src.labeling.triple_barrier import create_events, get_labels
 from src.labeling.volatility import get_volatility_targets
 from src.modeling.classifier import MetaClassifier
@@ -224,32 +224,7 @@ def run_pipeline(
     # ---------------------------------------------------------
     logger.info("--- Fase 3: Alpha e Labeling ---")
 
-    # Extrai spans dos params ou usa os padrões do config
-    long_fast_span = params.get("long_alpha_fast", labeling_config.long_fast_span)
-    long_slow_span = params.get("long_alpha_slow", labeling_config.long_slow_span)
-    short_fast_span = params.get("short_alpha_fast", labeling_config.short_fast_span)
-    short_slow_span = params.get("short_alpha_slow", labeling_config.short_slow_span)
-    long_hurst_threshold = params.get("long_hurst_threshold", feature_config.long_hurst_threshold)
-    short_hurst_threshold = params.get(
-        "short_hurst_threshold", feature_config.short_hurst_threshold
-    )
-    long_voi_threshold = params.get(
-        "long_voi_threshold", feature_config.long_vol_imbalance_z_threshold
-    )
-    short_voi_threshold = params.get(
-        "short_voi_threshold", feature_config.short_vol_imbalance_z_threshold
-    )
-
-    alpha_model = CompositeAlpha(
-        long_fast_span=long_fast_span,
-        long_slow_span=long_slow_span,
-        short_fast_span=short_fast_span,
-        short_slow_span=short_slow_span,
-        long_hurst_threshold=long_hurst_threshold,
-        short_hurst_threshold=short_hurst_threshold,
-        long_vir_zscore_threshold=long_voi_threshold,
-        short_vir_zscore_threshold=short_voi_threshold,
-    )
+    alpha_model = create_alpha_from_params(params)
     signal = alpha_model.generate_signal(df)
 
     signal_events = get_signal_events(signal)

@@ -56,11 +56,9 @@ from config.settings import (
     labeling_config,
     ml_config,
 )
-from src.data.extractor import INTERVAL_TO_TF, extract_ohlc
+from src.data.loaders import fetch_mt5_data, fetch_yfinance_data
 
 # Pipeline de dados e features
-from src.data.mt5_connector import mt5_session
-
 # Execução
 from src.execution.engine import AsyncTradingEngine
 from src.features.cusum_filter import adaptive_cusum_events
@@ -68,7 +66,7 @@ from src.features.frac_diff import find_min_d, frac_diff_ffd, get_weights_ffd
 from src.features.indicators import compute_all_features
 
 # Alpha e Labeling
-from src.labeling.alpha import CompositeAlpha, get_signal_events
+from src.labeling.alpha import CompositeAlpha, create_alpha_from_params, get_signal_events
 from src.labeling.triple_barrier import create_events, get_labels
 from src.labeling.volatility import get_volatility_targets
 from src.modeling.bet_sizing import compute_kelly_fraction
@@ -128,32 +126,8 @@ def train_model(df: pd.DataFrame, interval: str = "1h", params: dict | None = No
     if params is None:
         params = {}
 
-    long_fast_span = params.get("long_alpha_fast", labeling_config.long_fast_span)
-    long_slow_span = params.get("long_alpha_slow", labeling_config.long_slow_span)
-    short_fast_span = params.get("short_alpha_fast", labeling_config.short_fast_span)
-    short_slow_span = params.get("short_alpha_slow", labeling_config.short_slow_span)
-    long_hurst_threshold = params.get("long_hurst_threshold", feature_config.long_hurst_threshold)
-    short_hurst_threshold = params.get(
-        "short_hurst_threshold", feature_config.short_hurst_threshold
-    )
-    long_voi_threshold = params.get(
-        "long_voi_threshold", feature_config.long_vol_imbalance_z_threshold
-    )
-    short_voi_threshold = params.get(
-        "short_voi_threshold", feature_config.short_vol_imbalance_z_threshold
-    )
-
     # --- Alpha ---
-    alpha = CompositeAlpha(
-        long_fast_span=long_fast_span,
-        long_slow_span=long_slow_span,
-        short_fast_span=short_fast_span,
-        short_slow_span=short_slow_span,
-        long_hurst_threshold=long_hurst_threshold,
-        short_hurst_threshold=short_hurst_threshold,
-        long_vir_zscore_threshold=long_voi_threshold,
-        short_vir_zscore_threshold=short_voi_threshold,
-    )
+    alpha = create_alpha_from_params(params)
     signal = alpha.generate_signal(df_aligned)
     signal_events = get_signal_events(signal)
 
@@ -369,84 +343,6 @@ class LivePipeline:
 
 
 # ---------------------------------------------------------------------------
-# 4. Dados históricos para treinamento
-# ---------------------------------------------------------------------------
-def fetch_training_data(symbol: str, years: float, interval: str) -> pd.DataFrame:
-    """Baixa dados do yfinance para treinar o modelo."""
-    try:
-        import yfinance as yf
-    except ImportError:
-        logger.error("yfinance não instalado. Execute: pip install yfinance")
-        sys.exit(1)
-
-    # Limites do Yahoo: 1h -> 730 dias, outros intraday -> 60 dias.
-    # Usamos uma margem de segurança (729 e 59).
-    end = pd.Timestamp.now()
-    requested_days = int(years * 365)
-
-    if interval in ["1h", "60m"]:
-        days = min(requested_days, 729)
-    elif interval in ["2m", "5m", "15m", "30m", "90m"]:
-        days = min(requested_days, 59)
-    elif interval == "1m":
-        days = min(requested_days, 6)
-    else:
-        days = requested_days
-
-    start = end - pd.Timedelta(days=days)
-
-    logger.info(f"Baixando {days} dias de dados ({interval}) para {symbol}...")
-    df = yf.download(symbol, start=start, end=end, interval=interval, progress=False)
-
-    if df.empty:
-        logger.error(f"Nenhum dado para {symbol}.")
-        sys.exit(1)
-
-    if isinstance(df.columns, pd.MultiIndex):
-        df.columns = df.columns.get_level_values(0)
-
-    df = df.rename(
-        columns={
-            "Open": "open",
-            "High": "high",
-            "Low": "low",
-            "Close": "close",
-            "Volume": "volume",
-        }
-    )
-    df = df[["open", "high", "low", "close", "volume"]].dropna()
-    logger.success(f"Dados de treino: {len(df)} barras ({interval})")
-    return df
-
-
-def fetch_mt5_training_data(symbol: str, interval: str, n_bars: int) -> pd.DataFrame:
-    """Baixa dados do MT5 para treinar o modelo."""
-    tf = INTERVAL_TO_TF.get(interval, 60)
-    logger.info(f"Baixando {n_bars} barras ({interval}) do MT5 para {symbol}...")
-
-    try:
-        with mt5_session():
-            df = extract_ohlc(symbol=symbol, timeframe=tf, n_bars=n_bars)
-
-        if df.empty:
-            logger.error(f"Nenhum dado encontrado no MT5 para {symbol}.")
-            sys.exit(1)
-
-        # O extractor já retorna time como index e colunas em minúsculas
-        # Usa tick_volume como volume
-        df = (
-            df[["open", "high", "low", "close", "tick_volume"]]
-            .rename(columns={"tick_volume": "volume"})
-            .dropna()
-        )
-        logger.success(f"Dados de treino MT5: {len(df)} barras ({interval})")
-        return df
-    except Exception as e:
-        logger.error(f"Erro ao extrair dados de treino do MT5: {e}")
-        sys.exit(1)
-
-
-# ---------------------------------------------------------------------------
 # 5. Main
 # ---------------------------------------------------------------------------
 async def run(pipeline: LivePipeline, symbols: list[str], max_position: float, trade_type: str):
@@ -555,9 +451,11 @@ def main():
 
         # Otimização precisa dos dados
         if args.data_source == "mt5":
-            df_opt = fetch_mt5_training_data(args.symbol, args.interval, args.n_bars)
+            df_opt = fetch_mt5_data(symbol=args.symbol, interval=args.interval, n_bars=args.n_bars)
         else:
-            df_opt = fetch_training_data(args.symbol, args.years, args.interval)
+            df_opt = fetch_yfinance_data(
+                symbol=args.symbol, years=args.years, interval=args.interval
+            )
 
         from src.optimization.tuner import run_optimization
 
@@ -582,9 +480,9 @@ def main():
     else:
         logger.info("Nenhum modelo encontrado (ou força-otimização). Iniciando treinamento...")
         if args.data_source == "mt5":
-            df = fetch_mt5_training_data(args.symbol, args.interval, args.n_bars)
+            df = fetch_mt5_data(symbol=args.symbol, interval=args.interval, n_bars=args.n_bars)
         else:
-            df = fetch_training_data(args.symbol, args.years, args.interval)
+            df = fetch_yfinance_data(symbol=args.symbol, years=args.years, interval=args.interval)
         artifacts = train_model(df, interval=args.interval, params=optimized_params)
         save_model(artifacts, model_path)
 

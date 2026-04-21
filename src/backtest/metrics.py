@@ -200,7 +200,6 @@ def performance_report(
 
     # Sharpe Deflacionado
     if n_trials > 1:
-
         # O DSR original de dsr.py precisa de sr_values e n_days, mas aqui não os temos facilmente,
         # vamos usar sr_values=[sr] e n_days=len(returns) / periods_per_year aproximado como um proxy minimo
         # (na vida real n_trials devia vir acompanhado de todos os trials e sr_values, o DSR em report costuma omitir esse parametro ou ser preenchido pos tuning)

@@ -18,6 +18,7 @@ Capítulo 3.
 
 from __future__ import annotations
 
+# STANDBY — mantido para uso futuro com modelos lineares/NN
 import numpy as np
 import pandas as pd
 from loguru import logger
