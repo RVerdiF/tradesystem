@@ -274,9 +274,21 @@ class ExecutionConfig:
 
 
 # ---------------------------------------------------------------------------
+# Kraken
+# ---------------------------------------------------------------------------
+@dataclass(frozen=True)
+class KrakenConfig:
+    """Credenciais e defaults para a Kraken Spot REST API."""
+
+    api_key: str = os.getenv("KRAKEN_API_KEY", "")
+    api_secret: str = os.getenv("KRAKEN_API_SECRET", "")
+
+
+# ---------------------------------------------------------------------------
 # Instâncias padrão (singleton-like)
 # ---------------------------------------------------------------------------
 mt5_config = MT5Config()
+kraken_config = KrakenConfig()
 bar_sampling_config = BarSamplingConfig()
 cleaning_config = CleaningConfig()
 risk_config = RiskConfig()

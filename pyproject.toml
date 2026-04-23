@@ -21,6 +21,9 @@ dependencies = [
     "scikit-learn>=1.4,<2",
     "xgboost>=2.0,<3",
     "optuna>=3.6,<5",
+    # HTTP
+    "requests>=2.31",
+    "python-dotenv>=1.0",
     # Logging
     "loguru>=0.7,<1",
     # Stats
