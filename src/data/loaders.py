@@ -6,6 +6,12 @@ from datetime import datetime, timedelta
 from src.data.mt5_connector import mt5_session
 from src.data.extractor import INTERVAL_TO_TF, extract_ohlc
 
+# Mapeamento intervalo legível → minutos Kraken
+_KRAKEN_INTERVAL_MAP: dict[str, int] = {
+    "1m": 1, "5m": 5, "15m": 15, "30m": 30,
+    "1h": 60, "4h": 240, "1d": 1440, "1w": 10080,
+}
+
 
 def fetch_yfinance_data(
     symbol: str = "PETR4.SA", years: float = 5, interval: str = "1d"
@@ -126,3 +132,53 @@ def fetch_mt5_data(
         logger.error(f"Falha ao conectar no MT5: {e}")
         logger.info("Sugestão: garanta que o Terminal MT5 está aberto e com AutoTrading ativo.")
         sys.exit(1)
+
+
+def fetch_kraken_data(
+    pair: str = "XBTUSD",
+    interval: str = "1h",
+    since: int | None = None,
+) -> pd.DataFrame:
+    """Baixa candles OHLCV da Kraken Spot REST API.
+
+    Parameters
+    ----------
+    pair : str
+        Par Kraken, ex: "XBTUSD", "ETHUSD".
+    interval : str
+        Granularidade: "1m", "5m", "15m", "30m", "1h", "4h", "1d", "1w".
+    since : int, optional
+        Unix timestamp de início (retorna dados a partir deste ponto).
+
+    Returns
+    -------
+    pd.DataFrame
+        DataFrame OHLCV com DatetimeIndex UTC.
+    """
+    from src.data.kraken_client import KrakenClient
+
+    kraken_interval = _KRAKEN_INTERVAL_MAP.get(interval)
+    if kraken_interval is None:
+        logger.error(f"Intervalo inválido para Kraken: {interval!r}. Use: {list(_KRAKEN_INTERVAL_MAP)}")
+        sys.exit(1)
+
+    logger.info(f"Baixando dados da Kraken para {pair} (intervalo: {interval})...")
+
+    client = KrakenClient()
+    result = client.ohlc(pair, interval=kraken_interval, since=since)
+
+    # Kraken retorna dict keyed pelo nome canônico do par
+    candles = next(iter(v for k, v in result.items() if k != "last"), None)
+    if not candles:
+        logger.error(f"Nenhuma barra retornada da Kraken para {pair}.")
+        sys.exit(1)
+
+    # Formato: [time, open, high, low, close, vwap, volume, count]
+    df = pd.DataFrame(candles, columns=["time", "open", "high", "low", "close", "vwap", "volume", "count"])
+    df["time"] = pd.to_datetime(df["time"], unit="s", utc=True)
+    df = df.set_index("time")
+    df = df[["open", "high", "low", "close", "volume"]].astype(float)
+    df = df.dropna()
+
+    logger.success(f"Kraken: {len(df)} barras baixadas para {pair}.")
+    return df
